@@ -171,7 +171,7 @@ flowchart TB
   end
 
   subgraph maturity["maturity context"]
-    CHECK["check-maturity.usecase — deterministic decision engine"]
+    CHECK["maturity-engine — deterministic decision engine"]
     PMODEL["ports/ maturity-model.port"]
   end
 
@@ -251,8 +251,8 @@ laivel-up/
 │   │   │   ├── level.model.ts
 │   │   │   ├── level-requirement.model.ts
 │   │   │   └── requirement-result.model.ts
-│   │   ├── usecases/
-│   │   │   └── check-maturity.usecase.ts
+│   │   ├── engine/
+│   │   │   └── maturity-engine.ts
 │   │   ├── ports/
 │   │   │   └── maturity-model.port.ts
 │   │   └── adapters/
@@ -290,7 +290,7 @@ laivel-up/
 │
 └── tests/
     ├── maturity/
-    │   └── check-maturity.usecase.test.ts
+    │   └── maturity-engine.test.ts
     ├── evidence/
     │   └── resolve-evidence.usecase.test.ts
     ├── integration/

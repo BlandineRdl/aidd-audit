@@ -39,14 +39,14 @@ module.exports = {
       comment:
         'Infrastructure crosses inward through ports. Models and use cases never touch the disk.',
       severity: 'error',
-      from: { path: '^src/[^/]+/(models|usecases|contracts)/' },
+      from: { path: '^src/[^/]+/(models|usecases|contracts|engine)/' },
       to: { dependencyTypes: ['core'], path: '^(node:)?(fs|fs/promises|path|os)$' },
     },
     {
       name: 'domain-has-no-processes',
       comment: 'Git is reached through an adapter, never spawned from a use case.',
       severity: 'error',
-      from: { path: '^src/[^/]+/(models|usecases|contracts)/' },
+      from: { path: '^src/[^/]+/(models|usecases|contracts|engine)/' },
       to: { dependencyTypes: ['core'], path: '^(node:)?child_process$' },
     },
     {
@@ -54,7 +54,7 @@ module.exports = {
       comment:
         'The YAML parser belongs to maturity/adapters/. No domain or use-case file imports a vendor package.',
       severity: 'error',
-      from: { path: '^src/[^/]+/(models|usecases|contracts)/' },
+      from: { path: '^src/[^/]+/(models|usecases|contracts|engine)/' },
       to: {
         dependencyTypes: [
           'npm',
@@ -77,7 +77,10 @@ module.exports = {
       severity: 'warn',
       comment:
         'A public contract or a port is legitimately unreferenced until an adapter binds to it.',
-      from: { orphan: true, pathNot: ['\\.d\\.ts$', '^src/[^/]+/(contracts|ports)/'] },
+      from: {
+        orphan: true,
+        pathNot: ['\\.d\\.ts$', '^src/[^/]+/(contracts|ports)/'],
+      },
       to: {},
     },
   ],

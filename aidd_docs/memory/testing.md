@@ -16,9 +16,9 @@ failing behavior test → minimum implementation → refactor
 
 Tests follow behavior, not files. Do not test models, helpers, ports, or classes independently unless they own meaningful behavior that is clearer to test directly.
 
-Main use cases:
+Main behaviors:
 
-* `check-maturity.usecase` — maturity semantics;
+* `maturity-engine` — maturity semantics. Not a use case: it takes domain values and returns one, so it is tested directly and without doubles;
 * `resolve-evidence.usecase` — evidence resolution;
 * `collect-evidence.usecase` — collection, degradation, provenance, coverage;
 * `assess-maturity.usecase` — orchestration and assessment result.
@@ -31,7 +31,7 @@ Prefer simple fakes implementing project ports. Avoid mocks of internal collabor
 
 Examples:
 
-* `check-maturity.usecase` → fake `maturity-model.port`;
+* `maturity-engine` → no double at all: it is handed a model and observations;
 * `collect-evidence.usecase` → fake collectors;
 * `assess-maturity.usecase` → real domain collaborators, fakes only at external ports.
 
@@ -65,6 +65,14 @@ Gap:
 
 An evidence gap must never produce a recommendation that assumes the underlying practice is deficient.
 
+### The three vocabularies must stay compatible
+
+The four evidence-status names live in three independent declarations: `evidence/models/observation.model.ts`, `maturity/models/axis-observation.model.ts`, and the public contract. The duplication is deliberate — the two contexts are peers that never import each other, and the contract is self-contained so an internal refactor cannot reshape it.
+
+**Owed, not yet written:** a conformance test under `tests/assessment/`, the one place allowed to import all three, asserting the vocabularies stay compatible. `ObservedValue` and `Threshold` are in the same position.
+
+Not a shared import. A member added to one declaration and not the others compiles today, and the divergence would surface only at composition time.
+
 ## Integration and acceptance
 
 Use integration tests only where the real boundary matters.
@@ -92,7 +100,9 @@ One unobserved axis proves nothing at all. Every level of `aidd.yml` declares al
 
 `proven: null` is a result, not a failure — "insufficient evidence to classify", never "below White". The engine must not special-case it, and no renderer may fall back to `proven ?? white`: that single line would collapse the difference between having proved the baseline and having proved nothing, which is the difference the product sells. `tests/maturity/aidd-model.test.ts` pins it.
 
-That file is a **model conformance test**, not a decision test. It reads the canonical `aidd.yml` from disk on purpose, and checks that the shipped model satisfies the engine's invariants — four axes, seven distinct ranks, every threshold on its own scale — and lands on a few expected reference points. Decision tests stay free of the filesystem and of YAML; this one exists so a typo in the model fails at commit rather than at assessment.
+That file is a **model conformance test**, not a decision test. It reads the canonical `aidd.yml` from disk on purpose, checks the four axes and the seven distinct ranks, and lands on a few expected reference points. Decision tests stay free of the filesystem and of YAML; this one exists so a typo in the model fails at commit rather than at assessment.
+
+It asserts the shipped model's shape only indirectly, through those reference points: the engine's guards reject an invalid model, so a threshold off its scale throws here. Once the loader owns those guards, this file should assert them directly again.
 
 ## Tools and conventions
 

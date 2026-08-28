@@ -26,7 +26,7 @@ flowchart LR
   ASSESS --> MAT["maturity — decision engine"]
 
   EV --> EPORT["collector ports"]
-  MAT --> MPORT["maturity-model port"]
+  MAT --> MPORT["maturity-model port (planned)"]
 
   EAD["evidence adapters<br/>fixtures · live repository"] -.->|implement| EPORT
   MAD["maturity adapter<br/>YAML model"] -.->|implement| MPORT
@@ -36,7 +36,9 @@ flowchart LR
 
 ### `maturity`
 
-Owns maturity calculation: requirements, axes, levels, thresholds, and the maturity-model port.
+Owns maturity calculation: requirements, axes, levels and thresholds. The maturity-model port and its YAML adapter are planned, not written.
+
+`checkMaturity` lives in `engine/`, not in `usecases/`. It takes domain values and returns a domain value; it loads nothing, collects nothing, and sequences no application workflow. Filing it as a use case only forced use-case rules onto a pure decision function — it is the deterministic decision engine the brief names, and the folder says so.
 
 It knows nothing about evidence collection, assessment orchestration, or CLI concerns.
 
@@ -89,7 +91,7 @@ Driving adapters consume this contract; they do not reshape domain semantics the
 
 ## Runtime boundaries
 
-The maturity model is loaded through `maturity-model.port`; YAML is only one driven adapter.
+The maturity model will be loaded through a driven adapter that parses YAML, checks its shape and vocabulary, and guarantees cumulativity before returning a `MaturityModel`. **That loader does not exist yet** — see `load AIDD model`.
 
 Evidence is collected through collector ports. Fixture and live-repository collectors implement the same boundary and produce normalised observations.
 
@@ -107,16 +109,23 @@ Runtime assessment is fully offline.
 
 The grid's "Ce qu'on observe" column is deliberately not encoded: it illustrates, it does not decide.
 
+## Levels are cumulative, and that is checked
+
+A higher rank never asks less than the rank below it, on any axis. `checkMaturity` reports the highest level whose outcome is `MET` and does not re-check the levels beneath it, so a model that dipped would name a level whose predecessors are `NOT_MET` and "highest proven level" would stop meaning what it says.
+
+The AIDD domain is cumulative, so a custom `--model` that is not is not an AIDD model.
+
+**Not enforced yet.** The engine relies on it and nothing checks it; the loader owes it. Until then only `aidd.yml`, verified monotone by hand, is safe to trust.
+
 ## Frozen before the split
 
 Nothing below may be redefined inside a context. Each was frozen because more than one worktree binds to it, and a divergence would only surface at composition time.
 
 * `assessment/contracts/assessment-report.contract.ts` — the versioned public shape. Self-contained on purpose.
-* `evidence/ports/evidence-collector.port.ts` — one interface, two adapters: the fixture bundle and the live repository. They must stay interchangeable.
+* `evidence/ports/evidence-collector.port.ts` — one interface, two adapters: the fixture bundle and the live repository. They must stay interchangeable. A collector **must honour `context.signal`**: exceeding its budget is reported as `TIMED_OUT`, never as a silent hang. The type cannot express that duty and `CollectorRun` only records the outcome, so it is written here.
 * `evidence/models/observation.model.ts` — a collector emits observations and never resolves a status. `OBSERVED` can prove a requirement, `DECLARED` cannot; that distinction is what separates a fact from a claim.
 * `evidence/models/axis.model.ts` — the vocabulary a collector may speak, handed down by `assessment` from the loaded model. A collector that invents a value off its scale is rejected downstream rather than ranked.
-* `maturity/ports/maturity-model.port.ts` — one adapter, but the YAML parser must stay behind it.
-* `maturity/usecases/check-maturity.usecase.ts` and its tests — the decision semantics. The tests decide when prose disagrees.
+* `maturity/engine/` and its tests — the decision semantics, split by concept: `maturity-engine.ts` walks levels and picks the proven one, `requirement-outcome.ts` holds the conservative rule, `scale-comparison.ts` compares a value to a threshold. The tests decide when prose disagrees.
 
 ## Gotchas
 

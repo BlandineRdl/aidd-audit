@@ -26,7 +26,7 @@ flowchart TD
 - `profiles/`: acceptance fixtures — `perceval` → Red, `bohort` → Blue, `leodagan` → Green, `arthur` → Copper. Their deliberate holes are part of the specification; see `testing.md`.
 - `aidd_docs/`: `INSTALL.md` holds the frozen technical vision and execution plan; `memory/` is this bank.
 - `scripts/`: gate tooling, not product code. `prove-boundary-rules.mjs` proves every dependency-cruiser rule still bites; see `coding-assertions.md`.
-- `src/maturity/` **(planned)**: deterministic maturity decision engine and maturity-model port.
+- `src/maturity/`: `engine/` holds the deterministic decision function and, temporarily, the guards that refuse an invalid model; plus the models. There is no `validation/` layer and no loader yet.
 - `src/evidence/` **(planned)**: evidence collection and resolution, collector ports, fixture adapter, and live-repository adapter.
 - `src/assessment/` **(planned)**: orchestration between maturity and evidence, plus the versioned public report contract. Owns no maturity or evidence rules.
 - `src/cli/` **(planned)**: `assess` command and `json` / `human` renderers.
@@ -42,4 +42,6 @@ flowchart TD
 
 Examples:
 
-`check-maturity.usecase.ts` · `yaml-maturity-model.adapter.ts` · `evidence-collector.port.ts` · `assessment-report.contract.ts`
+`assess-maturity.usecase.ts` · `yaml-maturity-model.adapter.ts` · `evidence-collector.port.ts` · `assessment-report.contract.ts`
+
+A suffix names the role a file actually plays, never the folder it landed in. `usecases/` is for application behavior reached through a primary port — something that loads, collects, or sequences. Pure domain decisions live under their own concept: `engine/maturity-engine.ts`.

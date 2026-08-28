@@ -1,0 +1,29 @@
+# Review: maturity engine refactor
+
+- **Verdict**: changes-requested
+- **Diff**: `e08e301...working tree` (18 files, +344 / -553)
+- **Axes run**: code, relevancy
+- **Rules read**: `0-use-cases.md`, `0-public-contracts.md`, `1-clean-code.md`, `1-boy-scout.md`, `2-typescript-domain-modeling.md`
+- **Date**: 2026_08_28
+- **Findings**: 2 critical, 4 warning, 2 minor
+
+## Phases
+
+Not run. No plan holds acceptance criteria for this change.
+
+## Findings
+
+| Sev | Kind | Phase | Location | Issue | Fix |
+| --- | ---- | ----- | -------- | ----- | --- |
+| 🔴 | code | - | `src/maturity/engine/scale-comparison.ts:66` | An off-scale ordinal **threshold** silently satisfies its requirement. `scale.values.indexOf(String(requirement.min))` returns `-1` for a typo, and `observedRank >= -1` is always true. The observed rank is checked for `-1`, the threshold is not. Verified: with `min: 'XXL'` on the size scale `['none','S','M','L']` and size observed at `'none'`, the requirement is `MET` and the whole level is proven. The old engine threw `Threshold '…' is not on the scale`; that check moved to `validate-maturity-model`, which was then deleted, so it now exists nowhere. | Restore the guard next to the existing one: `const requiredRank = scale.values.indexOf(String(requirement.min)); if (requiredRank === -1) throw …`. Same class of backstop as `scaleForAxis`, and warranted for the same reason — `aidd.yml` is hand-edited and `--model` takes an arbitrary file. |
+| 🔴 | code | - | `src/maturity/engine/maturity-engine.ts:76`, `src/maturity/engine/requirement-outcome.ts:29` | A level silent on an axis is granted that axis for free. `evaluateAxis` filters `level.requirements` by axis; an empty result reaches `aggregate([])`, which returns `MET` because neither `NOT_MET` nor `UNPROVEN` is present. Verified: removing `parallelism` from the `high` level and observing parallelism at 1 still proves `high`. `aggregate`'s own comment names the consequence — "a level silent on an axis would otherwise score MET" — but nothing prevents it since `validate-maturity-model` was removed. | Either make `evaluateAxis` return `UNPROVEN` on an empty requirement list, or have the future YAML loader refuse a level that does not cover every axis. The second is the placement already agreed; until a loader exists, the engine is the only thing standing. |
+| 🟡 | code | - | `src/maturity/engine/scale-comparison.ts:60`, `:76` | A model typo on a **set** or **numeric** axis produces `NOT_MET` rather than an error. `Number('three')` is `NaN`, so `value >= NaN` is false; a set member that is not on the scale can never be matched. `NOT_MET` is a practice gap, so AIDD would report the assessed repository as proven deficient because of a defect in its own model — the exact conflation `project-brief.md` calls the product's central failure mode. Less visible than the ordinal case because it under-reports instead of over-reporting. | Same loader-side check as the two criticals: a threshold off its scale is a model error, never an outcome. |
+| 🟡 | fit | - | `src/maturity/engine/maturity-engine.ts:96` | Cumulativity is relied on and held by nobody. `highestProven` returns the highest `MET` level without checking that the levels beneath it hold, which is only sound if the model is monotone. `architecture.md` still states the invariant is enforced at load; `validate-maturity-model` enforced it and is gone. `aidd.yml` is monotone (verified by hand earlier), so nothing breaks today, but `--model` is a documented feature (`cli.md`). | Hold it in the YAML loader, as decided. Until then the claim in `architecture.md` should not read as enforced. |
+| 🟡 | rot | - | `aidd_docs/memory/architecture.md:94,116,126,127`, `aidd_docs/memory/codebase-map.md:29,47` | Project memory describes modules that no longer exist. `architecture.md` lists `maturity/ports/maturity-model.port.ts` and `maturity/validation/validate-maturity-model.ts` as frozen, states the model "is loaded through `maturity-model.port`", and asserts `validate-maturity-model` refuses a non-cumulative model. `codebase-map.md` describes `validation/` twice, once as a naming example. Memory is loaded into every session as instructions, so a stale entry directs the next agent to a file that is not there. | Rewrite those entries around the decision actually taken: no `validation/` layer; the YAML adapter parses, checks the shape, and guarantees cumulativity before returning a `MaturityModel`. |
+| 🟡 | rot | - | `.dependency-cruiser.cjs:42,49,57`, `scripts/prove-boundary-rules.mjs:89-96` | The boundary rules and their sentinel still cover `validation/`, a directory that no longer exists. Every `pnpm architecture` run creates `src/maturity/validation/`, writes a sentinel into it, cruises, and deletes it — proving a rule over a folder no code lives in. | Keep it only if the YAML adapter will reintroduce the folder; otherwise drop `validation` from the three `from.path` patterns and remove its sentinel. Leaving it is a rule nobody can breach. |
+| 🟢 | rot | - | `src/maturity/ports/` | Empty directory left by the port deletion. Git will not track it, so it survives only in this working copy, but `no-orphans` still exempts `^src/[^/]+/(contracts\|ports)/` and that exemption now matches nothing under `maturity`. | `rmdir src/maturity/ports`. |
+| 🟢 | code | - | `tests/maturity/aidd-model.test.ts:15` | `YAML.parse(readFileSync('aidd.yml','utf8')) as MaturityModel` asserts a type nothing verifies. Harmless in a test, but it is the line the future adapter will copy, and it is the reason the three findings above are reachable at all. | Parse into a checked shape in the adapter rather than casting. Noted here so the cast is not mistaken for a working pattern. |
+
+## Verification
+
+Not run. No plan and no acceptance criteria were in scope.

@@ -1,10 +1,7 @@
 /**
- * Proves that every boundary rule in .dependency-cruiser.cjs actually bites.
- *
  * A dependency-cruiser rule that matches nothing reports success, so a green
- * `pnpm architecture` is ambiguous: the architecture may be intact, or the wall
- * may simply not exist. This script writes one sentinel violation per rule,
- * cruises, and fails unless every rule fired. It always removes what it wrote.
+ * `pnpm architecture` is ambiguous: the wall may be intact, or absent. This
+ * writes one deliberate violation per rule and fails unless every rule fired.
  */
 import { spawnSync } from 'node:child_process'
 import { mkdirSync, rmSync, writeFileSync, existsSync, readdirSync } from 'node:fs'
@@ -14,10 +11,8 @@ const PREFIX = '__boundary-sentinel__'
 const SRC = 'src'
 
 /**
- * One entry per case. `from` is the file expected to be reported as violating
- * `rule`: matching on the pair, not the rule name alone, is what stops one
- * sentinel from vouching for another. Two cases may share a rule when the rule
- * has more than one way to die.
+ * Matched on the pair (`rule`, `from`), never the rule name alone: that is what
+ * stops one sentinel from vouching for another. A rule may need several.
  */
 const SENTINELS = [
   {
@@ -91,6 +86,16 @@ const SENTINELS = [
     },
   },
   {
+    // The domain rules cover engine/ alongside models, usecases and contracts.
+    // Widening a rule's path is only proven inside the new folder.
+    rule: 'domain-has-no-vendor-sdk',
+    from: 'src/maturity/engine/__boundary-sentinel__vendor.ts',
+    files: {
+      'src/maturity/engine/__boundary-sentinel__vendor.ts':
+        "import { parse } from 'yaml'\nexport const breach = parse\n",
+    },
+  },
+  {
     rule: 'no-circular',
     from: 'src/maturity/models/__boundary-sentinel__a.ts',
     files: {
@@ -153,6 +158,18 @@ const cruise = () => {
       (violation) => `${violation.rule.name}|${violation.from}`,
     ),
   )
+}
+
+/**
+ * `finally` does not run on a signal, and a surviving sentinel deadlocks the
+ * gate: `pnpm architecture` cruises before it sweeps, so the leftover makes
+ * depcruise exit 1 and the sweep below never gets its turn.
+ */
+for (const signal of ['SIGINT', 'SIGTERM']) {
+  process.on(signal, () => {
+    cleanup()
+    process.exit(130)
+  })
 }
 
 sweepStaleSentinels(SRC)

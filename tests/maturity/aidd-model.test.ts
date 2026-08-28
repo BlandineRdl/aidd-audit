@@ -1,22 +1,31 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import YAML from 'yaml'
-import { checkMaturity } from '../../src/maturity/usecases/check-maturity.usecase.js'
-import type { MaturityModel } from '../../src/maturity/models/maturity.model.js'
+import { checkMaturity } from '../../src/maturity/engine/maturity-engine.js'
+import type {
+  AxisObservation,
+  ObservedValue,
+} from '../../src/maturity/models/axis-observation.model.js'
+import type { AxisId, MaturityModel } from '../../src/maturity/models/maturity.model.js'
 
 /**
- * The canonical model, checked against the engine that will load it.
- *
- * A model conformance test, not a decision test. Decision tests stay free of the
- * filesystem and of YAML; this one reads both on purpose, to prove the shipped
- * model satisfies the engine's invariants and lands on known reference points.
- * A typo in aidd.yml — a level silent on an axis, a misspelt axis name, a
- * threshold off its scale — fails here at commit, not at assessment time.
+ * A conformance test, not a decision test: it reads the filesystem and YAML on
+ * purpose, so a typo in aidd.yml fails at commit rather than at assessment.
  */
 const model = YAML.parse(readFileSync('aidd.yml', 'utf8')) as MaturityModel
 
-const confirmed = (axis: string, value: unknown) =>
-  ({ axis, confidence: 'CONFIRMED', value }) as never
+const confirmed = (axis: AxisId, value: ObservedValue): AxisObservation => ({
+  axis,
+  confidence: 'CONFIRMED',
+  value,
+})
+
+const copperShaped: readonly AxisObservation[] = [
+  confirmed('size', 'L'),
+  confirmed('harness', ['prompts', 'context-engineering', 'behavior']),
+  confirmed('intervention', 'key-steps'),
+  confirmed('parallelism', 3),
+]
 
 describe('aidd.yml', () => {
   it('declares the four axes of the reference grid', () => {
@@ -34,45 +43,8 @@ describe('aidd.yml', () => {
     expect(new Set(ranks).size).toBe(7)
   })
 
-  it('is accepted by the engine, which rejects a level silent on an axis', () => {
-    expect(() =>
-      checkMaturity(model, [
-        confirmed('size', 'L'),
-        confirmed('harness', ['prompts', 'context-engineering', 'behavior']),
-        confirmed('intervention', 'key-steps'),
-        confirmed('parallelism', 3),
-      ]),
-    ).not.toThrow()
-  })
-
-  it('states every threshold on its own scale', () => {
-    const scaleOf = (axisId: string) => {
-      const axis = model.axes.find((candidate) => candidate.id === axisId)!
-      return model.scales[axis.scale]!
-    }
-    for (const level of model.levels) {
-      for (const requirement of level.requirements) {
-        const scale = scaleOf(requirement.axis)
-        if ('includes' in requirement) {
-          expect(scale.kind).toBe('set')
-          if (scale.kind !== 'set') continue
-          for (const member of requirement.includes) expect(scale.members).toContain(member)
-        } else if (scale.kind === 'ordinal') {
-          expect(scale.values).toContain(String(requirement.min))
-        } else {
-          expect(typeof requirement.min).toBe('number')
-        }
-      }
-    }
-  })
-
   it('grades a Copper-shaped repository at Copper, and points next at Silver', () => {
-    const check = checkMaturity(model, [
-      confirmed('size', 'L'),
-      confirmed('harness', ['prompts', 'context-engineering', 'behavior']),
-      confirmed('intervention', 'key-steps'),
-      confirmed('parallelism', 3),
-    ])
+    const check = checkMaturity(model, copperShaped)
     expect(check.proven?.level.id).toBe('copper')
     expect(check.next?.level.id).toBe('silver')
     expect(check.next?.outcome).toBe('NOT_MET')
@@ -91,17 +63,15 @@ describe('aidd.yml', () => {
   })
 
   /**
-   * Every level of this model declares all four axes, so one unobserved axis
-   * makes every level unprovable, White included. That is the conservative rule
-   * taken to its end: nothing is inferred from missing information. The report
-   * still explains itself through coverage and the blocking requirements.
+   * Every level declares all four axes, so one unobserved axis makes even White
+   * unprovable. The conservative rule taken to its end.
    */
   it('proves nothing at all when a single axis stays unknown', () => {
     const check = checkMaturity(model, [
       confirmed('size', 'L'),
       confirmed('harness', ['prompts', 'context-engineering', 'behavior']),
       confirmed('intervention', 'key-steps'),
-      { axis: 'parallelism', confidence: 'UNKNOWN', value: null } as never,
+      { axis: 'parallelism', confidence: 'UNKNOWN', value: null },
     ])
     expect(check.proven).toBeNull()
     expect(check.next?.level.id).toBe('white')

@@ -37,7 +37,7 @@ Lefthook runs `biome format --write` on the staged files, restages what it rewro
 
 - `maturity/` importing `evidence/`, `assessment/` or `cli/`
 - `evidence/` importing `maturity/`, `assessment/` or `cli/`
-- a domain or use-case file importing `node:fs`, `node:child_process`, or any vendor package
+- a model, use-case, contract or validation file importing `node:fs`, `node:child_process`, or any vendor package
 - `assessment/` importing a concrete adapter — it may compose public APIs only
 
 ### The rules are themselves under test
@@ -46,7 +46,9 @@ Lefthook runs `biome format --write` on the staged files, restages what it rewro
 
 `scripts/prove-boundary-rules.mjs` closes that gap. It writes one sentinel violation per rule, cruises, and fails unless every rule fired — matching on the pair *(rule, violating file)*, so no sentinel can vouch for another. It always removes what it wrote, and sweeps stale sentinels before starting.
 
-Adding a boundary rule means adding its sentinel. A rule with no sentinel is a rule nobody has checked.
+Adding a boundary rule means adding its sentinel, and so does widening one: a rule extended to a new folder is unproven there until a sentinel sits in it. A rule with no sentinel is a rule nobody has checked.
+
+The script traps `SIGINT` and `SIGTERM` as well as using `finally`, because a surviving sentinel is worse than a failed run: `pnpm architecture` cruises before it sweeps, so a leftover makes `depcruise` exit 1, `&&` short-circuits, and the sweep never gets its turn. A `SIGKILL` still escapes; the start-of-run sweep is the recovery.
 
 Two failure modes it exists to catch, both of which silently disarmed a rule here:
 
