@@ -1,0 +1,30 @@
+{
+  "name": "aidd-audit",
+  "version": "0.1.0",
+  "description": "Evaluation de maturite AIDD basee sur des preuves. Deterministe, hors ligne, explicable.",
+  "scripts": {
+    "test": "vitest run && depcruise src --config .dependency-cruiser.cjs",
+    "build": "tsup",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [],
+  "author": "Black Sun",
+  "license": "ISC",
+  "type": "module",
+  "private": true,
+  "engines": {
+    "node": ">=24"
+  },
+  "bin": {
+    "aidd-audit": "./dist/cli.js"
+  },
+  "packageManager": "pnpm@11.24.0",
+  "devDependencies": {
+    "@types/node": "^26.4.0",
+    "dependency-cruiser": "^18.2.0",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.11",
+    "yaml": "^2.9.0"
+  }
+}
