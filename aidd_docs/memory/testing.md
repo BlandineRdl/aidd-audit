@@ -104,6 +104,34 @@ That file is a **model conformance test**, not a decision test. It reads the can
 
 It reads `aidd.yml` through `loadMaturityModel`, so the loader's guards are what fail here: a threshold off its scale, a level short of an axis or a rank that dips stops the suite at collection, naming the fault. The reference points then prove the model still grades what it should.
 
+## A guard is only as good as the test that kills it
+
+The maturity model loader shipped three times with a live guard nothing held, and
+each round the suite was green. The pattern is always the same: the test names the
+rule, and asserts something weaker than the rule.
+
+**A rejection test pins the error class *and* a fragment of the message.**
+`toThrow(SomeError)` alone passes for any throw, and `toThrow(/some text/)` alone
+passes for any `Error` — including the `TypeError` from the guard's absence. Assert
+both, and make the fragment name the offending id, so the message stays useful to
+whoever hits it.
+
+**A guard's test is unproven until the guard has been neutered and the test seen to
+fail.** Delete the throw or force the condition, run the suite, watch that test go
+red, restore. Written but unproven is the state every escaped defect here was in:
+one honest sweep over this loader ran 61 mutations and 22 survived.
+
+**A sweep where nothing survives is a suspect harness, not a good result.** Run an
+unmutated control first and confirm it is green. A sweep here once reported every
+mutant killed because an invalid reporter name made every run die at startup, which
+reads exactly like success.
+
+**A fixture for invalid input must be asserted before it is used.** Building a
+malformed YAML document through `YAML.stringify` is not the same as writing that
+YAML: `{ rank: '.nan' }` serialises to `rank: ".nan"`, a quoted *string*, which the
+type check rejects long before the finiteness check under test. Assert the
+serialised text carries what the case needs, then parse it.
+
 ## Tools and conventions
 
 * Vitest only.
