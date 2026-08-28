@@ -2,7 +2,7 @@
 
 How this project is tested: TDD boundaries, doubles, and validation.
 
-**Status: strategy and reference fixtures are frozen; `tests/maturity/` and `tests/evidence/resolve-evidence.test.ts` exist. Collection, orchestration and the acceptance suite are still owed.**
+**Status: strategy and reference fixtures are frozen; `tests/maturity/`, `tests/cli/` and both `tests/evidence/` suites exist. Orchestration and the acceptance suite are still owed.**
 
 ## Strategy
 
@@ -20,22 +20,33 @@ Main behaviors:
 
 * `maturity-engine` — maturity semantics. Not a use case: it takes domain values and returns one, so it is tested directly and without doubles;
 * `resolve-evidence` — evidence resolution. Not a use case: it takes domain values and returns one, so it is tested directly and without doubles;
-* `collect-evidence.usecase` — collection, degradation, provenance, coverage;
-* `assess-maturity.usecase` — orchestration and assessment result.
+* `collect-evidence.usecase` — collector execution, degradation, provenance, and evidence resolution;
+* `assess-maturity.usecase` — orchestration, coverage, and assessment result.
 
 ## Style and doubles
 
 Use **Chicago-style testing**: exercise real deterministic collaborators together and fake only architectural boundaries outside the behavior under test.
 
-Prefer simple fakes implementing project ports. Avoid mocks of internal collaborators, call-order assertions, and implementation-detail tests.
+Avoid mocks of internal collaborators, call-order assertions, and implementation-detail tests.
 
 Examples:
 
 * `maturity-engine` → no double at all: it is handed a model and observations;
-* `collect-evidence.usecase` → fake collectors;
+* `collect-evidence.usecase` → `FakeInMemoryEvidenceCollector`, `FailingEvidenceCollector`, and the real resolver;
 * `assess-maturity.usecase` → real domain collaborators, fakes only at external ports.
 
-A fake provides controlled behavior; it must not reproduce production business logic.
+A double is one alternative implementation of the port, not a scenario machine.
+
+* Own file, never an inline factory in a suite.
+* Concrete port implementation, so `.adapter.ts`.
+* Name states what it stands for: an available in-memory source, an unavailable boundary.
+* Two concepts, two classes — not one class with a union widened until it plays both parts.
+* Constructor takes what the double *is*, never a behaviour callback or a mode selector.
+* Controlled behavior only. It never reproduces production business logic.
+* A failing double takes `unknown`, not `Error` — that is what `catch` binds under `strict`.
+* It emerges because a business test needs it. No library of doubles written ahead of them.
+
+A constructor that selects between behaviours is driven by the branches of the test, not by anything the system has.
 
 ## Core semantics to protect
 

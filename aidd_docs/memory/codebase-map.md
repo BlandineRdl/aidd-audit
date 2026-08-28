@@ -27,7 +27,7 @@ flowchart TD
 - `aidd_docs/`: `INSTALL.md` holds the frozen technical vision and execution plan; `memory/` is this bank.
 - `scripts/`: gate tooling, not product code. `prove-boundary-rules.mjs` proves every dependency-cruiser rule still bites; see `coding-assertions.md`.
 - `src/maturity/`: `engine/` decides, and keeps the guards that refuse an invalid hand-built model; `loading/` turns a YAML file into a model the engine may trust — shape, then invariants; `models/` holds the types and the rules shared by both.
-- `src/evidence/`: `resolution/resolve-evidence.ts`, its models, and `ports/evidence-collector.port.ts` exist; collection, the fixture adapter, and the live-repository adapter are still **(planned)**.
+- `src/evidence/`: `resolution/resolve-evidence.ts`, its models, `ports/evidence-collector.port.ts` and `usecases/collect-evidence.usecase.ts` exist; the fixture adapter and the live-repository adapter are still **(planned)**. The use case runs collectors and resolves what they observed; it owns no axis semantics and no coverage arithmetic.
 - `src/assessment/`: `contracts/assessment-report.contract.ts` exists; the orchestration between maturity and evidence is still **(planned)**. Owns no maturity or evidence rules.
 - `src/cli/`: `renderers/json.renderer.ts` and `renderers/human.renderer.ts` exist, with `renderers/unrenderable-report.error.ts` guarding the JSON boundary. The `assess` command is still **(planned)**.
 

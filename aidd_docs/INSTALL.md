@@ -160,12 +160,12 @@ flowchart TB
   end
 
   subgraph assessment["assessment — composition context"]
-    ASSESS["assess-maturity.usecase"]
+    ASSESS["assess-maturity.usecase — orchestration, coverage"]
     CONTRACT["contracts/ assessment-report.contract (schemaVersion)"]
   end
 
   subgraph evidence["evidence context"]
-    COLLECT["collect-evidence.usecase — timeout, degrade, provenance, coverage"]
+    COLLECT["collect-evidence.usecase — run collectors, degrade, provenance"]
     RESOLVE["resolve-evidence — CONFIRMED / CLAIMED / CONFLICTING / UNKNOWN"]
     PSRC["ports/ collector ports"]
   end
@@ -262,8 +262,7 @@ laivel-up/
 │   │   ├── models/
 │   │   │   ├── observation.model.ts
 │   │   │   ├── evidence.model.ts
-│   │   │   ├── evidence-status.model.ts
-│   │   │   └── coverage.model.ts
+│   │   │   └── evidence-status.model.ts
 │   │   ├── usecases/
 │   │   │   └── collect-evidence.usecase.ts
 │   │   ├── resolution/
@@ -277,7 +276,8 @@ laivel-up/
 │   ├── assessment/
 │   │   ├── models/
 │   │   │   ├── assessment.model.ts
-│   │   │   └── axis-result.model.ts
+│   │   │   ├── axis-result.model.ts
+│   │   │   └── coverage.model.ts
 │   │   ├── contracts/
 │   │   │   └── assessment-report.contract.ts
 │   │   └── usecases/
@@ -479,7 +479,7 @@ Their deliberate holes are part of the specification:
 * `leodagan` has no `session.md`;
 * `perceval` has no `repo-context/`.
 
-Each test must therefore also assert collection coverage.
+Each test must therefore also assert the report's coverage.
 
 Missing input yields `UNKNOWN`, never a fabricated negative observation.
 
@@ -587,7 +587,7 @@ The supplied architecture was reviewed inline instead; its findings are recorded
 | 2  | The CLI had no home, though a deal-breaker governs it                                   | Added `cli/` as a driving adapter with renderers and no business logic.                                                                                                                                                                                                                      |
 | 3  | `--json` was implied by the domain model                                                | Added `assessment/contracts/assessment-report.contract.ts` with `schemaVersion`, versioned separately from `assessment.model.ts`.                                                                                                                                                            |
 | 4  | `git-activity.adapter.ts` was ambiguous between fixture and live collector              | Renamed `live-repository.adapter.ts`; fixture reading stays in `profile-bundle.adapter.ts`.                                                                                                                                                                                                  |
-| 5  | Per-collector timeout and degradation had nowhere to live                               | Collector-level ports; `collect-evidence.usecase.ts` owns timeout, failure normalisation, provenance and coverage aggregation. Collector execution status stays separate from evidence status — an unavailable collector leaves evidence `UNKNOWN`; it does not create a new evidence state. |
+| 5  | Per-collector timeout and degradation had nowhere to live                               | Collector-level ports; `collect-evidence.usecase.ts` owns collector execution, failure normalisation and provenance. The caller owns the budget and hands down an `AbortSignal`, so a use case holds no clock. Coverage is report shape, derived by `assessment` from the requested axes and the resolved evidence. Collector execution status stays separate from evidence status — an unavailable collector leaves evidence `UNKNOWN`; it does not create a new evidence state. |
 | 6  | `UNKNOWN`, `CLAIMED` and `CONFLICTING` did not have explicit maturity semantics         | Only `CONFIRMED` evidence may satisfy a requirement. The other statuses produce an `UNPROVEN` assessment outcome and cannot increase maturity.                                                                                                                                               |
 | 7  | Axis and level calculation were described but not formally frozen                       | Added explicit deterministic semantics and decision-engine tests before acceptance tests.                                                                                                                                                                                                    |
 | 8  | `assessment` could become a catch-all business layer                                    | Explicitly constrained it to orchestration. Evidence and maturity decisions remain inside their respective contexts.                                                                                                                                                                         |

@@ -2,7 +2,7 @@
 
 The macro technical shape: contexts, dependencies, and architectural boundaries.
 
-**Status: `maturity/engine` and its YAML model loader, `evidence/resolution`, the assessment contract and the CLI's human renderer exist; the assess command and the orchestration usecases do not.** `aidd_docs/INSTALL.md` holds the implementation plan; this file defines the architecture the code must preserve.
+**Status: `maturity/engine` and its YAML model loader, `evidence/resolution`, `evidence/usecases/collect-evidence.usecase.ts`, the assessment contract and the CLI's renderers exist; the assess command, the collector adapters and the `assessment` orchestration do not.** `aidd_docs/INSTALL.md` holds the implementation plan; this file defines the architecture the code must preserve.
 
 ## Stack
 
@@ -56,6 +56,8 @@ It knows nothing about maturity calculation, assessment orchestration, or CLI co
 Composes `evidence` and `maturity` to produce an assessment.
 
 It owns orchestration, **not business rules**. Resolution rules remain in `evidence`; maturity rules remain in `maturity`.
+
+Coverage is its own. `axesRequested`, `axesObserved` and `axesConfirmed` describe the report, not the collection: `assessment` derives all three from the axes it requested and the evidence it got back. `evidence` owns collector execution, provenance and resolution, and stops there — it never counts on behalf of a report it does not build.
 
 If orchestration starts deciding domain semantics because it has access to both contexts, the boundary has failed.
 
