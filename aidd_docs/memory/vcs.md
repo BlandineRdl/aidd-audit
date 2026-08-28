@@ -27,4 +27,11 @@ Agents must not redefine shared semantics inside their context. Contracts first,
 
 ## Commit Strategy
 
-AI should auto commit: `never`
+AI should auto commit: `never`.
+
+- The one exception: the SDLC pipeline ran to its end — framed, delivered, review approved with no blocker — **and a human validated that outcome**. Both conditions, in that order.
+- A green gate is not validation. Neither is an approving reviewer: the pipeline reviews its own work, so the last word belongs to someone outside it.
+- Until that word is given, the work stays uncommitted in the worktree.
+- An agent reaching the end of the pipeline reports what it built and stops. It never commits in anticipation of approval.
+- `/aidd-orchestrator:01-sdlc` ending in "a draft pull request" does not override this rule.
+- Push and pull request follow the same gate. `origin` is a backup and a sharing point, so anything that reaches it has been seen by a human first.
