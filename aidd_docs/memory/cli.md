@@ -8,6 +8,8 @@ The command-line tool: its commands, inputs, and distribution.
 
 - `aidd-audit assess <path>` — assess a repository or a fixture bundle and report its highest proven maturity level. The single command of the MVP.
 
+**A live repository cannot be assigned a level in the MVP, and this is a ceiling, not a bug.** `intervention` counts corrective commits made after a change was opened; an opening event is a forge concept, and a forge API is out of MVP scope. No local history recovers it, merge-based included — a merge records that a branch landed, never what followed review. `size` needs the same change boundaries and so is observable only where merge commits preserve them, which excludes squash and rebase histories. Every level of `aidd.yml` declares all four axes, so one `UNKNOWN` axis is enough: `assess <a repository>` reports `proven: null`, and `assess <a bundle>` is what classifies. The renderer path for `proven: null` is therefore the live command's normal output, not its edge case. Lifted by a forge collector, post-MVP, behind the same port.
+
 ## Interface
 
 - `--json` renders the frozen `assessment-report.contract` instead of the human explanation. It is the contract adapters and tests bind to.
