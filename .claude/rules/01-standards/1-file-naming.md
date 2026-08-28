@@ -23,6 +23,7 @@ A file's folder says which context owns it. Its name expresses the concept; a su
 - `.contract.ts` a versioned public shape.
 - `.model.ts` a domain type or value.
 - `.error.ts` one exported error class.
+- `.renderer.ts` turns a report into one output surface's text, no business logic.
 - `.fixture.ts` shared test data, never a suite.
 
 ## Names
