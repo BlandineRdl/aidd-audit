@@ -1,0 +1,191 @@
+# Canonical AIDD maturity model.
+#
+# Transcribed from the 7x4 grid in levels/aidd.md, which remains human
+# documentation and is never loaded at runtime. This file is the only form
+# of the maturity model the engine reads.
+#
+# Every requirement below is a MINIMUM THRESHOLD, never an exact value.
+# A level is satisfied when its requirements are met or exceeded.
+#
+# Deciding whether evidence can satisfy a requirement, how thresholds are
+# evaluated, how axes combine, and which level is ultimately reported belongs
+# to the deterministic engine, not to this file.
+#
+# The grid's "Ce qu'on observe" column is deliberately absent: it illustrates
+# possible observations; it does not define decision rules.
+#
+# Custom models passed through --model must conform to this schema.
+
+schemaVersion: 1
+id: aidd
+
+# Scales define the vocabulary and ordering used by requirements.
+#
+# For ordinal scales, values are ordered from lowest to highest.
+# For set scales, requirements explicitly list every required capability.
+# Numeric scales use ordinary minimum-threshold comparison.
+scales:
+  size:
+    kind: ordinal
+    values:
+      - none
+      - S
+      - M
+      - L
+      - XL
+
+  harness:
+    kind: set
+    members:
+      - prompts
+      - context-engineering
+      - behavior
+      - loops
+
+  intervention:
+    kind: ordinal
+    # Ascending autonomy: later values mean less human intervention.
+    values:
+      - not-applicable          # "—"
+      - after-the-fact-most     # "après coup, sur la majorité"
+      - after-the-fact-some     # "après coup, sur une partie"
+      - key-steps               # "aux étapes clés"
+      - never-once-framed       # "jamais, une fois la tâche cadrée"
+      - never-framing-included  # "jamais, cadrage compris"
+
+  parallelism:
+    kind: numeric
+
+axes:
+  - id: size
+    label: Taille
+    scale: size
+
+  - id: harness
+    label: Harness
+    scale: harness
+
+  - id: intervention
+    label: Intervention
+    scale: intervention
+
+  - id: parallelism
+    label: En parallèle
+    scale: parallelism
+
+# rank is the canonical level ordering. YAML list order has no semantic meaning.
+#
+# Levels are cumulative in maturity, but the engine does not infer satisfaction
+# from rank alone: every level is evaluated against its own requirements.
+#
+# Set requirements are therefore cumulative explicitly. For example, Blue
+# requires both prompts and context-engineering rather than relying on an
+# implicit relationship between those capabilities.
+levels:
+  - id: white
+    rank: 0
+    label: White
+    requirements:
+      - axis: size
+        min: none
+      - axis: harness
+        includes: []
+      - axis: intervention
+        min: not-applicable
+      - axis: parallelism
+        min: 0
+
+  - id: red
+    rank: 1
+    label: Red
+    requirements:
+      - axis: size
+        min: S
+      - axis: harness
+        includes:
+          - prompts
+      - axis: intervention
+        min: after-the-fact-most
+      - axis: parallelism
+        min: 1
+
+  - id: blue
+    rank: 2
+    label: Blue
+    requirements:
+      - axis: size
+        min: M
+      - axis: harness
+        includes:
+          - prompts
+          - context-engineering
+      - axis: intervention
+        min: after-the-fact-some
+      - axis: parallelism
+        min: 1
+
+  - id: green
+    rank: 3
+    label: Green
+    requirements:
+      - axis: size
+        min: L
+      - axis: harness
+        includes:
+          - prompts
+          - context-engineering
+          - behavior
+      - axis: intervention
+        min: key-steps
+      - axis: parallelism
+        min: 1
+
+  - id: copper
+    rank: 4
+    label: Copper
+    requirements:
+      - axis: size
+        min: L
+      - axis: harness
+        includes:
+          - prompts
+          - context-engineering
+          - behavior
+      - axis: intervention
+        min: key-steps
+      - axis: parallelism
+        min: 3
+
+  - id: silver
+    rank: 5
+    label: Silver
+    requirements:
+      - axis: size
+        min: L
+      - axis: harness
+        includes:
+          - prompts
+          - context-engineering
+          - behavior
+          - loops
+      - axis: intervention
+        min: never-once-framed
+      - axis: parallelism
+        min: 3
+
+  - id: gold
+    rank: 6
+    label: Gold
+    requirements:
+      - axis: size
+        min: L
+      - axis: harness
+        includes:
+          - prompts
+          - context-engineering
+          - behavior
+          - loops
+      - axis: intervention
+        min: never-framing-included
+      - axis: parallelism
+        min: 3
