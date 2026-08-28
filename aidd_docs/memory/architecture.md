@@ -2,7 +2,7 @@
 
 The macro technical shape: contexts, dependencies, and architectural boundaries.
 
-**Status: manifest and toolchain exist; no `src/` does.** `aidd_docs/INSTALL.md` holds the implementation plan; this file defines the architecture the code must preserve.
+**Status: `maturity/engine`, `evidence/resolution` and the assessment contract exist; the CLI and orchestration usecases do not.** `aidd_docs/INSTALL.md` holds the implementation plan; this file defines the architecture the code must preserve.
 
 ## Stack
 
@@ -45,6 +45,8 @@ It knows nothing about evidence collection, assessment orchestration, or CLI con
 ### `evidence`
 
 Owns observation collection and evidence resolution, including collector ports and their adapters.
+
+`resolveEvidence` lives in `resolution/`, not in `usecases/`, for the same reason `checkMaturity` lives in `engine/`: it takes domain values and returns a domain value, loading and collecting nothing.
 
 It knows nothing about maturity calculation, assessment orchestration, or CLI concerns.
 
@@ -124,7 +126,7 @@ Nothing below may be redefined inside a context. Each was frozen because more th
 * `assessment/contracts/assessment-report.contract.ts` — the versioned public shape. Self-contained on purpose.
 * `evidence/ports/evidence-collector.port.ts` — one interface, two adapters: the fixture bundle and the live repository. They must stay interchangeable. A collector **must honour `context.signal`**: exceeding its budget is reported as `TIMED_OUT`, never as a silent hang. The type cannot express that duty and `CollectorRun` only records the outcome, so it is written here.
 * `evidence/models/observation.model.ts` — a collector emits observations and never resolves a status. `OBSERVED` can prove a requirement, `DECLARED` cannot; that distinction is what separates a fact from a claim.
-* `evidence/models/axis.model.ts` — the vocabulary a collector may speak, handed down by `assessment` from the loaded model. A collector that invents a value off its scale is rejected downstream rather than ranked.
+* `evidence/models/axis.model.ts` — the vocabulary a collector may speak, handed down by `assessment` from the loaded model. A collector that invents a value off its scale is rejected rather than ranked, at the boundary that maps observations into maturity input — not by resolution, which only decides agreement, and not by the model loader, which answers whether the model itself is valid.
 * `maturity/engine/` and its tests — the decision semantics, split by concept: `maturity-engine.ts` walks levels and picks the proven one, `requirement-outcome.ts` holds the conservative rule, `scale-comparison.ts` compares a value to a threshold. The tests decide when prose disagrees.
 
 ## Gotchas

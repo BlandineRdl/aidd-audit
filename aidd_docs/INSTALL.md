@@ -166,7 +166,7 @@ flowchart TB
 
   subgraph evidence["evidence context"]
     COLLECT["collect-evidence.usecase — timeout, degrade, provenance, coverage"]
-    RESOLVE["resolve-evidence.usecase — CONFIRMED / CLAIMED / CONFLICTING / UNKNOWN"]
+    RESOLVE["resolve-evidence — CONFIRMED / CLAIMED / CONFLICTING / UNKNOWN"]
     PSRC["ports/ collector ports"]
   end
 
@@ -265,8 +265,9 @@ laivel-up/
 │   │   │   ├── evidence-status.model.ts
 │   │   │   └── coverage.model.ts
 │   │   ├── usecases/
-│   │   │   ├── collect-evidence.usecase.ts
-│   │   │   └── resolve-evidence.usecase.ts
+│   │   │   └── collect-evidence.usecase.ts
+│   │   ├── resolution/
+│   │   │   └── resolve-evidence.ts
 │   │   ├── ports/
 │   │   │   └── evidence-collector.port.ts
 │   │   └── adapters/
@@ -292,7 +293,7 @@ laivel-up/
     ├── maturity/
     │   └── maturity-engine.test.ts
     ├── evidence/
-    │   └── resolve-evidence.usecase.test.ts
+    │   └── resolve-evidence.test.ts
     ├── integration/
     │   └── live-repository.adapter.test.ts
     └── acceptance/
@@ -301,7 +302,7 @@ laivel-up/
 
 Conventions:
 
-**folder = business context · subfolder = architectural grouping · suffix = architectural role and searchable metadata.**
+**folder = business context · subfolder = architectural grouping · name = concept · suffix (when present) = architectural role and searchable metadata.**
 
 ## Decision engine tests
 
