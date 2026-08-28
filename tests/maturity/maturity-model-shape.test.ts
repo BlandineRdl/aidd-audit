@@ -2,13 +2,7 @@ import { describe, expect, it } from 'vitest'
 import YAML from 'yaml'
 import { InvalidMaturityModelError } from '../../src/maturity/models/invalid-maturity-model.error.js'
 import { parseMaturityModel } from '../../src/maturity/loading/load-maturity-model.js'
-import {
-  mutate,
-  mutateShape,
-  pick,
-  validDocument,
-  validSource,
-} from './maturity-model-document.fixture.js'
+import { mutate, mutateShape, pick } from './maturity-model-document.fixture.js'
 
 describe('a document the parser cannot turn into a model', () => {
   describe('a document that is not a model at all', () => {

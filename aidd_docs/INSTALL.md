@@ -253,10 +253,10 @@ laivel-up/
 │   │   │   └── requirement-result.model.ts
 │   │   ├── engine/
 │   │   │   └── maturity-engine.ts
-│   │   ├── ports/
-│   │   │   └── maturity-model.port.ts
-│   │   └── adapters/
-│   │       └── load-maturity-model.ts
+│   │   └── loading/
+│   │       ├── load-maturity-model.ts
+│   │       ├── model-shape.ts
+│   │       └── model-consistency.ts
 │   │
 │   ├── evidence/
 │   │   ├── models/

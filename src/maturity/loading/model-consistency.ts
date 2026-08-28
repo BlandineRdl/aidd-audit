@@ -124,9 +124,10 @@ function requireNoDip(
 }
 
 /**
- * A mismatch must throw, never fall through to the permissive answer: returning
- * `true` here once let a dipping model pass. Vocabulary catches it first in the
- * normal path, which is exactly why this must not rely on that.
+ * The `never` in `default` is the only thing requiring a new `Scale` kind to be
+ * given a comparison here; without it a fourth kind silently inherits `true`,
+ * and every model becomes cumulative. No test can reach that branch, so nothing
+ * but this compiles it shut.
  */
 function reachesOrExceeds(
   scale: Scale,
