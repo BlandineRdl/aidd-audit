@@ -2,7 +2,7 @@
  * Architecture boundaries, enforced mechanically.
  *
  * INSTALL.md step 5: this is the wall parallel worktree agents are most likely
- * to breach, so it must fail in `pnpm test`, not in review.
+ * to breach, so it must fail in `pnpm architecture`, not in review.
  */
 module.exports = {
   forbidden: [
@@ -39,21 +39,21 @@ module.exports = {
       comment: 'Infrastructure crosses inward through ports. Models and use cases never touch the disk.',
       severity: 'error',
       from: { path: '^src/[^/]+/(models|usecases|contracts)/' },
-      to: { path: '^node:(fs|fs/promises|path|os)$' },
+      to: { dependencyTypes: ['core'], path: '^(node:)?(fs|fs/promises|path|os)$' },
     },
     {
       name: 'domain-has-no-processes',
       comment: 'Git is reached through an adapter, never spawned from a use case.',
       severity: 'error',
       from: { path: '^src/[^/]+/(models|usecases|contracts)/' },
-      to: { path: '^node:child_process$' },
+      to: { dependencyTypes: ['core'], path: '^(node:)?child_process$' },
     },
     {
       name: 'domain-has-no-vendor-sdk',
       comment: 'The YAML parser belongs to maturity/adapters/. No domain or use-case file imports a vendor package.',
       severity: 'error',
       from: { path: '^src/[^/]+/(models|usecases|contracts)/' },
-      to: { dependencyTypes: ['npm'] },
+      to: { dependencyTypes: ['npm', 'npm-dev', 'npm-optional', 'npm-peer', 'npm-no-pkg', 'npm-unknown'] },
     },
     {
       name: 'no-circular',

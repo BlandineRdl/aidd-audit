@@ -3,9 +3,12 @@
   "version": "0.1.0",
   "description": "Evaluation de maturite AIDD basee sur des preuves. Deterministe, hors ligne, explicable.",
   "scripts": {
-    "test": "vitest run && depcruise src --config .dependency-cruiser.cjs",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "architecture": "depcruise src && node scripts/prove-boundary-rules.mjs",
+    "check": "pnpm typecheck && pnpm test && pnpm architecture",
     "build": "tsup",
-    "typecheck": "tsc --noEmit"
+    "prepare": "lefthook install"
   },
   "keywords": [],
   "author": "Black Sun",
@@ -19,12 +22,15 @@
     "aidd-audit": "./dist/cli.js"
   },
   "packageManager": "pnpm@11.24.0",
+  "dependencies": {
+    "yaml": "^2.9.0"
+  },
   "devDependencies": {
     "@types/node": "^26.4.0",
     "dependency-cruiser": "^18.2.0",
+    "lefthook": "^2.1.10",
     "tsup": "^8.5.1",
     "typescript": "^5.9.3",
-    "vitest": "^4.1.11",
-    "yaml": "^2.9.0"
+    "vitest": "^4.1.11"
   }
 }

@@ -25,6 +25,7 @@ flowchart TD
 - `levels/aidd.md`: human documentation of the model — the seven levels, four axes, and 7×4 grid. Never loaded at runtime.
 - `profiles/`: acceptance fixtures — `perceval` → Red, `bohort` → Blue, `leodagan` → Green, `arthur` → Copper. Their deliberate holes are part of the specification; see `testing.md`.
 - `aidd_docs/`: `INSTALL.md` holds the frozen technical vision and execution plan; `memory/` is this bank.
+- `scripts/`: gate tooling, not product code. `prove-boundary-rules.mjs` proves every dependency-cruiser rule still bites; see `coding-assertions.md`.
 - `src/maturity/` **(planned)**: deterministic maturity decision engine and maturity-model port.
 - `src/evidence/` **(planned)**: evidence collection and resolution, collector ports, fixture adapter, and live-repository adapter.
 - `src/assessment/` **(planned)**: orchestration between maturity and evidence, plus the versioned public report contract. Owns no maturity or evidence rules.
