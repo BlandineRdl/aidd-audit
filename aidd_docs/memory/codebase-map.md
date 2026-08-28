@@ -2,15 +2,15 @@
 
 The macro layout: the top-level areas and what each holds. A map to navigate, not the full tree.
 
-**Status: `levels/`, `profiles/`, `aidd_docs/`, `aidd.yml`, `src/` and `tests/` exist; `src/assessment/usecases` and `src/cli/` are still planned** — the target layout is frozen in `aidd_docs/INSTALL.md` under **Folder structure**.
+**Status: `levels/`, `profiles/`, `aidd_docs/`, `aidd.yml`, `src/` and `tests/` exist, including both `src/cli/renderers/`; `src/assessment/usecases` and `src/cli/assess.command.ts` are still planned** — the target layout is frozen in `aidd_docs/INSTALL.md` under **Folder structure**.
 
 ```mermaid
 flowchart TD
   ROOT["laivel-up"] --> MODEL["aidd.yml · levels/ — maturity model"]
   ROOT --> FIX["profiles/ — acceptance fixtures"]
   ROOT --> DOCS["aidd_docs/ — install guide + memory"]
-  ROOT --> SRC["src/ — planned"]
-  ROOT --> TESTS["tests/ — planned"]
+  ROOT --> SRC["src/"]
+  ROOT --> TESTS["tests/"]
 
   SRC --> MAT["maturity/"]
   SRC --> EV["evidence/"]
@@ -29,7 +29,7 @@ flowchart TD
 - `src/maturity/`: `engine/` holds the deterministic decision function and, temporarily, the guards that refuse an invalid model; plus the models. There is no `validation/` layer and no loader yet.
 - `src/evidence/`: `resolution/resolve-evidence.ts`, its models, and `ports/evidence-collector.port.ts` exist; collection, the fixture adapter, and the live-repository adapter are still **(planned)**.
 - `src/assessment/`: `contracts/assessment-report.contract.ts` exists; the orchestration between maturity and evidence is still **(planned)**. Owns no maturity or evidence rules.
-- `src/cli/` **(planned)**: `assess` command and `json` / `human` renderers.
+- `src/cli/`: `renderers/json.renderer.ts` and `renderers/human.renderer.ts` exist, with `renderers/unrenderable-report.error.ts` guarding the JSON boundary. The `assess` command is still **(planned)**.
 
 ## Entry points
 
