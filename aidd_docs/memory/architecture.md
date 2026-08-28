@@ -107,6 +107,17 @@ Runtime assessment is fully offline.
 
 The grid's "Ce qu'on observe" column is deliberately not encoded: it illustrates, it does not decide.
 
+## Frozen before the split
+
+Nothing below may be redefined inside a context. Each was frozen because more than one worktree binds to it, and a divergence would only surface at composition time.
+
+* `assessment/contracts/assessment-report.contract.ts` — the versioned public shape. Self-contained on purpose.
+* `evidence/ports/evidence-collector.port.ts` — one interface, two adapters: the fixture bundle and the live repository. They must stay interchangeable.
+* `evidence/models/observation.model.ts` — a collector emits observations and never resolves a status. `OBSERVED` can prove a requirement, `DECLARED` cannot; that distinction is what separates a fact from a claim.
+* `evidence/models/axis.model.ts` — the vocabulary a collector may speak, handed down by `assessment` from the loaded model. A collector that invents a value off its scale is rejected downstream rather than ranked.
+* `maturity/ports/maturity-model.port.ts` — one adapter, but the YAML parser must stay behind it.
+* `maturity/usecases/check-maturity.usecase.ts` and its tests — the decision semantics. The tests decide when prose disagrees.
+
 ## Gotchas
 
 * `levels/aidd.md` documents the maturity model but is never loaded at runtime. Runtime reads `aidd.yml`.

@@ -64,8 +64,8 @@ module.exports = {
     {
       name: 'no-orphans',
       severity: 'warn',
-      comment: 'A public contract is legitimately unreferenced until an adapter binds to it.',
-      from: { orphan: true, pathNot: ['\\.d\\.ts$', '^src/[^/]+/contracts/'] },
+      comment: 'A public contract or a port is legitimately unreferenced until an adapter binds to it.',
+      from: { orphan: true, pathNot: ['\\.d\\.ts$', '^src/[^/]+/(contracts|ports)/'] },
       to: {},
     },
   ],
