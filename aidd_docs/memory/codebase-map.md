@@ -26,7 +26,7 @@ flowchart TD
 - `profiles/`: acceptance fixtures — `perceval` → Red, `bohort` → Blue, `leodagan` → Green, `arthur` → Copper. Their deliberate holes are part of the specification; see `testing.md`.
 - `aidd_docs/`: `INSTALL.md` holds the frozen technical vision and execution plan; `memory/` is this bank.
 - `scripts/`: gate tooling, not product code. `prove-boundary-rules.mjs` proves every dependency-cruiser rule still bites; see `coding-assertions.md`.
-- `src/maturity/`: `engine/` holds the deterministic decision function and, temporarily, the guards that refuse an invalid model; plus the models. There is no `validation/` layer and no loader yet.
+- `src/maturity/`: `engine/` decides, and keeps the guards that refuse an invalid hand-built model; `loading/` turns a YAML file into a model the engine may trust — shape, then invariants; `models/` holds the types and the rules shared by both.
 - `src/evidence/`: `resolution/resolve-evidence.ts`, its models, and `ports/evidence-collector.port.ts` exist; collection, the fixture adapter, and the live-repository adapter are still **(planned)**.
 - `src/assessment/`: `contracts/assessment-report.contract.ts` exists; the orchestration between maturity and evidence is still **(planned)**. Owns no maturity or evidence rules.
 - `src/cli/`: `renderers/json.renderer.ts` and `renderers/human.renderer.ts` exist, with `renderers/unrenderable-report.error.ts` guarding the JSON boundary. The `assess` command is still **(planned)**.
@@ -42,6 +42,6 @@ flowchart TD
 
 Examples:
 
-`engine/maturity-engine.ts` · `resolution/resolve-evidence.ts` · `assess-maturity.usecase.ts` · `yaml-maturity-model.adapter.ts` · `evidence-collector.port.ts` · `assessment-report.contract.ts`
+`engine/maturity-engine.ts` · `resolution/resolve-evidence.ts` · `assess-maturity.usecase.ts` · `load-maturity-model.ts` · `evidence-collector.port.ts` · `assessment-report.contract.ts`
 
 A suffix names the role a file actually plays, never the folder it landed in. `usecases/` is for application behavior reached through a primary port — something that loads, collects, or sequences. Pure domain decisions live under their own concept: `engine/maturity-engine.ts`.

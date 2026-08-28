@@ -178,7 +178,7 @@ flowchart TB
   subgraph driven["Driven adapters"]
     FIX["profile-bundle.adapter"]
     GIT["live-repository.adapter"]
-    YAML["yaml-maturity-model.adapter"]
+    YAML["load-maturity-model"]
   end
 
   CLI --> ASSESS
@@ -256,7 +256,7 @@ laivel-up/
 │   │   ├── ports/
 │   │   │   └── maturity-model.port.ts
 │   │   └── adapters/
-│   │       └── yaml-maturity-model.adapter.ts
+│   │       └── load-maturity-model.ts
 │   │
 │   ├── evidence/
 │   │   ├── models/
@@ -385,7 +385,7 @@ allowBuilds:
 
 Without it every `pnpm exec` fails: the deps-status check re-runs `pnpm install`, which exits non-zero on `ERR_PNPM_IGNORED_BUILDS`.
 
-The YAML parser is a dependency of `maturity/adapters/` only, never of a domain or use-case file.
+The YAML parser is a dependency of `maturity/loading/` only, never of a domain or use-case file.
 
 ### 2. Author `aidd.yml` — blocking
 
@@ -583,7 +583,7 @@ The supplied architecture was reviewed inline instead; its findings are recorded
 
 | #  | Finding                                                                                 | Resolution                                                                                                                                                                                                                                                                                   |
 | -- | --------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1  | `maturity-model.port.ts` had no implementation                                          | Added `yaml-maturity-model.adapter.ts`, reading one canonical YAML format only. Markdown is documentation.                                                                                                                                                                                   |
+| 1  | `maturity-model.port.ts` had no implementation                                          | Added `load-maturity-model.ts`, reading one canonical YAML format only. Markdown is documentation.                                                                                                                                                                                   |
 | 2  | The CLI had no home, though a deal-breaker governs it                                   | Added `cli/` as a driving adapter with renderers and no business logic.                                                                                                                                                                                                                      |
 | 3  | `--json` was implied by the domain model                                                | Added `assessment/contracts/assessment-report.contract.ts` with `schemaVersion`, versioned separately from `assessment.model.ts`.                                                                                                                                                            |
 | 4  | `git-activity.adapter.ts` was ambiguous between fixture and live collector              | Renamed `live-repository.adapter.ts`; fixture reading stays in `profile-bundle.adapter.ts`.                                                                                                                                                                                                  |

@@ -22,10 +22,13 @@ module.exports = {
     },
     {
       name: 'assessment-composes-never-adapts',
-      comment: 'assessment/ orchestrates public use cases; it never imports a concrete adapter.',
+      comment:
+        'assessment/ orchestrates public use cases; it never imports concrete infrastructure. ' +
+        'loading/ is named here alongside adapters/: it holds the YAML model loader, which is ' +
+        'concrete infrastructure whether or not a port exists for it to implement yet.',
       severity: 'error',
       from: { path: '^src/assessment/' },
-      to: { path: '^src/[^/]+/adapters/' },
+      to: { path: '^src/[^/]+/(adapters|loading)/' },
     },
     {
       name: 'assessment-never-depends-on-cli',
@@ -52,7 +55,7 @@ module.exports = {
     {
       name: 'domain-has-no-vendor-sdk',
       comment:
-        'The YAML parser belongs to maturity/adapters/. No domain or use-case file imports a vendor package.',
+        'The YAML parser belongs to maturity/loading/. No domain or use-case file imports a vendor package.',
       severity: 'error',
       from: { path: '^src/[^/]+/(models|usecases|contracts|engine|resolution)/' },
       to: {

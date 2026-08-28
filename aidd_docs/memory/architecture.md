@@ -2,7 +2,7 @@
 
 The macro technical shape: contexts, dependencies, and architectural boundaries.
 
-**Status: `maturity/engine`, `evidence/resolution` and the assessment contract exist; the CLI and orchestration usecases do not.** `aidd_docs/INSTALL.md` holds the implementation plan; this file defines the architecture the code must preserve.
+**Status: `maturity/engine` and its YAML model loader, `evidence/resolution`, the assessment contract and the CLI's human renderer exist; the assess command and the orchestration usecases do not.** `aidd_docs/INSTALL.md` holds the implementation plan; this file defines the architecture the code must preserve.
 
 ## Stack
 
@@ -11,7 +11,7 @@ The macro technical shape: contexts, dependencies, and architectural boundaries.
 * pnpm, pinned through `packageManager`.
 * tsup/esbuild bundles one entrypoint, `dist/cli.js`.
 * dependency-cruiser mechanically enforces context boundaries.
-* YAML is the runtime format of the maturity model. Its parser belongs to `maturity/adapters/`.
+* YAML is the runtime format of the maturity model. Its parser belongs to `maturity/loading/`.
 * No database, ORM, auth, or network at runtime. The assessed repository is the input; AIDD owns no persistent state.
 
 ## Shape
@@ -26,17 +26,18 @@ flowchart LR
   ASSESS --> MAT["maturity — decision engine"]
 
   EV --> EPORT["collector ports"]
-  MAT --> MPORT["maturity-model port (planned)"]
+  MAT --> MAD["maturity loading<br/>load-maturity-model.ts"]
 
   EAD["evidence adapters<br/>fixtures · live repository"] -.->|implement| EPORT
-  MAD["maturity adapter<br/>YAML model"] -.->|implement| MPORT
 ```
+
+No `maturity-model.port.ts` exists, and the loader is therefore **not** an adapter: nothing asks `maturity` for a model through an abstraction yet, so there is no port to implement. It lives in `loading/` and is named for what it does. When a use case needs "give me a maturity model", the port appears with that consumer and this file becomes its YAML implementation. A port with one implementation and no consumer would be a wall with no door.
 
 ## Contexts
 
 ### `maturity`
 
-Owns maturity calculation: requirements, axes, levels and thresholds. The maturity-model port and its YAML adapter are planned, not written.
+Owns maturity calculation: requirements, axes, levels and thresholds. `loading/` turns a YAML file into a model the engine may trust; `assessment` is barred from importing it, as it is from any concrete infrastructure.
 
 `checkMaturity` lives in `engine/`, not in `usecases/`. It takes domain values and returns a domain value; it loads nothing, collects nothing, and sequences no application workflow. Filing it as a use case only forced use-case rules onto a pure decision function — it is the deterministic decision engine the brief names, and the folder says so.
 
@@ -93,7 +94,7 @@ Driving adapters consume this contract; they do not reshape domain semantics the
 
 ## Runtime boundaries
 
-The maturity model will be loaded through a driven adapter that parses YAML, checks its shape and vocabulary, and guarantees cumulativity before returning a `MaturityModel`. **That loader does not exist yet** — see `load AIDD model`.
+The maturity model is loaded through `maturity/loading/load-maturity-model.ts` (`loadMaturityModel` / `parseMaturityModel`), the only place in `maturity` that may import `yaml` or `node:fs`. It parses YAML, checks shape and vocabulary, verifies every level covers every declared axis, and guarantees cumulativity before returning a `MaturityModel` the engine may trust without re-checking. A rejection throws `InvalidMaturityModelError`, naming what is wrong.
 
 Evidence is collected through collector ports. Fixture and live-repository collectors implement the same boundary and produce normalised observations.
 
@@ -117,7 +118,7 @@ A higher rank never asks less than the rank below it, on any axis. `checkMaturit
 
 The AIDD domain is cumulative, so a custom `--model` that is not is not an AIDD model.
 
-**Not enforced yet.** The engine relies on it and nothing checks it; the loader owes it. Until then only `aidd.yml`, verified monotone by hand, is safe to trust.
+`load-maturity-model.ts` enforces it: a level asking less than the rank below it on any axis is rejected before the engine ever sees the model.
 
 ## Frozen before the split
 

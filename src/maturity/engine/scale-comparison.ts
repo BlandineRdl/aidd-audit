@@ -9,7 +9,8 @@ import {
   type SetRequirement,
 } from '../models/maturity.model.js'
 import type { ObservedValue } from '../models/axis-observation.model.js'
-import { InvalidMaturityModelError } from './invalid-maturity-model.error.js'
+import { InvalidMaturityModelError } from '../models/invalid-maturity-model.error.js'
+import { requireThresholdOnScale } from '../models/threshold-on-scale.js'
 import { InvalidObservationError } from './invalid-observation.error.js'
 
 export function reaches(
@@ -37,54 +38,14 @@ function scaleForAxis(model: MaturityModel, axisId: AxisId): Scale {
     throw new InvalidMaturityModelError(`Unknown axis '${axisId}'.`)
   }
 
-  const scale = model.scales[axis.scale]
+  // Object.hasOwn, not a bare index: a plain lookup resolves an inherited
+  // Object.prototype member (`toString`, …) as if it were a declared scale.
+  const scale = Object.hasOwn(model.scales, axis.scale) ? model.scales[axis.scale] : undefined
   if (scale === undefined) {
     throw new InvalidMaturityModelError(`Unknown scale '${axis.scale}'.`)
   }
 
   return scale
-}
-
-/**
- * A model defect must be rejected, never scored. An off-scale ordinal threshold
- * ranks at -1, which every observation clears; an off-scale set member or a
- * non-numeric minimum can never be met, which would report a practice gap.
- *
- * Temporary here: the `load AIDD model` feature moves this whole function to the
- * loader, where the untyped YAML actually enters.
- */
-function requireThresholdOnScale(scale: Scale, requirement: LevelRequirement): void {
-  if (isSetRequirement(requirement)) {
-    if (scale.kind !== 'set') {
-      throw new InvalidMaturityModelError(
-        `Axis '${requirement.axis}' is not a set scale but declares 'includes'.`,
-      )
-    }
-    for (const member of requirement.includes) {
-      if (!scale.members.includes(member)) {
-        throw new InvalidMaturityModelError(
-          `Member '${member}' is not on the '${requirement.axis}' scale.`,
-        )
-      }
-    }
-    return
-  }
-
-  if (scale.kind === 'set') {
-    throw new InvalidMaturityModelError(
-      `Axis '${requirement.axis}' is a set scale and needs 'includes'.`,
-    )
-  }
-  if (scale.kind === 'numeric' && typeof requirement.min !== 'number') {
-    throw new InvalidMaturityModelError(
-      `Axis '${requirement.axis}' is numeric but its minimum is not a number.`,
-    )
-  }
-  if (scale.kind === 'ordinal' && !scale.values.includes(String(requirement.min))) {
-    throw new InvalidMaturityModelError(
-      `Threshold '${String(requirement.min)}' is not on the '${requirement.axis}' scale.`,
-    )
-  }
 }
 
 function holdsEveryMember(requirement: SetRequirement, value: ObservedValue): boolean {

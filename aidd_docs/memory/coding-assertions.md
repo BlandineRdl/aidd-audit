@@ -38,7 +38,7 @@ Lefthook runs `biome format --write` on the staged files, restages what it rewro
 - `maturity/` importing `evidence/`, `assessment/` or `cli/`
 - `evidence/` importing `maturity/`, `assessment/` or `cli/`
 - a model, use-case, contract, engine or resolution file importing `node:fs`, `node:child_process`, or any vendor package
-- `assessment/` importing a concrete adapter — it may compose public APIs only
+- `assessment/` importing concrete infrastructure from `adapters/` or `loading/` — it may compose public APIs only
 
 ### The rules are themselves under test
 

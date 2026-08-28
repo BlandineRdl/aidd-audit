@@ -5,7 +5,7 @@ import type {
   LevelResult,
   RequirementResult,
 } from '../models/requirement-result.model.js'
-import { InvalidMaturityModelError } from './invalid-maturity-model.error.js'
+import { InvalidMaturityModelError } from '../models/invalid-maturity-model.error.js'
 import { InvalidObservationError } from './invalid-observation.error.js'
 import { aggregate, outcomeOf } from './requirement-outcome.js'
 
@@ -18,7 +18,7 @@ export interface MaturityCheck {
   readonly next: LevelResult | null
 }
 
-/** Assumes a well-formed, cumulative model. The loader owes both. */
+/** Assumes a well-formed, cumulative model. `loading/` owes both. */
 export function checkMaturity(
   model: MaturityModel,
   observations: readonly AxisObservation[],

@@ -1,18 +1,19 @@
-import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import YAML from 'yaml'
+import { loadMaturityModel } from '../../src/maturity/loading/load-maturity-model.js'
 import { checkMaturity } from '../../src/maturity/engine/maturity-engine.js'
 import type {
   AxisObservation,
   ObservedValue,
 } from '../../src/maturity/models/axis-observation.model.js'
-import type { AxisId, MaturityModel } from '../../src/maturity/models/maturity.model.js'
+import type { AxisId } from '../../src/maturity/models/maturity.model.js'
 
 /**
  * A conformance test, not a decision test: it reads the filesystem and YAML on
  * purpose, so a typo in aidd.yml fails at commit rather than at assessment.
+ * Loading is itself the claim under test: the canonical model passes every
+ * check without throwing.
  */
-const model = YAML.parse(readFileSync('aidd.yml', 'utf8')) as MaturityModel
+const model = loadMaturityModel('aidd.yml')
 
 const confirmed = (axis: AxisId, value: ObservedValue): AxisObservation => ({
   axis,
@@ -28,6 +29,10 @@ const copperShaped: readonly AxisObservation[] = [
 ]
 
 describe('aidd.yml', () => {
+  it('loads without throwing — shape, vocabulary, coverage and cumulativity all hold', () => {
+    expect(() => loadMaturityModel('aidd.yml')).not.toThrow()
+  })
+
   it('declares the four axes of the reference grid', () => {
     expect(model.axes.map((axis) => axis.id).sort()).toEqual([
       'harness',
