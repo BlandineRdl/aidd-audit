@@ -2,7 +2,7 @@
 
 How this project is tested: TDD boundaries, doubles, and validation.
 
-**Status: strategy and reference fixtures are frozen; `tests/maturity/`, `tests/cli/` and both `tests/evidence/` suites exist. Orchestration and the acceptance suite are still owed.**
+**Status: strategy and reference fixtures are frozen; `tests/maturity/`, `tests/cli/`, both `tests/evidence/` suites and `tests/assessment/` exist. Orchestration and the acceptance suite are still owed.**
 
 ## Strategy
 
@@ -20,8 +20,9 @@ Main behaviors:
 
 * `maturity-engine` — maturity semantics. Not a use case: it takes domain values and returns one, so it is tested directly and without doubles;
 * `resolve-evidence` — evidence resolution. Not a use case: it takes domain values and returns one, so it is tested directly and without doubles;
+* `compose-assessment-report` — projection into the public contract, coverage derivation. Not a use case, for the same reason: tested against the real `checkMaturity`, without doubles;
 * `collect-evidence.usecase` — collector execution, degradation, provenance, and evidence resolution;
-* `assess-maturity.usecase` — orchestration, coverage, and assessment result.
+* `assess-maturity.usecase` — orchestration and assessment result; coverage is `compose-assessment-report`'s to prove.
 
 ## Style and doubles
 
@@ -32,6 +33,7 @@ Avoid mocks of internal collaborators, call-order assertions, and implementation
 Examples:
 
 * `maturity-engine` → no double at all: it is handed a model and observations;
+* `compose-assessment-report` → no double either: real evidence and the real engine, fed through `composeAssessmentReport`;
 * `collect-evidence.usecase` → `FakeInMemoryEvidenceCollector`, `FailingEvidenceCollector`, and the real resolver;
 * `assess-maturity.usecase` → real domain collaborators, fakes only at external ports.
 
@@ -80,7 +82,7 @@ An evidence gap must never produce a recommendation that assumes the underlying 
 
 The four evidence-status names live in three independent declarations: `evidence/models/observation.model.ts`, `maturity/models/axis-observation.model.ts`, and the public contract. The duplication is deliberate — the two contexts are peers that never import each other, and the contract is self-contained so an internal refactor cannot reshape it.
 
-**Owed, not yet written:** a conformance test under `tests/assessment/`, the one place allowed to import all three, asserting the vocabularies stay compatible. `ObservedValue` and `Threshold` are in the same position.
+`tests/assessment/vocabulary-conformance.test.ts` is that conformance test, the one place allowed to import all three. It splits across two gates: `pnpm typecheck` holds the type-level half — statuses, `ObservedValue` and `Threshold` are each asserted `Identical` between declarations, the only way to check `ObservedValue` and `Threshold` at all, since the contract keeps no runtime list of either to compare against. `pnpm test` holds a runtime check of the status names alone, comparing `EVIDENCE_STATUSES` against `EVIDENCE_CONFIDENCES` and against the contract's own status keys.
 
 Not a shared import. A member added to one declaration and not the others compiles today, and the divergence would surface only at composition time.
 

@@ -2,7 +2,7 @@
 
 The macro layout: the top-level areas and what each holds. A map to navigate, not the full tree.
 
-**Status: `levels/`, `profiles/`, `aidd_docs/`, `aidd.yml`, `src/` and `tests/` exist, including both `src/cli/renderers/`; `src/assessment/usecases` and `src/cli/assess.command.ts` are still planned** — the target layout is frozen in `aidd_docs/INSTALL.md` under **Folder structure**.
+**Status: `levels/`, `profiles/`, `aidd_docs/`, `aidd.yml`, `src/` and `tests/` exist, including both `src/cli/renderers/` and `src/assessment/composition/`; `src/assessment/usecases` and `src/cli/assess.command.ts` are still planned** — the target layout is frozen in `aidd_docs/INSTALL.md` under **Folder structure**.
 
 ```mermaid
 flowchart TD
@@ -28,7 +28,7 @@ flowchart TD
 - `scripts/`: gate tooling, not product code. `prove-boundary-rules.mjs` proves every dependency-cruiser rule still bites; see `coding-assertions.md`.
 - `src/maturity/`: `engine/` decides, and keeps the guards that refuse an invalid hand-built model; `loading/` turns a YAML file into a model the engine may trust — shape, then invariants; `models/` holds the types and the rules shared by both.
 - `src/evidence/`: `resolution/resolve-evidence.ts`, its models, `ports/evidence-collector.port.ts` and `usecases/collect-evidence.usecase.ts` exist; the fixture adapter and the live-repository adapter are still **(planned)**. The use case runs collectors and resolves what they observed; it owns no axis semantics and no coverage arithmetic.
-- `src/assessment/`: `contracts/assessment-report.contract.ts` exists; the orchestration between maturity and evidence is still **(planned)**. Owns no maturity or evidence rules.
+- `src/assessment/`: `contracts/assessment-report.contract.ts` and `composition/compose-assessment-report.ts` exist — the latter derives coverage and projects `CollectorProvenance` into `ProvenanceEntry`; `usecases/assess-maturity.usecase.ts`, the sequencer that will load the model, run collection and call it, is still **(planned)**. Owns no maturity or evidence rules.
 - `src/cli/`: `renderers/json.renderer.ts` and `renderers/human.renderer.ts` exist, with `renderers/unrenderable-report.error.ts` guarding the JSON boundary. The `assess` command is still **(planned)**.
 
 ## Entry points
@@ -42,6 +42,6 @@ flowchart TD
 
 Examples:
 
-`engine/maturity-engine.ts` · `resolution/resolve-evidence.ts` · `assess-maturity.usecase.ts` · `load-maturity-model.ts` · `evidence-collector.port.ts` · `assessment-report.contract.ts`
+`engine/maturity-engine.ts` · `resolution/resolve-evidence.ts` · `composition/compose-assessment-report.ts` · `assess-maturity.usecase.ts` · `load-maturity-model.ts` · `evidence-collector.port.ts` · `assessment-report.contract.ts`
 
 A suffix names the role a file actually plays, never the folder it landed in. `usecases/` is for application behavior reached through a primary port — something that loads, collects, or sequences. Pure domain decisions live under their own concept: `engine/maturity-engine.ts`.

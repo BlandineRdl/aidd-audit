@@ -2,7 +2,7 @@
 
 The macro technical shape: contexts, dependencies, and architectural boundaries.
 
-**Status: `maturity/engine` and its YAML model loader, `evidence/resolution`, `evidence/usecases/collect-evidence.usecase.ts`, the assessment contract and the CLI's renderers exist; the assess command, the collector adapters and the `assessment` orchestration do not.** `aidd_docs/INSTALL.md` holds the implementation plan; this file defines the architecture the code must preserve.
+**Status: `maturity/engine` and its YAML model loader, `evidence/resolution`, `evidence/usecases/collect-evidence.usecase.ts`, `assessment/composition/compose-assessment-report.ts`, the assessment contract and the CLI's renderers exist; the assess command, the collector adapters and `assess-maturity.usecase` do not.** `aidd_docs/INSTALL.md` holds the implementation plan; this file defines the architecture the code must preserve.
 
 ## Stack
 
@@ -58,6 +58,10 @@ Composes `evidence` and `maturity` to produce an assessment.
 It owns orchestration, **not business rules**. Resolution rules remain in `evidence`; maturity rules remain in `maturity`.
 
 Coverage is its own. `axesRequested`, `axesObserved` and `axesConfirmed` describe the report, not the collection: `assessment` derives all three from the axes it requested and the evidence it got back. `evidence` owns collector execution, provenance and resolution, and stops there — it never counts on behalf of a report it does not build.
+
+`composeAssessmentReport` lives in `composition/`, not `usecases/`, for the same reason `checkMaturity` and `resolveEvidence` live outside theirs: it takes domain values — a model, evidence, provenance — and returns one, loading and sequencing nothing. It is also where `evidence/models/collector-provenance.model.ts`'s `CollectorProvenance` is projected to the contract's `ProvenanceEntry`; `assessment` owns that mapping because `evidence` was kept from importing `assessment/contracts` on purpose. `assess-maturity.usecase.ts` remains the later sequencer: it will load the model, run collection, and call this function.
+
+`composition/` sits inside the same dependency-cruiser domain rules as `models/`, `usecases/`, `contracts/`, `engine/` and `resolution/` — those match by folder name, so a rule widened to reach it needed its own sentinel per rule; see `coding-assertions.md`.
 
 If orchestration starts deciding domain semantics because it has access to both contexts, the boundary has failed.
 
