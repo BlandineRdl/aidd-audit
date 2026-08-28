@@ -2,7 +2,7 @@
 
 The command-line tool: its commands, inputs, and distribution.
 
-**Status: manifest and toolchain exist (`aidd-audit`, ESM, Node >= 24, pnpm). No `src/` yet.**
+**Status: both renderers exist (`src/cli/renderers/`). `assess.command.ts` does not, so there is still no entry point and `pnpm build` stays red.**
 
 ## Commands
 
@@ -13,6 +13,8 @@ The command-line tool: its commands, inputs, and distribution.
 - `--json` renders the frozen `assessment-report.contract` instead of the human explanation. It is the contract adapters and tests bind to.
 - `--model path/to/custom.yml` overrides the built-in `aidd.yml`.
 - Two renderers, no business logic in either: `json.renderer` (the contract) and `human.renderer` (the explanation).
+- `json.renderer` projects the contract field by field rather than stringifying the report it is handed, so a field the contract does not declare never reaches the published output. Stable key order falls out of that allowlist for free; it is a consequence, not the reason, and no consumer should read meaning into JSON key order.
+- `--json` **refuses** a report holding a non-finite number instead of publishing it. JSON renders `NaN` and `Infinity` as `null`, and `null` in this contract means absence — `observed: null` is "not observed", `proven: null` is "no level established". Publishing one would fabricate an evidence gap no collector reported. There is no faithful substitute, so the renderer throws `UnrenderableReportError` naming the field's path. Refusing is not business logic: it decides nothing about maturity, it declines to publish a document it cannot publish truthfully.
 - The human output must expose the blocking axis and its evidence status, so that "not mature enough" and "we don't know yet" never read as the same conclusion.
 - When `proven` is null the renderer says the subject could not be classified and names what is missing. It never prints White, and never renders the result as lower than a level: "no proven level" is above the scale's floor, not below it.
 - Execution requires no network. Ever.
