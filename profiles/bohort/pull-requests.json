@@ -1,0 +1,266 @@
+[
+  {
+    "number": 1292,
+    "title": "Show the payment status on the invoice list",
+    "state": "open",
+    "draft": false,
+    "merged": false,
+    "created_at": "2026-07-11T19:51:00Z",
+    "merged_at": null,
+    "closed_at": null,
+    "head": {
+      "ref": "feat/1292"
+    },
+    "base": {
+      "ref": "main"
+    },
+    "changed_files": 6,
+    "additions": 132,
+    "deletions": 43,
+    "commits": 7,
+    "review_comments": 6,
+    "body": null
+  },
+  {
+    "number": 1288,
+    "title": "Reject credit notes with a positive amount",
+    "state": "closed",
+    "draft": false,
+    "merged": true,
+    "created_at": "2026-07-09T22:00:00Z",
+    "merged_at": "2026-07-11T14:35:00Z",
+    "closed_at": "2026-07-11T14:35:00Z",
+    "head": {
+      "ref": "feat/1288"
+    },
+    "base": {
+      "ref": "main"
+    },
+    "changed_files": 3,
+    "additions": 45,
+    "deletions": 25,
+    "commits": 7,
+    "review_comments": 4,
+    "body": null
+  },
+  {
+    "number": 1284,
+    "title": "Unify total computation across billable documents",
+    "state": "closed",
+    "draft": false,
+    "merged": true,
+    "created_at": "2026-07-07T07:21:00Z",
+    "merged_at": "2026-07-09T16:08:00Z",
+    "closed_at": "2026-07-09T16:08:00Z",
+    "head": {
+      "ref": "feat/1284"
+    },
+    "base": {
+      "ref": "main"
+    },
+    "changed_files": 4,
+    "additions": 72,
+    "deletions": 39,
+    "commits": 10,
+    "review_comments": 4,
+    "body": "## Context\n\nThe gross total existed in three copies: invoice, quote, credit note. A fix\napplied to one was not applied to the others — that is where bug #1279 came from.\n\n## What changes\n\nOne shared pure function, `computeTotal(lines, country)`. Rates stay in code, in\none table instead of three copies. The sign of a credit note is decided by the caller.\n\n## How I went about it\n\nFirst pass generated from the three existing functions. The result kept the\n`if / else if` per country, which I replaced with the table — otherwise we were\nadding an `else if` for every new country.\n\nThe generated tests only covered the nominal case. I added the unknown country,\nthe empty list and the rounding: that third case is what revealed the\ncomputation returned `0.30000000000000004`.\n\n## What I did not do\n\nMove the rates into the database. That needs a migration and an admin screen.\n\n## Review\n\nThree rounds with @sophie on the function name and where the module belongs.\nFixed before merge."
+  },
+  {
+    "number": 1280,
+    "title": "Handle a missing billing country without crashing",
+    "state": "closed",
+    "draft": false,
+    "merged": true,
+    "created_at": "2026-07-06T07:34:00Z",
+    "merged_at": "2026-07-06T19:54:00Z",
+    "closed_at": "2026-07-06T19:54:00Z",
+    "head": {
+      "ref": "feat/1280"
+    },
+    "base": {
+      "ref": "main"
+    },
+    "changed_files": 1,
+    "additions": 3,
+    "deletions": 3,
+    "commits": 5,
+    "review_comments": 3,
+    "body": null
+  },
+  {
+    "number": 1276,
+    "title": "Add VAT exemption for intra-community customers",
+    "state": "closed",
+    "draft": false,
+    "merged": true,
+    "created_at": "2026-07-01T16:43:00Z",
+    "merged_at": "2026-07-05T17:33:00Z",
+    "closed_at": "2026-07-05T17:33:00Z",
+    "head": {
+      "ref": "feat/1276"
+    },
+    "base": {
+      "ref": "main"
+    },
+    "changed_files": 10,
+    "additions": 252,
+    "deletions": 137,
+    "commits": 10,
+    "review_comments": 2,
+    "body": null
+  },
+  {
+    "number": 1273,
+    "title": "Split the PDF renderer out of the invoice service",
+    "state": "closed",
+    "draft": false,
+    "merged": true,
+    "created_at": "2026-06-23T21:08:00Z",
+    "merged_at": "2026-07-01T07:14:00Z",
+    "closed_at": "2026-07-01T07:14:00Z",
+    "head": {
+      "ref": "feat/1273"
+    },
+    "base": {
+      "ref": "main"
+    },
+    "changed_files": 37,
+    "additions": 807,
+    "deletions": 440,
+    "commits": 10,
+    "review_comments": 3,
+    "body": null
+  },
+  {
+    "number": 1272,
+    "title": "Fix rounding on multi-line discounts",
+    "state": "closed",
+    "draft": false,
+    "merged": true,
+    "created_at": "2026-06-20T21:30:00Z",
+    "merged_at": "2026-06-23T10:48:00Z",
+    "closed_at": "2026-06-23T10:48:00Z",
+    "head": {
+      "ref": "feat/1272"
+    },
+    "base": {
+      "ref": "main"
+    },
+    "changed_files": 3,
+    "additions": 81,
+    "deletions": 33,
+    "commits": 7,
+    "review_comments": 6,
+    "body": null
+  },
+  {
+    "number": 1264,
+    "title": "Move invoice numbering to a dedicated sequence",
+    "state": "closed",
+    "draft": false,
+    "merged": true,
+    "created_at": "2026-06-04T05:49:00Z",
+    "merged_at": "2026-06-20T16:27:00Z",
+    "closed_at": "2026-06-20T16:27:00Z",
+    "head": {
+      "ref": "feat/1264"
+    },
+    "base": {
+      "ref": "main"
+    },
+    "changed_files": 102,
+    "additions": 1941,
+    "deletions": 1230,
+    "commits": 13,
+    "review_comments": 4,
+    "body": null
+  },
+  {
+    "number": 1258,
+    "title": "Backfill the currency column on legacy invoices",
+    "state": "closed",
+    "draft": false,
+    "merged": true,
+    "created_at": "2026-05-31T06:45:00Z",
+    "merged_at": "2026-06-04T02:33:00Z",
+    "closed_at": "2026-06-04T02:33:00Z",
+    "head": {
+      "ref": "feat/1258"
+    },
+    "base": {
+      "ref": "main"
+    },
+    "changed_files": 10,
+    "additions": 244,
+    "deletions": 144,
+    "commits": 8,
+    "review_comments": 0,
+    "body": null
+  },
+  {
+    "number": 1255,
+    "title": "Send the dunning email from a queue instead of the request",
+    "state": "closed",
+    "draft": false,
+    "merged": true,
+    "created_at": "2026-05-23T16:59:00Z",
+    "merged_at": "2026-05-30T13:36:00Z",
+    "closed_at": "2026-05-30T13:36:00Z",
+    "head": {
+      "ref": "feat/1255"
+    },
+    "base": {
+      "ref": "main"
+    },
+    "changed_files": 39,
+    "additions": 602,
+    "deletions": 458,
+    "commits": 4,
+    "review_comments": 1,
+    "body": null
+  },
+  {
+    "number": 1253,
+    "title": "Index quotes by customer and status",
+    "state": "closed",
+    "draft": false,
+    "merged": true,
+    "created_at": "2026-05-20T22:33:00Z",
+    "merged_at": "2026-05-23T11:25:00Z",
+    "closed_at": "2026-05-23T11:25:00Z",
+    "head": {
+      "ref": "feat/1253"
+    },
+    "base": {
+      "ref": "main"
+    },
+    "changed_files": 6,
+    "additions": 184,
+    "deletions": 40,
+    "commits": 3,
+    "review_comments": 6,
+    "body": null
+  },
+  {
+    "number": 1250,
+    "title": "Expire draft quotes after ninety days",
+    "state": "closed",
+    "draft": false,
+    "merged": true,
+    "created_at": "2026-05-16T15:37:00Z",
+    "merged_at": "2026-05-20T05:47:00Z",
+    "closed_at": "2026-05-20T05:47:00Z",
+    "head": {
+      "ref": "feat/1250"
+    },
+    "base": {
+      "ref": "main"
+    },
+    "changed_files": 8,
+    "additions": 217,
+    "deletions": 57,
+    "commits": 8,
+    "review_comments": 3,
+    "body": null
+  }
+]

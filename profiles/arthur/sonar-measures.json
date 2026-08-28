@@ -1,0 +1,59 @@
+{
+  "component": {
+    "key": "solo:portal",
+    "name": "portal",
+    "qualifier": "TRK",
+    "language": "ts",
+    "measures": [
+      {
+        "metric": "ncloc",
+        "value": "70224"
+      },
+      {
+        "metric": "files",
+        "value": "418"
+      },
+      {
+        "metric": "duplicated_lines_density",
+        "value": "2.4"
+      },
+      {
+        "metric": "complexity",
+        "value": "1760"
+      },
+      {
+        "metric": "cognitive_complexity",
+        "value": "1660"
+      },
+      {
+        "metric": "coverage",
+        "value": "85.0"
+      },
+      {
+        "metric": "branch_coverage",
+        "value": "76.0"
+      },
+      {
+        "metric": "tests",
+        "value": "3316"
+      },
+      {
+        "metric": "uncovered_files",
+        "value": "53"
+      },
+      {
+        "metric": "code_smells",
+        "value": "10"
+      },
+      {
+        "metric": "bugs",
+        "value": "0"
+      },
+      {
+        "metric": "sqale_index",
+        "value": "228"
+      }
+    ]
+  },
+  "analysedAt": "2026-07-13T19:52:41+0000"
+}

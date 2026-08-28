@@ -1,0 +1,20 @@
+{
+  "profile_id": "bohort",
+  "role": "développeuse fullstack",
+  "experience_years": 7,
+  "stack": [
+    "TypeScript",
+    "Next.js",
+    "Prisma"
+  ],
+  "team_size": 4,
+  "available": [
+    "git-activity.json",
+    "pull-requests.json",
+    "code/",
+    "sonar-measures.json",
+    "repo-context/",
+    "declaratif.md",
+    "session.md"
+  ]
+}

@@ -1,0 +1,266 @@
+[
+  {
+    "number": 1138,
+    "title": "Drop the legacy CSV importer",
+    "state": "open",
+    "draft": false,
+    "merged": false,
+    "created_at": "2026-07-13T15:53:00Z",
+    "merged_at": null,
+    "closed_at": null,
+    "head": {
+      "ref": "feat/1138"
+    },
+    "base": {
+      "ref": "main"
+    },
+    "changed_files": 10,
+    "additions": 268,
+    "deletions": 216,
+    "commits": 5,
+    "review_comments": 3,
+    "body": null
+  },
+  {
+    "number": 1131,
+    "title": "Add a dead letter topic for unparsable payloads",
+    "state": "closed",
+    "draft": false,
+    "merged": true,
+    "created_at": "2026-07-11T18:45:00Z",
+    "merged_at": "2026-07-13T11:36:00Z",
+    "closed_at": "2026-07-13T11:36:00Z",
+    "head": {
+      "ref": "feat/1131"
+    },
+    "base": {
+      "ref": "main"
+    },
+    "changed_files": 11,
+    "additions": 278,
+    "deletions": 127,
+    "commits": 6,
+    "review_comments": 2,
+    "body": null
+  },
+  {
+    "number": 1125,
+    "title": "Batch the writes to the warehouse sink",
+    "state": "closed",
+    "draft": false,
+    "merged": true,
+    "created_at": "2026-07-09T10:42:00Z",
+    "merged_at": "2026-07-11T16:58:00Z",
+    "closed_at": "2026-07-11T16:58:00Z",
+    "head": {
+      "ref": "feat/1125"
+    },
+    "base": {
+      "ref": "main"
+    },
+    "changed_files": 22,
+    "additions": 702,
+    "deletions": 219,
+    "commits": 6,
+    "review_comments": 4,
+    "body": null
+  },
+  {
+    "number": 1118,
+    "title": "Roll the scheduler over to leader election",
+    "state": "closed",
+    "draft": false,
+    "merged": true,
+    "created_at": "2026-07-07T01:01:00Z",
+    "merged_at": "2026-07-09T06:32:00Z",
+    "closed_at": "2026-07-09T06:32:00Z",
+    "head": {
+      "ref": "feat/1118"
+    },
+    "base": {
+      "ref": "main"
+    },
+    "changed_files": 33,
+    "additions": 815,
+    "deletions": 344,
+    "commits": 7,
+    "review_comments": 0,
+    "body": null
+  },
+  {
+    "number": 1113,
+    "title": "Partition the ingest queue by tenant",
+    "state": "closed",
+    "draft": false,
+    "merged": true,
+    "created_at": "2026-07-01T13:26:00Z",
+    "merged_at": "2026-07-06T22:01:00Z",
+    "closed_at": "2026-07-06T22:01:00Z",
+    "head": {
+      "ref": "feat/1113"
+    },
+    "base": {
+      "ref": "main"
+    },
+    "changed_files": 76,
+    "additions": 1702,
+    "deletions": 1319,
+    "commits": 11,
+    "review_comments": 0,
+    "body": null
+  },
+  {
+    "number": 1105,
+    "title": "Rework the retry policy around idempotency keys",
+    "state": "closed",
+    "draft": false,
+    "merged": true,
+    "created_at": "2026-06-29T03:42:00Z",
+    "merged_at": "2026-07-01T08:44:00Z",
+    "closed_at": "2026-07-01T08:44:00Z",
+    "head": {
+      "ref": "feat/1105"
+    },
+    "base": {
+      "ref": "main"
+    },
+    "changed_files": 30,
+    "additions": 788,
+    "deletions": 304,
+    "commits": 7,
+    "review_comments": 0,
+    "body": null
+  },
+  {
+    "number": 1102,
+    "title": "Resume synchronisation where it fails",
+    "state": "closed",
+    "draft": false,
+    "merged": true,
+    "created_at": "2026-06-27T06:58:00Z",
+    "merged_at": "2026-06-28T22:05:00Z",
+    "closed_at": "2026-06-28T22:05:00Z",
+    "head": {
+      "ref": "feat/1102"
+    },
+    "base": {
+      "ref": "main"
+    },
+    "changed_files": 11,
+    "additions": 320,
+    "deletions": 174,
+    "commits": 6,
+    "review_comments": 2,
+    "body": "## The problem\n\nA network drop halfway through a 40,000-record synchronisation made the whole\nthing start over. The job runs once a night, so a failure costs a\nfull day: three nights in a row and the warehouse was three days behind.\n\n## What I change\n\nBatch processing, with retries per batch rather than on the whole run. The wait\ndoubles on each attempt — without that, three clients retrying at the same time\nfinish the network's job for it.\n\n## What I checked\n\nTests cover the batch that fails then succeeds, giving up after the last\nattempt, the empty source, and dry-run mode. I replayed the synchronisation\nfrom the night of the 12th, cutting the network halfway: correct resume, no\nduplicates in the database.\n\n## What I am not doing\n\nResuming after a process restart. That would need progress persisted, so a\ntable and a migration. It will be worth it once we go past an hour of\nprocessing — we are at 22 minutes.\n\n## Review\n\nOne remark from @marc on the name of `batchSize`. Kept as is — the option is\npublic and two integrations pass it. Reasoning in `aidd_docs/tasks/1102.md`."
+  },
+  {
+    "number": 1097,
+    "title": "Migrate the connector registry to Postgres",
+    "state": "closed",
+    "draft": false,
+    "merged": true,
+    "created_at": "2026-06-22T12:27:00Z",
+    "merged_at": "2026-06-27T03:04:00Z",
+    "closed_at": "2026-06-27T03:04:00Z",
+    "head": {
+      "ref": "feat/1097"
+    },
+    "base": {
+      "ref": "main"
+    },
+    "changed_files": 42,
+    "additions": 1319,
+    "deletions": 714,
+    "commits": 9,
+    "review_comments": 1,
+    "body": null
+  },
+  {
+    "number": 1090,
+    "title": "Cache the schema registry lookups",
+    "state": "closed",
+    "draft": false,
+    "merged": true,
+    "created_at": "2026-06-20T14:01:00Z",
+    "merged_at": "2026-06-22T08:23:00Z",
+    "closed_at": "2026-06-22T08:23:00Z",
+    "head": {
+      "ref": "feat/1090"
+    },
+    "base": {
+      "ref": "main"
+    },
+    "changed_files": 3,
+    "additions": 91,
+    "deletions": 69,
+    "commits": 6,
+    "review_comments": 2,
+    "body": null
+  },
+  {
+    "number": 1082,
+    "title": "Expose ingest lag as a Prometheus metric",
+    "state": "closed",
+    "draft": false,
+    "merged": true,
+    "created_at": "2026-06-18T13:10:00Z",
+    "merged_at": "2026-06-20T07:35:00Z",
+    "closed_at": "2026-06-20T07:35:00Z",
+    "head": {
+      "ref": "feat/1082"
+    },
+    "base": {
+      "ref": "main"
+    },
+    "changed_files": 6,
+    "additions": 163,
+    "deletions": 93,
+    "commits": 4,
+    "review_comments": 4,
+    "body": null
+  },
+  {
+    "number": 1075,
+    "title": "Add a replay endpoint for a single tenant",
+    "state": "closed",
+    "draft": false,
+    "merged": true,
+    "created_at": "2026-06-16T19:15:00Z",
+    "merged_at": "2026-06-18T08:56:00Z",
+    "closed_at": "2026-06-18T08:56:00Z",
+    "head": {
+      "ref": "feat/1075"
+    },
+    "base": {
+      "ref": "main"
+    },
+    "changed_files": 6,
+    "additions": 166,
+    "deletions": 114,
+    "commits": 4,
+    "review_comments": 3,
+    "body": null
+  },
+  {
+    "number": 1073,
+    "title": "Replace the polling loop with a watch on the source",
+    "state": "closed",
+    "draft": false,
+    "merged": true,
+    "created_at": "2026-06-13T16:13:00Z",
+    "merged_at": "2026-06-16T16:45:00Z",
+    "closed_at": "2026-06-16T16:45:00Z",
+    "head": {
+      "ref": "feat/1073"
+    },
+    "base": {
+      "ref": "main"
+    },
+    "changed_files": 29,
+    "additions": 1103,
+    "deletions": 383,
+    "commits": 10,
+    "review_comments": 3,
+    "body": null
+  }
+]

@@ -1,0 +1,59 @@
+{
+  "component": {
+    "key": "ingest:platform",
+    "name": "platform",
+    "qualifier": "TRK",
+    "language": "go",
+    "measures": [
+      {
+        "metric": "ncloc",
+        "value": "46032"
+      },
+      {
+        "metric": "files",
+        "value": "274"
+      },
+      {
+        "metric": "duplicated_lines_density",
+        "value": "1.7"
+      },
+      {
+        "metric": "complexity",
+        "value": "1150"
+      },
+      {
+        "metric": "cognitive_complexity",
+        "value": "1090"
+      },
+      {
+        "metric": "coverage",
+        "value": "89.0"
+      },
+      {
+        "metric": "branch_coverage",
+        "value": "81.0"
+      },
+      {
+        "metric": "tests",
+        "value": "2276"
+      },
+      {
+        "metric": "uncovered_files",
+        "value": "26"
+      },
+      {
+        "metric": "code_smells",
+        "value": "7"
+      },
+      {
+        "metric": "bugs",
+        "value": "0"
+      },
+      {
+        "metric": "sqale_index",
+        "value": "174"
+      }
+    ]
+  },
+  "analysedAt": "2026-07-15T01:18:05+0000"
+}

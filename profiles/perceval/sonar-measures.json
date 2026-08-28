@@ -1,0 +1,59 @@
+{
+  "component": {
+    "key": "clientA:billing",
+    "name": "billing",
+    "qualifier": "TRK",
+    "language": "ts",
+    "measures": [
+      {
+        "metric": "ncloc",
+        "value": "23124"
+      },
+      {
+        "metric": "files",
+        "value": "148"
+      },
+      {
+        "metric": "duplicated_lines_density",
+        "value": "18.4"
+      },
+      {
+        "metric": "complexity",
+        "value": "592"
+      },
+      {
+        "metric": "cognitive_complexity",
+        "value": "838"
+      },
+      {
+        "metric": "coverage",
+        "value": "37.0"
+      },
+      {
+        "metric": "branch_coverage",
+        "value": "24.0"
+      },
+      {
+        "metric": "tests",
+        "value": "475"
+      },
+      {
+        "metric": "uncovered_files",
+        "value": "79"
+      },
+      {
+        "metric": "code_smells",
+        "value": "641"
+      },
+      {
+        "metric": "bugs",
+        "value": "212"
+      },
+      {
+        "metric": "sqale_index",
+        "value": "8358"
+      }
+    ]
+  },
+  "analysedAt": "2026-07-15T03:47:12+0000"
+}

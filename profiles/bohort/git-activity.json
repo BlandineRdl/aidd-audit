@@ -1,0 +1,59 @@
+{
+  "period": {
+    "from": "2026-01-15",
+    "to": "2026-07-15"
+  },
+  "repositories": 3,
+  "pull_requests": {
+    "total": 48,
+    "size_distribution": {
+      "xs": 4,
+      "s": 12,
+      "m": 24,
+      "l": 7,
+      "xl": 1
+    },
+    "median_files_changed": 7,
+    "median_lines_changed": 251.5,
+    "median_correction_commits_after_open": 2,
+    "merged_without_human_edit_after_open": 10,
+    "reverted": 1,
+    "median_review_comments_received": 3
+  },
+  "commits": {
+    "total": 357,
+    "median_per_pr": 7,
+    "ai_coauthored_ratio": 0.58,
+    "message_convention_compliance": 0.88
+  },
+  "tests": {
+    "coverage_start": 0.47,
+    "coverage_end": 0.68,
+    "prs_with_tests_ratio": 0.71
+  },
+  "parallelism": {
+    "max_concurrent_branches": 3,
+    "median_concurrent_branches": 1
+  },
+  "ci": {
+    "failure_rate": 0.12,
+    "median_runs_to_green": 2
+  },
+  "context_files": {
+    "agents_md": true,
+    "rules_count": 0,
+    "skills_count": 0,
+    "hooks_count": 0,
+    "agents_count": 0,
+    "last_updated": "2026-07-12"
+  },
+  "assistant_usage": {
+    "declared_tools": [
+      "claude-code",
+      "chatgpt-web"
+    ],
+    "editor_integration": true,
+    "sessions_per_week": 31,
+    "tokens_per_week": 1900000
+  }
+}

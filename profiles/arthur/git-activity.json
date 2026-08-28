@@ -1,0 +1,59 @@
+{
+  "period": {
+    "from": "2026-01-15",
+    "to": "2026-07-15"
+  },
+  "repositories": 6,
+  "pull_requests": {
+    "total": 154,
+    "size_distribution": {
+      "xs": 3,
+      "s": 9,
+      "m": 29,
+      "l": 65,
+      "xl": 48
+    },
+    "median_files_changed": 29,
+    "median_lines_changed": 1050,
+    "median_correction_commits_after_open": 1,
+    "merged_without_human_edit_after_open": 46,
+    "reverted": 3,
+    "median_review_comments_received": 1
+  },
+  "commits": {
+    "total": 1195,
+    "median_per_pr": 7,
+    "ai_coauthored_ratio": 0.91,
+    "message_convention_compliance": 0.82
+  },
+  "tests": {
+    "coverage_start": 0.58,
+    "coverage_end": 0.79,
+    "prs_with_tests_ratio": 0.88
+  },
+  "parallelism": {
+    "max_concurrent_branches": 7,
+    "median_concurrent_branches": 4
+  },
+  "ci": {
+    "failure_rate": 0.07,
+    "median_runs_to_green": 2
+  },
+  "context_files": {
+    "agents_md": true,
+    "rules_count": 0,
+    "skills_count": 4,
+    "hooks_count": 0,
+    "agents_count": 2,
+    "last_updated": "2026-07-14"
+  },
+  "assistant_usage": {
+    "declared_tools": [
+      "claude-code",
+      "codex"
+    ],
+    "editor_integration": true,
+    "sessions_per_week": 74,
+    "tokens_per_week": 21000000
+  }
+}

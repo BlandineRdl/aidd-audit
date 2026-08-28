@@ -1,0 +1,17 @@
+{
+  "profile_id": "perceval",
+  "role": "développeur backend",
+  "experience_years": 4,
+  "stack": [
+    "TypeScript",
+    "NestJS",
+    "PostgreSQL"
+  ],
+  "team_size": 6,
+  "available": [
+    "git-activity.json",
+    "code/",
+    "sonar-measures.json",
+    "declaratif.md"
+  ]
+}

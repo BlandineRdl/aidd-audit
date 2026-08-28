@@ -1,0 +1,21 @@
+{
+  "profile_id": "arthur",
+  "role": "développeur indépendant",
+  "experience_years": 9,
+  "stack": [
+    "Python",
+    "FastAPI",
+    "TypeScript",
+    "React",
+    "Terraform"
+  ],
+  "team_size": 1,
+  "available": [
+    "git-activity.json",
+    "code/",
+    "sonar-measures.json",
+    "repo-context/",
+    "session.md"
+  ],
+  "note": "La personne n'a pas répondu au questionnaire déclaratif."
+}

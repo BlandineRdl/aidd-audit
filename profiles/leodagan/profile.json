@@ -1,0 +1,20 @@
+{
+  "profile_id": "leodagan",
+  "role": "tech lead",
+  "experience_years": 11,
+  "stack": [
+    "Go",
+    "TypeScript",
+    "React",
+    "Kubernetes"
+  ],
+  "team_size": 8,
+  "available": [
+    "git-activity.json",
+    "pull-requests.json",
+    "code/",
+    "sonar-measures.json",
+    "repo-context/",
+    "declaratif.md"
+  ]
+}

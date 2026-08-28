@@ -1,0 +1,59 @@
+{
+  "component": {
+    "key": "acme:invoicing",
+    "name": "invoicing",
+    "qualifier": "TRK",
+    "language": "ts",
+    "measures": [
+      {
+        "metric": "ncloc",
+        "value": "36162"
+      },
+      {
+        "metric": "files",
+        "value": "205"
+      },
+      {
+        "metric": "duplicated_lines_density",
+        "value": "5.8"
+      },
+      {
+        "metric": "complexity",
+        "value": "880"
+      },
+      {
+        "metric": "cognitive_complexity",
+        "value": "915"
+      },
+      {
+        "metric": "coverage",
+        "value": "61.0"
+      },
+      {
+        "metric": "branch_coverage",
+        "value": "38.0"
+      },
+      {
+        "metric": "tests",
+        "value": "1225"
+      },
+      {
+        "metric": "uncovered_files",
+        "value": "68"
+      },
+      {
+        "metric": "code_smells",
+        "value": "64"
+      },
+      {
+        "metric": "bugs",
+        "value": "0"
+      },
+      {
+        "metric": "sqale_index",
+        "value": "1092"
+      }
+    ]
+  },
+  "analysedAt": "2026-07-14T22:06:39+0000"
+}
