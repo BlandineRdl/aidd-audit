@@ -48,6 +48,8 @@ Lefthook runs `biome format --write` on the staged files, restages what it rewro
 
 Adding a boundary rule means adding its sentinel, and so does widening one: a rule extended to a new folder is unproven there until a sentinel sits in it. When several rules widen into the same folder, each one needs its own sentinel there — one rule's sentinel proves nothing about the others sharing that path. A rule with no sentinel is a rule nobody has checked.
 
+**Moving a file can walk it out from under a rule, and nothing says so.** These rules match on paths, so a rule written against `^src/[^/]+/adapters/` stops applying the moment the file it guarded moves to `^src/[^/]+/loading/` — no violation, no warning, one fewer wall. The sentinel keeps passing, because it still proves the rule bites in the folder it names. Whenever a file crosses folders, re-read every rule whose path mentioned the folder it left, and give the folder it entered its own sentinel.
+
 The script traps `SIGINT` and `SIGTERM` as well as using `finally`, because a surviving sentinel is worse than a failed run: `pnpm architecture` cruises before it sweeps, so a leftover makes `depcruise` exit 1, `&&` short-circuits, and the sweep never gets its turn. A `SIGKILL` still escapes; the start-of-run sweep is the recovery.
 
 Two failure modes it exists to catch, both of which silently disarmed a rule here:
