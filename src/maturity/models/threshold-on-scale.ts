@@ -1,11 +1,7 @@
 import { InvalidMaturityModelError } from './invalid-maturity-model.error.js'
 import { isSetRequirement, type LevelRequirement, type Scale } from './maturity.model.js'
 
-/**
- * Shared by the loader and the engine deliberately: two copies of this rule
- * drifted apart once, and the engine went on scoring models the loader would
- * have refused.
- */
+/** One rule, two callers: the loader gates YAML, the engine backstops a hand-built model. */
 export function requireThresholdOnScale(
   scale: Scale,
   requirement: LevelRequirement,

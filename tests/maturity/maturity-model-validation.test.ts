@@ -1,13 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { InvalidMaturityModelError } from '../../src/maturity/models/invalid-maturity-model.error.js'
 import { parseMaturityModel } from '../../src/maturity/loading/load-maturity-model.js'
-import {
-  mutate,
-  mutateShape,
-  pick,
-  validDocument,
-  validSource,
-} from './maturity-model-document.fixture.js'
+import { mutate, pick } from './maturity-model-document.fixture.js'
 import type { TestDocument } from './maturity-model-document.fixture.js'
 
 describe('a well-formed model that does not hold together', () => {
@@ -236,6 +230,16 @@ describe('a well-formed model that does not hold together', () => {
       const run = () => parseMaturityModel(source)
       expect(run).toThrow(InvalidMaturityModelError)
       expect(run).toThrow(/rank' must be a finite number/)
+    })
+
+    it.each([
+      ['NaN', Number.NaN],
+      ['Infinity', Number.POSITIVE_INFINITY],
+    ])('names %s in the message, rather than reporting "a number"', (name, rank) => {
+      const source = mutate((document) => {
+        pick(document.levels ?? [], (level) => level.id === 'high').rank = rank
+      })
+      expect(() => parseMaturityModel(source)).toThrow(new RegExp(`got ${name}\\.`))
     })
   })
 
