@@ -36,7 +36,8 @@ module.exports = {
     },
     {
       name: 'domain-has-no-filesystem',
-      comment: 'Infrastructure crosses inward through ports. Models and use cases never touch the disk.',
+      comment:
+        'Infrastructure crosses inward through ports. Models and use cases never touch the disk.',
       severity: 'error',
       from: { path: '^src/[^/]+/(models|usecases|contracts)/' },
       to: { dependencyTypes: ['core'], path: '^(node:)?(fs|fs/promises|path|os)$' },
@@ -50,10 +51,20 @@ module.exports = {
     },
     {
       name: 'domain-has-no-vendor-sdk',
-      comment: 'The YAML parser belongs to maturity/adapters/. No domain or use-case file imports a vendor package.',
+      comment:
+        'The YAML parser belongs to maturity/adapters/. No domain or use-case file imports a vendor package.',
       severity: 'error',
       from: { path: '^src/[^/]+/(models|usecases|contracts)/' },
-      to: { dependencyTypes: ['npm', 'npm-dev', 'npm-optional', 'npm-peer', 'npm-no-pkg', 'npm-unknown'] },
+      to: {
+        dependencyTypes: [
+          'npm',
+          'npm-dev',
+          'npm-optional',
+          'npm-peer',
+          'npm-no-pkg',
+          'npm-unknown',
+        ],
+      },
     },
     {
       name: 'no-circular',
@@ -64,7 +75,8 @@ module.exports = {
     {
       name: 'no-orphans',
       severity: 'warn',
-      comment: 'A public contract or a port is legitimately unreferenced until an adapter binds to it.',
+      comment:
+        'A public contract or a port is legitimately unreferenced until an adapter binds to it.',
       from: { orphan: true, pathNot: ['\\.d\\.ts$', '^src/[^/]+/(contracts|ports)/'] },
       to: {},
     },
@@ -74,6 +86,9 @@ module.exports = {
     exclude: { path: '^(profiles|dist)/' },
     tsConfig: { fileName: 'tsconfig.json' },
     tsPreCompilationDeps: true,
-    enhancedResolveOptions: { exportsFields: ['exports'], conditionNames: ['import', 'require', 'node'] },
+    enhancedResolveOptions: {
+      exportsFields: ['exports'],
+      conditionNames: ['import', 'require', 'node'],
+    },
   },
 }

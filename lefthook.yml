@@ -1,6 +1,13 @@
 # Local net, not the source of truth. The gate is `pnpm check`, which a human,
 # an agent, a worktree or a future CI all run identically without lefthook.
 pre-commit:
+  parallel: false
   commands:
+    format:
+      glob: '*.{ts,mts,cts,js,mjs,cjs,json,jsonc}'
+      exclude:
+        - 'profiles/**'
+      run: pnpm exec biome format --write --no-errors-on-unmatched {staged_files}
+      stage_fixed: true
     check:
       run: pnpm check

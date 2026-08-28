@@ -17,18 +17,32 @@ export const ASSESSMENT_REPORT_SCHEMA_VERSION = 1
 export type EvidenceStatus = 'CONFIRMED' | 'CLAIMED' | 'CONFLICTING' | 'UNKNOWN'
 
 /**
- * What the assessment concluded. Never conflated with EvidenceStatus:
- * NOT_MET means the minimum is proven out of reach, UNPROVEN means the
- * evidence could not settle it.
+ * What the assessment concluded.
+ *
+ * Never conflated with EvidenceStatus:
+ * * NOT_MET means observable evidence proves the requirement is not met.
+ * * UNPROVEN means the available evidence could not establish whether it is met.
  */
 export type AssessmentOutcome = 'MET' | 'NOT_MET' | 'UNPROVEN'
 
+/**
+ * Why a blocking requirement prevents progression.
+ *
+ * PRACTICE means the observed practice is proven below the requirement.
+ * EVIDENCE means the practice itself is not proven deficient; the evidence is
+ * missing, insufficient, claimed, or conflicting.
+ */
+export type GapKind = 'PRACTICE' | 'EVIDENCE'
+
 export interface RequirementReport {
   readonly axis: string
-  /** The minimum the model asks for, rendered as the model expresses it. */
+
+  /** The minimum the maturity model requires, expressed in the model's vocabulary. */
   readonly threshold: string | number | readonly string[]
-  /** What was observed, or null when nothing was. */
+
+  /** What was observed, or null when no usable observation was obtained. */
   readonly observed: string | number | readonly string[] | null
+
   readonly evidence: EvidenceStatus
   readonly outcome: AssessmentOutcome
 }
@@ -44,8 +58,14 @@ export interface LevelReport {
   readonly id: string
   readonly rank: number
   readonly label: string
+
+  /**
+   * MET means the level is fully proven.
+   * NOT_MET means at least one required axis is proven below threshold.
+   * UNPROVEN means no axis is NOT_MET, but at least one cannot be proven.
+   */
   readonly outcome: AssessmentOutcome
-  readonly satisfied: boolean
+
   readonly axes: readonly AxisReport[]
 }
 
@@ -54,20 +74,36 @@ export interface BlockingRequirement {
   readonly level: string
   readonly axis: string
   readonly evidence: EvidenceStatus
-  readonly outcome: AssessmentOutcome
+
+  /** A blocking requirement can never be MET. */
+  readonly outcome: Exclude<AssessmentOutcome, 'MET'>
+
+  /**
+   * Derived from outcome:
+   *   NOT_MET  -> PRACTICE
+   *   UNPROVEN -> EVIDENCE
+   *
+   * Consumers must not have to infer this distinction themselves.
+   */
+  readonly gap: GapKind
 }
 
-/** Which collector produced an observation, and whether it ran at all. */
+/** Which collector ran and what it contributed to the assessment. */
 export interface ProvenanceEntry {
   readonly collector: string
   readonly status: 'COMPLETED' | 'FAILED' | 'TIMED_OUT' | 'SKIPPED'
-  /** Axes this collector contributed an observation for. */
+
+  /** Axes this collector contributed at least one observation for. */
   readonly axes: readonly string[]
 }
 
 /**
- * How much of the intended evidence the run actually obtained. A degraded run
- * stays a valid assessment; it simply proves less.
+ * How much of the intended evidence the run actually obtained.
+ *
+ * A degraded run remains a valid assessment; it simply proves less.
+ *
+ * Coverage is currently axis-based. If collectors later operate at a finer
+ * requirement granularity, this contract may evolve in a future schema version.
  */
 export interface CoverageReport {
   readonly axesRequested: number
@@ -77,15 +113,34 @@ export interface CoverageReport {
 
 export interface AssessmentReport {
   readonly schemaVersion: typeof ASSESSMENT_REPORT_SCHEMA_VERSION
+
   /** The maturity model this run was assessed against. */
-  readonly model: { readonly id: string; readonly schemaVersion: number }
-  readonly subject: { readonly path: string }
-  /** The highest fully proven level, or null when no level is proven. */
+  readonly model: {
+    readonly id: string
+    readonly schemaVersion: number
+  }
+
+  readonly subject: {
+    readonly path: string
+  }
+
+  /** The highest fully proven level, or null when no level can be proven. */
   readonly proven: LevelReport | null
-  /** The lowest level above the proven one, or null once the top is reached. */
+
+  /** The first level above `proven`, or null once the top level is reached. */
   readonly next: LevelReport | null
+
+  /** Full evaluation of the maturity model, ordered by rank. */
   readonly levels: readonly LevelReport[]
+
+  /**
+   * Requirements blocking progression to `next`.
+   *
+   * PRACTICE gaps may justify changing the practice.
+   * EVIDENCE gaps must only explain what could not be established.
+   */
   readonly blocking: readonly BlockingRequirement[]
+
   readonly coverage: CoverageReport
   readonly provenance: readonly ProvenanceEntry[]
 }

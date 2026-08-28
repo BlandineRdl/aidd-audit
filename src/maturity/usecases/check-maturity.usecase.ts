@@ -16,9 +16,10 @@ import type {
 export interface MaturityCheck {
   /** Every level of the model, ordered by rank. */
   readonly levels: readonly LevelResult[]
-  /** The highest fully satisfied level, or null when none is proven. */
+  /** The highest level whose outcome is MET, or null when none is proven. */
   readonly proven: LevelResult | null
-  /** The lowest unsatisfied level above the proven one, or null at the top. */
+  /** Strictly the level above the proven one — the lowest when none is proven.
+   *  Its own outcome says why it blocks. Null once the top level is proven. */
   readonly next: LevelResult | null
 }
 
@@ -35,33 +36,57 @@ export function checkMaturity(
   observations: readonly AxisObservation[],
 ): MaturityCheck {
   const observed = new Map<AxisId, AxisObservation>()
-  for (const observation of observations) observed.set(observation.axis, observation)
+  for (const observation of observations) {
+    if (observed.has(observation.axis)) {
+      throw new MaturityModelError(`Duplicate observation for axis '${observation.axis}'.`)
+    }
+    observed.set(observation.axis, observation)
+  }
+
+  const known = new Set(model.axes.map((axis) => axis.id))
 
   const levels = [...model.levels]
     .sort((a, b) => a.rank - b.rank)
     .map((level): LevelResult => {
+      for (const requirement of level.requirements) {
+        if (!known.has(requirement.axis)) {
+          throw new MaturityModelError(
+            `Level '${level.id}' declares a requirement for unknown axis '${requirement.axis}'.`,
+          )
+        }
+      }
+
       const axes = model.axes.map((axis): AxisResult => {
-        const requirements = level.requirements
-          .filter((requirement) => requirement.axis === axis.id)
-          .map((requirement): RequirementResult => ({
+        const declared = level.requirements.filter((requirement) => requirement.axis === axis.id)
+        if (declared.length === 0) {
+          throw new MaturityModelError(
+            `Level '${level.id}' declares no requirement for axis '${axis.id}'.`,
+          )
+        }
+        const requirements = declared.map(
+          (requirement): RequirementResult => ({
             axis: axis.id,
             requirement,
             outcome: resolve(model, requirement, observed.get(axis.id)),
-          }))
-        return { axis: axis.id, outcome: aggregate(requirements.map((r) => r.outcome)), requirements }
+          }),
+        )
+        return {
+          axis: axis.id,
+          outcome: aggregate(requirements.map((r) => r.outcome)),
+          requirements,
+        }
       })
 
-      const outcome = aggregate(axes.map((a) => a.outcome))
-      return { level, outcome, satisfied: outcome === 'MET', axes }
+      return { level, outcome: aggregate(axes.map((a) => a.outcome)), axes }
     })
 
-  const satisfied = levels.filter((result) => result.satisfied)
-  const proven = satisfied.length > 0 ? satisfied[satisfied.length - 1]! : null
-  const next = levels.find(
-    (result) => !result.satisfied && (proven === null || result.level.rank > proven.level.rank),
-  )
+  const proven = [...levels].reverse().find((result) => result.outcome === 'MET') ?? null
+  const next =
+    proven === null
+      ? (levels[0] ?? null)
+      : (levels.find((result) => result.level.rank > proven.level.rank) ?? null)
 
-  return { levels, proven, next: next ?? null }
+  return { levels, proven, next }
 }
 
 /**
@@ -77,13 +102,16 @@ function resolve(
   if (observation === undefined) return 'UNPROVEN'
   if (observation.confidence !== 'CONFIRMED') return 'UNPROVEN'
   if (observation.value === null) return 'UNPROVEN'
-  return reaches(scaleOf(model, requirement.axis), requirement, observation.value) ? 'MET' : 'NOT_MET'
+  return reaches(scaleOf(model, requirement.axis), requirement, observation.value)
+    ? 'MET'
+    : 'NOT_MET'
 }
 
 /**
  * NOT_MET dominates UNPROVEN: evidence that disproves a minimum is a firmer
- * answer than evidence that is missing. An empty requirement list is MET,
- * which is what makes an axis a level says nothing about satisfiable.
+ * answer than evidence that is missing. Never called with an
+ * empty list: a level silent on an axis is rejected as an invalid model, so a
+ * typo in the YAML cannot hand out an axis for free.
  */
 function aggregate(outcomes: readonly Outcome[]): Outcome {
   if (outcomes.includes('NOT_MET')) return 'NOT_MET'
@@ -98,7 +126,9 @@ function reaches(
 ): boolean {
   if (scale.kind === 'set') {
     if (!isSetRequirement(requirement)) {
-      throw new MaturityModelError(`Axis '${requirement.axis}' is a set scale and needs 'includes'.`)
+      throw new MaturityModelError(
+        `Axis '${requirement.axis}' is a set scale and needs 'includes'.`,
+      )
     }
     if (!Array.isArray(value)) {
       throw new MaturityModelError(`Axis '${requirement.axis}' expects a set of values.`)
@@ -107,7 +137,9 @@ function reaches(
   }
 
   if (isSetRequirement(requirement)) {
-    throw new MaturityModelError(`Axis '${requirement.axis}' is not a set scale but declares 'includes'.`)
+    throw new MaturityModelError(
+      `Axis '${requirement.axis}' is not a set scale but declares 'includes'.`,
+    )
   }
 
   if (scale.kind === 'numeric') {
@@ -120,10 +152,14 @@ function reaches(
   const observedRank = scale.values.indexOf(String(value))
   const requiredRank = scale.values.indexOf(String(requirement.min))
   if (observedRank === -1) {
-    throw new MaturityModelError(`Value '${String(value)}' is not on the '${requirement.axis}' scale.`)
+    throw new MaturityModelError(
+      `Value '${String(value)}' is not on the '${requirement.axis}' scale.`,
+    )
   }
   if (requiredRank === -1) {
-    throw new MaturityModelError(`Threshold '${String(requirement.min)}' is not on the '${requirement.axis}' scale.`)
+    throw new MaturityModelError(
+      `Threshold '${String(requirement.min)}' is not on the '${requirement.axis}' scale.`,
+    )
   }
   return observedRank >= requiredRank
 }

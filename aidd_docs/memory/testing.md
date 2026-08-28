@@ -88,6 +88,8 @@ Missing input yields `UNKNOWN`, never fabricated negative evidence.
 
 Vitest's `include` is restricted to `tests/**/*.test.ts`, and `profiles/` is excluded twice over. Without it vitest runs the fixtures' own `*.test.ts` as this project's suite: `profiles/bohort/code/pricing.test.ts` fails on a `zod` it does not have, and `profiles/arthur/code/usage-summary.test.ts` contributes five green tests that prove nothing about the product.
 
+One unobserved axis proves nothing at all. Every level of `aidd.yml` declares all four axes, so a single `UNKNOWN` leaves even White unproven and the report has no level to name. That is the conservative rule taken to its end, and `tests/maturity/aidd-model.test.ts` pins it. It puts the weight on collector coverage: a collector that silently contributes nothing costs the whole assessment, not one rung.
+
 ## Tools and conventions
 
 * Vitest only.

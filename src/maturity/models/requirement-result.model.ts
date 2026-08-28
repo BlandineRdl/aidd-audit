@@ -20,7 +20,7 @@ export interface AxisResult {
 
 export interface LevelResult {
   readonly level: Level
+  /** A level is reached when this is MET. No second field can contradict it. */
   readonly outcome: Outcome
-  readonly satisfied: boolean
   readonly axes: readonly AxisResult[]
 }

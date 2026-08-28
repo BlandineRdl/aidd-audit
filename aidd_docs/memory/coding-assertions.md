@@ -14,6 +14,10 @@ One assertion, one command, one verdict. An agent reading `pnpm architecture fai
 | `pnpm test` | Vitest, behavior only |
 | `pnpm architecture` | dependency-cruiser boundary rules, then the proof that those rules bite |
 | `pnpm check` | the three above, in that order, fail-fast |
+| `pnpm format` | Biome, rewrites files in place |
+| `pnpm format:check` | Biome, reports without rewriting |
+
+Formatting is deliberately outside `check`, for the same reason as `build`: a mis-indented file blocks nothing about correctness. Biome is a formatter here and nothing else — its linter is off, `typecheck` and `architecture` already own those verdicts.
 
 `pnpm check` is the single source of truth. A human, an agent, a worktree or a future CI run the same gate without depending on anything being installed.
 
@@ -21,7 +25,7 @@ One assertion, one command, one verdict. An agent reading `pnpm architecture fai
 
 `pnpm check`.
 
-Lefthook runs it on `pre-commit` and refuses the commit on failure. **The hook is a local net, not the gate** — it can be bypassed, uninstalled, or absent from a fresh worktree, and nothing about correctness may rest on it. `lefthook install` is wired through the `prepare` script, so `pnpm install` arms it.
+Lefthook runs `biome format --write` on the staged files, restages what it rewrote, then runs it on `pre-commit` and refuses the commit on failure. **The hook is a local net, not the gate** — it can be bypassed, uninstalled, or absent from a fresh worktree, and nothing about correctness may rest on it. `lefthook install` is wired through the `prepare` script, so `pnpm install` arms it.
 
 ## Before push
 

@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { checkMaturity, MaturityModelError } from '../../src/maturity/usecases/check-maturity.usecase.js'
-import type { AxisObservation, EvidenceConfidence } from '../../src/maturity/models/axis-observation.model.js'
+import {
+  checkMaturity,
+  MaturityModelError,
+} from '../../src/maturity/usecases/check-maturity.usecase.js'
+import type {
+  AxisObservation,
+  EvidenceConfidence,
+} from '../../src/maturity/models/axis-observation.model.js'
 import type { MaturityModel } from '../../src/maturity/models/maturity.model.js'
 
 /**
@@ -93,7 +99,10 @@ describe('requirement resolution', () => {
   )
 
   it('is UNPROVEN when the axis was never observed', () => {
-    const check = checkMaturity(model, observe().filter((o) => o.axis !== 'size'))
+    const check = checkMaturity(
+      model,
+      observe().filter((o) => o.axis !== 'size'),
+    )
     expect(requirementOf(check, 'high', 'size').outcome).toBe('UNPROVEN')
   })
 
@@ -133,7 +142,10 @@ describe('axis satisfaction', () => {
   })
 
   it('lets NOT_MET dominate UNPROVEN, because disproof is firmer than absence', () => {
-    const check = checkMaturity(model, observe({ size: ['M', 'CONFIRMED'], harness: [null, 'UNKNOWN'] }))
+    const check = checkMaturity(
+      model,
+      observe({ size: ['M', 'CONFIRMED'], harness: [null, 'UNKNOWN'] }),
+    )
     const high = check.levels.find((l) => l.level.id === 'high')!
     expect(high.outcome).toBe('NOT_MET')
   })
@@ -145,38 +157,56 @@ describe('level satisfaction', () => {
     expect(check.proven?.level.id).toBe('high')
   })
 
-  it('is not satisfied when one axis is NOT_MET', () => {
+  it('is not reached when one axis is NOT_MET', () => {
     const check = checkMaturity(model, observe({ parallelism: [1, 'CONFIRMED'] }))
-    expect(check.levels.find((l) => l.level.id === 'high')!.satisfied).toBe(false)
+    expect(check.levels.find((l) => l.level.id === 'high')!.outcome).toBe('NOT_MET')
   })
 
-  it('is not satisfied when one axis is UNPROVEN', () => {
+  it('is not reached when one axis is UNPROVEN', () => {
     const check = checkMaturity(model, observe({ parallelism: [3, 'UNKNOWN'] }))
-    expect(check.levels.find((l) => l.level.id === 'high')!.satisfied).toBe(false)
+    expect(check.levels.find((l) => l.level.id === 'high')!.outcome).toBe('UNPROVEN')
   })
 
   it('keeps a fully proven lower level when the higher one is only unproven', () => {
-    const check = checkMaturity(model, observe({ parallelism: [1, 'CONFIRMED'], size: ['S', 'CONFIRMED'] }))
+    const check = checkMaturity(
+      model,
+      observe({ parallelism: [1, 'CONFIRMED'], size: ['S', 'CONFIRMED'] }),
+    )
     expect(check.proven?.level.id).toBe('low')
     expect(check.next?.level.id).toBe('high')
     expect(check.levels.find((l) => l.level.id === 'high')!.outcome).toBe('NOT_MET')
   })
 
   it('separates "not mature enough" from "we do not know yet"', () => {
-    const notMature = checkMaturity(model, observe({ size: ['S', 'CONFIRMED'], parallelism: [1, 'CONFIRMED'] }))
+    const notMature = checkMaturity(
+      model,
+      observe({ size: ['S', 'CONFIRMED'], parallelism: [1, 'CONFIRMED'] }),
+    )
     const unknown = checkMaturity(model, observe({ size: ['L', 'UNKNOWN'] }))
     expect(notMature.levels.find((l) => l.level.id === 'high')!.outcome).toBe('NOT_MET')
     expect(unknown.levels.find((l) => l.level.id === 'high')!.outcome).toBe('UNPROVEN')
   })
 
   it('proves no level at all when nothing is CONFIRMED, rather than defaulting to the floor', () => {
-    const check = checkMaturity(model, observe({
-      size: ['L', 'UNKNOWN'],
-      harness: [['prompts'], 'UNKNOWN'],
-      parallelism: [3, 'UNKNOWN'],
-    }))
+    const check = checkMaturity(
+      model,
+      observe({
+        size: ['L', 'UNKNOWN'],
+        harness: [['prompts'], 'UNKNOWN'],
+        parallelism: [3, 'UNKNOWN'],
+      }),
+    )
     expect(check.proven).toBeNull()
     expect(check.next?.level.id).toBe('low')
+  })
+
+  it('points next at the level immediately above the proven one', () => {
+    const check = checkMaturity(
+      model,
+      observe({ size: ['S', 'CONFIRMED'], parallelism: [1, 'CONFIRMED'] }),
+    )
+    expect(check.proven?.level.id).toBe('low')
+    expect(check.next?.level.rank).toBe(2)
   })
 
   it('reports no next level once the top is proven', () => {
@@ -189,6 +219,37 @@ describe('level satisfaction', () => {
   })
 })
 
+describe('an invalid model is rejected, never worked around', () => {
+  it('refuses two observations of the same axis instead of keeping the last', () => {
+    const twice = [...observe(), { axis: 'size', confidence: 'CONFIRMED', value: 'S' } as const]
+    expect(() => checkMaturity(model, twice)).toThrow(MaturityModelError)
+  })
+
+  it('refuses a level silent on an axis, which would otherwise grant it for free', () => {
+    const holed: MaturityModel = {
+      ...model,
+      levels: model.levels.map((level) =>
+        level.id === 'high'
+          ? { ...level, requirements: level.requirements.filter((r) => r.axis !== 'parallelism') }
+          : level,
+      ),
+    }
+    expect(() => checkMaturity(holed, observe())).toThrow(MaturityModelError)
+  })
+
+  it('refuses a requirement pointing at an axis the model does not declare', () => {
+    const typo: MaturityModel = {
+      ...model,
+      levels: model.levels.map((level) =>
+        level.id === 'high'
+          ? { ...level, requirements: [...level.requirements, { axis: 'paralellism', min: 3 }] }
+          : level,
+      ),
+    }
+    expect(() => checkMaturity(typo, observe())).toThrow(MaturityModelError)
+  })
+})
+
 describe('determinism', () => {
   it('returns the same result for the same input', () => {
     const once = checkMaturity(model, observe({ size: ['M', 'CONFIRMED'] }))
@@ -197,6 +258,8 @@ describe('determinism', () => {
   })
 
   it('rejects a value that is not on its scale instead of guessing a rank', () => {
-    expect(() => checkMaturity(model, observe({ size: ['XXL', 'CONFIRMED'] }))).toThrow(MaturityModelError)
+    expect(() => checkMaturity(model, observe({ size: ['XXL', 'CONFIRMED'] }))).toThrow(
+      MaturityModelError,
+    )
   })
 })
