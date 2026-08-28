@@ -1,20 +1,23 @@
 # AI Operating Guidelines
 
-How this team drives AI coding assistants on this project. Keep it short and specific to this repo. Fill the placeholders, drop what does not apply.
+How this project drives AI coding assistants. Specific to this repo; the general playbook lives with the framework.
 
 ## House rules
 
-- <A rule the AI must follow here, for example "a failing test comes before any bug fix">
-- <A boundary, for example "never edit the generated client under src/api/">
-- <A convention the AI keeps, for example "commits stay atomic and intention-revealing">
+- `pnpm check` is the gate. A change is not done until it exits zero: typecheck, tests, then the boundary rules and the proof those rules still bite.
+- Never commit or push unless the session asked for it. A green gate is not a validation; see `memory/vcs.md`.
+- A suite sits beside the code it exercises. `tests/` is for what exercises no single file.
+- Context boundaries are mechanical, not editorial: `maturity` and `evidence` are peers and never import each other. If `pnpm architecture` passes only because a rule stopped matching, the wall is gone.
+- Read the code or the model before asserting behavior. This product refuses to claim what it cannot observe; the same standard applies to what is said about it.
 
 ## Validation depth
 
-- <When a change here needs a quick check versus a full review>
-- <What must be green before a merge>
+- Any change to `src/`: `pnpm check`.
+- Before a push: `pnpm check`, then `pnpm build`.
+- A new boundary rule, or one widened to a new folder: add its sentinel in `scripts/prove-boundary-rules.mjs`, or it is unproven there.
+- A new guard: neuter it, watch its test go red, restore. A guard whose test was never seen to fail is not covered.
 
 ## When the AI drifts
 
-- <How this team recovers, for example "reset the session and restate the objective in one sentence">
-
-For the general AIDD playbook (planning, review loops, prompting and context hygiene, anti-patterns), see the framework docs: <https://github.com/ai-driven-dev/framework>.
+- The memory bank under `aidd_docs/memory/` is the shared state. When an answer contradicts it, one of the two is wrong — settle that before writing code.
+- Restate the objective as one observable outcome, then `/clear`.

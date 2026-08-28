@@ -2,7 +2,7 @@
 
 The macro technical shape: contexts, dependencies, and architectural boundaries.
 
-**Status: `maturity/engine` and its YAML model loader, `evidence/resolution`, `evidence/usecases/collect-evidence.usecase.ts`, `assessment/composition/compose-assessment-report.ts`, the assessment contract and the CLI's renderers exist; the assess command, the collector adapters and `assess-maturity.usecase` do not.** `aidd_docs/INSTALL.md` holds the implementation plan; this file defines the architecture the code must preserve.
+What exists and what is still planned is in `codebase-map.md`. `aidd_docs/INSTALL.md` holds the implementation plan; this file defines the architecture the code must preserve.
 
 ## Stack
 
@@ -105,8 +105,6 @@ The maturity model is loaded through `maturity/loading/load-maturity-model.ts` (
 Evidence is collected through collector ports. Fixture and live-repository collectors implement the same boundary and produce normalised observations.
 
 The live-repository adapter may access the real filesystem and local Git. Network-backed collectors are post-MVP.
-
-Runtime assessment is fully offline.
 
 ## Maturity model transcription
 

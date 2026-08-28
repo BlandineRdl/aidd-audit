@@ -2,8 +2,6 @@
 
 The checks that must pass for code to count as done. Minimal, run after every change.
 
-**Status: `pnpm check` runs and exits zero.** `pnpm build` stays red until `src/cli/assess.command.ts` lands — tsup has no entry point yet.
-
 ## The command surface
 
 One assertion, one command, one verdict. An agent reading `pnpm architecture failed` knows it breached a boundary; it does not have to decode a red test run.
@@ -29,16 +27,11 @@ Lefthook runs `biome format --write` on the staged files, restages what it rewro
 
 ## Before push
 
-`pnpm check`, then `pnpm build` — tsup must produce `dist/cli.js`. Build is deliberately outside `check`: a broken bundle blocks distribution, not correctness.
+`pnpm check`, then `pnpm build` — tsup must produce `dist/cli.js`. Build is deliberately outside `check`: a broken bundle blocks distribution, not correctness. It stays red until `src/cli/assess.command.ts` lands, since tsup has no entry point before that.
 
 ## The boundary rules
 
-`pnpm architecture` must fail on any of these. This is the wall parallel worktree agents are most likely to breach, so it fails mechanically rather than in review:
-
-- `maturity/` importing `evidence/`, `assessment/` or `cli/`
-- `evidence/` importing `maturity/`, `assessment/` or `cli/`
-- a model, use-case, contract, engine or resolution file importing `node:fs`, `node:child_process`, or any vendor package
-- `assessment/` importing concrete infrastructure from `adapters/` or `loading/` — it may compose public APIs only
+The walls themselves are in `architecture.md` under **Dependency rules**. `pnpm architecture` is what makes them fail mechanically rather than in review — this is the boundary parallel worktree agents are most likely to breach.
 
 ### The cruise sees production only
 
@@ -64,7 +57,3 @@ Two failure modes it exists to catch, both of which silently disarmed a rule her
 
 - `to.path` matches the **resolved** module, not the import specifier: `import 'node:fs'` resolves to `fs`, so `^node:fs$` never matches. Use `^(node:)?fs$`.
 - `dependencyTypes: ['npm']` excludes a devDependency, which is `npm-dev`. The rule keeps a dedicated devDependency sentinel so it cannot be narrowed back.
-
-## Behavior
-
-If a fix is needed, spawn 1 agent per failing assertion (typecheck / test / architecture = up to 3 agents).

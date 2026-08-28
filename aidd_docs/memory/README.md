@@ -14,7 +14,7 @@ The root files load every session through the project memory block in each AI co
 
 ## Files
 
-Refreshed automatically by the memory hook. Do not edit by hand.
+The index below mirrors the load block in each AI context file. Keep the two in step when a file is added or removed.
 
 <!-- files:start -->
 - [architecture.md](architecture.md)

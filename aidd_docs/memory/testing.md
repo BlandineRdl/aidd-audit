@@ -2,63 +2,42 @@
 
 How this project is tested: TDD boundaries, doubles, and validation.
 
-**Status: strategy and reference fixtures are frozen; the maturity, evidence, assessment and cli suites exist, each beside the code it exercises under `src/`, plus the vocabulary conformance test under `tests/assessment/`. Orchestration and the acceptance suite are still owed.**
-
 ## Strategy
 
-Use **TDD at the use-case boundary**.
-
-Tests describe observable business behavior through a use case's public API:
-
-```text
-failing behavior test → minimum implementation → refactor
-```
-
-Tests follow behavior, not files. Do not test models, helpers, ports, or classes independently unless they own meaningful behavior that is clearer to test directly.
-
-Main behaviors:
-
-* `maturity-engine` — maturity semantics. Not a use case: it takes domain values and returns one, so it is tested directly and without doubles;
-* `resolve-evidence` — evidence resolution. Not a use case: it takes domain values and returns one, so it is tested directly and without doubles;
-* `compose-assessment-report` — projection into the public contract, coverage derivation. Not a use case, for the same reason: tested against the real `checkMaturity`, without doubles;
-* `collect-evidence.usecase` — collector execution, degradation, provenance, and evidence resolution;
-* `assess-maturity.usecase` — orchestration and assessment result; coverage is `compose-assessment-report`'s to prove.
+* TDD at the **use-case boundary**: failing behavior test → minimum implementation → refactor.
+* A test describes observable behavior through a public API.
+* Tests follow behavior, not files. Models, helpers, ports and classes get no suite of their own unless they hold behavior clearer to test directly.
+* Prefer the smallest boundary that proves the behavior.
+* Test names describe behavior, never implementation.
 
 ## Where a test lives
 
 * A suite sits **beside the code it exercises**: `engine/maturity-engine.test.ts` next to `maturity-engine.ts`.
 * `tests/` holds only what has no such neighbour, and exists for that alone:
   * `tests/maturity/aidd-model.test.ts` — conformance of `aidd.yml`, a data file, not a function;
-  * the acceptance suite over `profiles/` — the whole chain, no single unit;
-  * `tests/assessment/vocabulary-conformance.test.ts` — the one place allowed to import all three contexts.
+  * `tests/assessment/vocabulary-conformance.test.ts` — the one place allowed to import all three contexts;
+  * the acceptance suite over `profiles/` **(owed)** — the whole chain, no single unit.
 * **Co-location is not mirroring.** `resolve-evidence.test.ts` exists because resolution is a behavior, not because `resolve-evidence.ts` is a file. `scale-comparison.ts` is owed nothing.
 * Three suffixes mark what never ships: `*.test.ts`, `*.test-adapter.ts`, `*.test-fixture.ts` — one glob, read by `vitest` and by `dependency-cruiser`.
 
-## Style and doubles
+## Behaviors under test, and what each one fakes
 
-Use **Chicago-style testing**: exercise real deterministic collaborators together and fake only architectural boundaries outside the behavior under test.
+**Chicago-style**: run the real deterministic collaborators together, fake only architectural boundaries outside the behavior under test. No mocks of internal collaborators, no call-order assertions, no implementation-detail tests.
 
-Avoid mocks of internal collaborators, call-order assertions, and implementation-detail tests.
+| Behavior | Proves | Doubles |
+| -------- | ------ | ------- |
+| `maturity-engine` | maturity semantics | none — handed a model and observations |
+| `resolve-evidence` | evidence resolution | none — takes domain values, returns one |
+| `compose-assessment-report` | projection into the public contract, coverage derivation | none — real evidence, real `checkMaturity` |
+| `collect-evidence.usecase` | collector execution, degradation, provenance, resolution | `FakeInMemoryEvidenceCollector`, `FailingEvidenceCollector`; real resolver |
+| `assess-maturity.usecase` **(owed)** | orchestration and assessment result; coverage is `compose-assessment-report`'s to prove | real domain collaborators, fakes at external ports only |
 
-Examples:
+The first three are not use cases: each takes domain values and returns one, so it is tested directly.
 
-* `maturity-engine` → no double at all: it is handed a model and observations;
-* `compose-assessment-report` → no double either: real evidence and the real engine, fed through `composeAssessmentReport`;
-* `collect-evidence.usecase` → `FakeInMemoryEvidenceCollector`, `FailingEvidenceCollector`, and the real resolver;
-* `assess-maturity.usecase` → real domain collaborators, fakes only at external ports.
+## Doubles
 
-A double is one alternative implementation of the port, not a scenario machine.
-
-* Own file, never an inline factory in a suite.
-* Concrete port implementation, so `.test-adapter.ts`, filed in `adapters/` with the production ones. Always an adapter — only a boundary is ever faked — and `test-` is what separates it from the one that ships.
-* Name states what it stands for: an available in-memory source, an unavailable boundary.
-* Two concepts, two classes — not one class with a union widened until it plays both parts.
-* Constructor takes what the double *is*, never a behaviour callback or a mode selector.
-* Controlled behavior only. It never reproduces production business logic.
-* A failing double takes `unknown`, not `Error` — that is what `catch` binds under `strict`.
-* It emerges because a business test needs it. No library of doubles written ahead of them.
-
-A constructor that selects between behaviours is driven by the branches of the test, not by anything the system has.
+* A double is one alternative implementation of a port, not a scenario machine. Always an adapter — only a boundary is ever faked — so `.test-adapter.ts`, filed in `adapters/` with the production ones.
+* The discipline itself is a rule: `.claude/rules/03-testing/3-test-doubles.md`, loaded when one is edited.
 
 ## Core semantics to protect
 
@@ -81,28 +60,22 @@ Level:
 * no `NOT_MET` + at least one `UNPROVEN` → not proven;
 * otherwise report the highest fully satisfied lower level.
 
-Gap:
-
-* `NOT_MET` → practice gap;
-* `UNPROVEN` → evidence gap.
-
-An evidence gap must never produce a recommendation that assumes the underlying practice is deficient.
+Gap: `NOT_MET` is a practice gap, `UNPROVEN` an evidence gap — see **The conservative rule** in `project-brief.md` for what each may recommend.
 
 ### The three vocabularies must stay compatible
 
-The four evidence-status names live in three independent declarations: `evidence/models/observation.model.ts`, `maturity/models/axis-observation.model.ts`, and the public contract. The duplication is deliberate — the two contexts are peers that never import each other, and the contract is self-contained so an internal refactor cannot reshape it.
-
-`tests/assessment/vocabulary-conformance.test.ts` is that conformance test, the one place allowed to import all three. It splits across two gates: `pnpm typecheck` holds the type-level half — statuses, `ObservedValue` and `Threshold` are each asserted `Identical` between declarations, the only way to check `ObservedValue` and `Threshold` at all, since the contract keeps no runtime list of either to compare against. `pnpm test` holds a runtime check of the status names alone, comparing `EVIDENCE_STATUSES` against `EVIDENCE_CONFIDENCES` and against the contract's own status keys.
-
-Not a shared import. A member added to one declaration and not the others compiles today, and the divergence would surface only at composition time.
+* The four evidence-status names live in three independent declarations: `evidence/models/observation.model.ts`, `maturity/models/axis-observation.model.ts`, and the public contract. Peers never import each other and the contract is self-contained; the duplication is the price.
+* A member added to one declaration and not the others compiles today. The divergence would surface only at composition time.
+* `tests/assessment/vocabulary-conformance.test.ts` is the one place allowed to import all three, and it splits across two gates:
+  * `pnpm typecheck` — statuses, `ObservedValue` and `Threshold` each asserted `Identical` between declarations. The only way to check the last two at all: the contract keeps no runtime list of either.
+  * `pnpm test` — the status names alone, `EVIDENCE_STATUSES` against `EVIDENCE_CONFIDENCES` against the contract's own status keys.
+* Not a shared import.
 
 ## Integration and acceptance
 
-Use integration tests only where the real boundary matters.
-
-`live-repository.adapter` runs against temporary real Git repositories and the real filesystem. Do not mock Git to test the Git adapter.
-
-Keep a small acceptance suite for the reference profiles:
+* Integration tests only where the real boundary matters: `live-repository.adapter` runs against temporary real Git repositories and the real filesystem. Do not mock Git to test the Git adapter.
+* Profiles are acceptance fixtures, not domain identities. Production code holds no profile-specific knowledge.
+* Missing input yields `UNKNOWN`, never fabricated negative evidence.
 
 | Profile    | Expected | Deliberate hole    |
 | ---------- | -------- | ------------------ |
@@ -111,68 +84,34 @@ Keep a small acceptance suite for the reference profiles:
 | `leodagan` | Green    | no `session.md`    |
 | `arthur`   | Copper   | no `declaratif.md` |
 
-Profiles are acceptance fixtures, not domain identities. Production code contains no profile-specific knowledge.
+* **`leodagan` is the trap the harness axis has to survive.** Expected Green, so `aidd.yml` requires `prompts` of him, yet `session.md` — the prompt-to-commit trace — is exactly what he lacks. A collector that confirms `prompts` only from a transcript file makes Green and above unreachable, and three fixtures out of four fail at once.
+* `profiles/` ship their own `*.test.ts`. They stay out through vitest's `include` and a second exclusion; drop either and `profiles/bohort/code/pricing.test.ts` fails on a `zod` it does not have while `profiles/arthur/code/usage-summary.test.ts` adds five green tests that prove nothing.
 
-Missing input yields `UNKNOWN`, never fabricated negative evidence.
+## What one unobserved axis costs
 
-`leodagan` is the trap the harness axis has to survive. He is expected Green, so `aidd.yml` requires `prompts` of him, yet his `session.md` — the prompt-to-commit trace — is exactly what he lacks. A collector that confirms `prompts` only from a transcript file makes Green and above unreachable, and three fixtures out of four fail at once. See the term's definition in `project-brief.md`.
+* Every level of `aidd.yml` declares all four axes, so a single `UNKNOWN` leaves even White unproven and the report has no level to name. The conservative rule taken to its end.
+* The weight is therefore on collector coverage: a collector that silently contributes nothing costs the whole assessment, not one rung.
+* `proven: null` is that result — "insufficient evidence to classify", never "below White". `tests/maturity/aidd-model.test.ts` pins it; the renderer's matching duty is in `cli.md`.
 
-Vitest's `include` names `src/**/*.test.ts` and `tests/**/*.test.ts`, and `profiles/` is excluded twice over. Without it vitest runs the fixtures' own `*.test.ts` as this project's suite: `profiles/bohort/code/pricing.test.ts` fails on a `zod` it does not have, and `profiles/arthur/code/usage-summary.test.ts` contributes five green tests that prove nothing about the product.
+### `aidd-model.test.ts` is a model conformance test, not a decision test
 
-One unobserved axis proves nothing at all. Every level of `aidd.yml` declares all four axes, so a single `UNKNOWN` leaves even White unproven and the report has no level to name. That is the conservative rule taken to its end, and it puts the weight on collector coverage: a collector that silently contributes nothing costs the whole assessment, not one rung.
+* It reads the canonical `aidd.yml` from disk on purpose — four axes, seven distinct ranks, a few expected reference points — so a typo in the model fails at commit rather than at assessment.
+* Decision tests stay free of the filesystem and of YAML.
+* It reads through `loadMaturityModel`, so the loader's guards are what fail here: a threshold off its scale, a level short of an axis or a rank that dips stops the suite at collection, naming the fault. The reference points then prove the model still grades what it should.
 
-`proven: null` is a result, not a failure — "insufficient evidence to classify", never "below White". The engine must not special-case it, and no renderer may fall back to `proven ?? white`: that single line would collapse the difference between having proved the baseline and having proved nothing, which is the difference the product sells. `tests/maturity/aidd-model.test.ts` pins it.
+## What this repository already got wrong
 
-That file is a **model conformance test**, not a decision test. It reads the canonical `aidd.yml` from disk on purpose, checks the four axes and the seven distinct ranks, and lands on a few expected reference points. Decision tests stay free of the filesystem and of YAML; this one exists so a typo in the model fails at commit rather than at assessment.
+* The model loader shipped **three times** with a live guard nothing held, green suite each round. The pattern never varies: the test names the rule and asserts something weaker.
+* One honest mutation sweep over that loader ran 61 mutations; **22 survived**.
+* An earlier sweep reported every mutant killed — an invalid reporter name was making every run die at startup, which reads exactly like success.
+* What to do about it is a rule: `.claude/rules/03-testing/3-tests.md`, loaded when a suite is edited.
 
-It reads `aidd.yml` through `loadMaturityModel`, so the loader's guards are what fail here: a threshold off its scale, a level short of an axis or a rank that dips stops the suite at collection, naming the fault. The reference points then prove the model still grades what it should.
+## Tools
 
-## A guard is only as good as the test that kills it
-
-The maturity model loader shipped three times with a live guard nothing held, and
-each round the suite was green. The pattern is always the same: the test names the
-rule, and asserts something weaker than the rule.
-
-**A rejection test pins the error class *and* a fragment of the message.**
-`toThrow(SomeError)` alone passes for any throw, and `toThrow(/some text/)` alone
-passes for any `Error` — including the `TypeError` from the guard's absence. Assert
-both, and make the fragment name the offending id, so the message stays useful to
-whoever hits it.
-
-**A guard's test is unproven until the guard has been neutered and the test seen to
-fail.** Delete the throw or force the condition, run the suite, watch that test go
-red, restore. Written but unproven is the state every escaped defect here was in:
-one honest sweep over this loader ran 61 mutations and 22 survived.
-
-**A sweep where nothing survives is a suspect harness, not a good result.** Run an
-unmutated control first and confirm it is green. A sweep here once reported every
-mutant killed because an invalid reporter name made every run die at startup, which
-reads exactly like success.
-
-**A fixture for invalid input must be asserted before it is used.** Building a
-malformed YAML document through `YAML.stringify` is not the same as writing that
-YAML: `{ rank: '.nan' }` serialises to `rank: ".nan"`, a quoted *string*, which the
-type check rejects long before the finiteness check under test. Assert the
-serialised text carries what the case needs, then parse it.
-
-## Tools and conventions
-
-* Vitest only.
-* dependency-cruiser runs with the test command.
-* A suite sits beside the code it exercises; `tests/` holds only what has no such neighbour.
-* Test names describe behavior, not implementation.
-* Do not create tests merely to mirror `src/`.
-* Prefer the smallest test boundary that proves the behavior.
-
-## Offline verification
-
-Before the deadline, with the network disabled:
+* Vitest only; dependency-cruiser runs with the test command.
+* Verify the offline constraint with the network disabled, on a repository and on a fixture bundle, in both renderings:
 
 ```bash
-aidd-audit assess ./profiles/arthur
-aidd-audit assess ./profiles/arthur --json
-aidd-audit assess .
-aidd-audit assess . --json
+aidd-audit assess ./profiles/arthur   # and --json
+aidd-audit assess .                   # and --json
 ```
-
-Offline execution is a product constraint, not a degraded mode.

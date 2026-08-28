@@ -2,8 +2,6 @@
 
 The command-line tool: its commands, inputs, and distribution.
 
-**Status: both renderers exist (`src/cli/renderers/`). `assess.command.ts` does not, so there is still no entry point and `pnpm build` stays red.**
-
 ## Commands
 
 - `aidd-audit assess <path>` — assess a repository or a fixture bundle and report its highest proven maturity level. The single command of the MVP.
@@ -19,12 +17,11 @@ The command-line tool: its commands, inputs, and distribution.
 - `--json` **refuses** a report holding a non-finite number instead of publishing it. JSON renders `NaN` and `Infinity` as `null`, and `null` in this contract means absence — `observed: null` is "not observed", `proven: null` is "no level established". Publishing one would fabricate an evidence gap no collector reported. There is no faithful substitute, so the renderer throws `UnrenderableReportError` naming the field's path. Refusing is not business logic: it decides nothing about maturity, it declines to publish a document it cannot publish truthfully.
 - The human output must expose the blocking axis and its evidence status, so that "not mature enough" and "we don't know yet" never read as the same conclusion.
 - When `proven` is null the renderer says the subject could not be classified and names what is missing. It never prints White, and never renders the result as lower than a level: "no proven level" is above the scale's floor, not below it.
-- Execution requires no network. Ever.
 
 ## Distribution
 
 - **Not published.** `package.json` is `private: true`. The tool is built and run locally: `pnpm build`, then the `aidd-audit` bin from `dist/cli.js`.
-- The package name `aidd-audit` exists because `aidd` is already taken on npm by an unrelated package. Any doc still saying `npx aidd assess .` is stale on both counts.
+- The package name `aidd-audit` exists because `aidd` is already taken on npm by an unrelated package.
 - tsup produces one bundled entrypoint, so publishing later needs no restructuring — only dropping `private` and adding `files`.
 
 ## Boundary
