@@ -5,7 +5,7 @@ paths:
 
 # File Naming
 
-A file's folder says which context owns it, its suffix says what role it plays.
+A file's folder says which context owns it. Its name expresses the concept; a suffix, when present, expresses an architectural role.
 
 ## Placement
 
@@ -30,3 +30,4 @@ A file's folder says which context owns it, its suffix says what role it plays.
 - kebab-case, lowercase, no abbreviations.
 - One exported concept per file.
 - Filename states the exported concept.
+- Never add a generic suffix to classify a pure domain operation.

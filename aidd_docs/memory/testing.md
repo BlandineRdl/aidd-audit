@@ -2,7 +2,7 @@
 
 How this project is tested: TDD boundaries, doubles, and validation.
 
-**Status: strategy and reference fixtures are frozen; no test file exists yet.**
+**Status: strategy and reference fixtures are frozen; `tests/maturity/` and `tests/evidence/resolve-evidence.test.ts` exist. Collection, orchestration and the acceptance suite are still owed.**
 
 ## Strategy
 
@@ -19,7 +19,7 @@ Tests follow behavior, not files. Do not test models, helpers, ports, or classes
 Main behaviors:
 
 * `maturity-engine` — maturity semantics. Not a use case: it takes domain values and returns one, so it is tested directly and without doubles;
-* `resolve-evidence.usecase` — evidence resolution;
+* `resolve-evidence` — evidence resolution. Not a use case: it takes domain values and returns one, so it is tested directly and without doubles;
 * `collect-evidence.usecase` — collection, degradation, provenance, coverage;
 * `assess-maturity.usecase` — orchestration and assessment result.
 
