@@ -89,7 +89,13 @@ module.exports = {
   ],
   options: {
     doNotFollow: { path: 'node_modules' },
-    exclude: { path: '^(profiles|dist)/' },
+    // The test graph is not the production graph. A co-located suite imports
+    // vitest — a devDependency — from inside engine/, composition/ or
+    // usecases/, which `domain-has-no-vendor-sdk` forbids, and rightly so for
+    // the code that ships. These rules describe what dist/cli.js is allowed to depend on, so
+    // the files that never reach it are cruised out. Sentinels are named
+    // `__boundary-sentinel__*.ts`, so nothing here disarms them.
+    exclude: { path: ['^(profiles|dist)/', '\\.test(-adapter|-fixture)?\\.ts$'] },
     tsConfig: { fileName: 'tsconfig.json' },
     tsPreCompilationDeps: true,
     enhancedResolveOptions: {

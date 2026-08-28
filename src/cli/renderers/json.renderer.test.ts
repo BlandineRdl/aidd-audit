@@ -6,9 +6,9 @@ import type {
   LevelReport,
   ProvenanceEntry,
   RequirementReport,
-} from '../../src/assessment/contracts/assessment-report.contract.js'
-import { renderJsonReport } from '../../src/cli/renderers/json.renderer.js'
-import { UnrenderableReportError } from '../../src/cli/renderers/unrenderable-report.error.js'
+} from '../../assessment/contracts/assessment-report.contract.js'
+import { renderJsonReport } from './json.renderer.js'
+import { UnrenderableReportError } from './unrenderable-report.error.js'
 import {
   assessmentReport,
   axisReport,
@@ -19,7 +19,7 @@ import {
   notMetRequirement,
   practiceBlocker,
   unprovenRequirement,
-} from './assessment-report.fixture.js'
+} from './assessment-report.test-fixture.js'
 
 describe('1. the output is valid JSON', () => {
   it('parses without throwing', () => {

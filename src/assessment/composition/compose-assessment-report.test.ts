@@ -1,20 +1,20 @@
 import { describe, expect, it } from 'vitest'
-import { composeAssessmentReport } from '../../src/assessment/composition/compose-assessment-report.js'
-import { ASSESSMENT_REPORT_SCHEMA_VERSION } from '../../src/assessment/contracts/assessment-report.contract.js'
+import { composeAssessmentReport } from './compose-assessment-report.js'
+import { ASSESSMENT_REPORT_SCHEMA_VERSION } from '../contracts/assessment-report.contract.js'
 import type {
   AssessmentReport,
   LevelReport,
   RequirementReport,
-} from '../../src/assessment/contracts/assessment-report.contract.js'
-import { UndeclaredAxisError } from '../../src/assessment/composition/undeclared-axis.error.js'
-import type { CollectorProvenance } from '../../src/evidence/models/collector-provenance.model.js'
-import type { AxisId } from '../../src/evidence/models/axis.model.js'
+} from '../contracts/assessment-report.contract.js'
+import { UndeclaredAxisError } from './undeclared-axis.error.js'
+import type { CollectorProvenance } from '../../evidence/models/collector-provenance.model.js'
+import type { AxisId } from '../../evidence/models/axis.model.js'
 import type {
   Evidence,
   EvidenceStatus,
   ObservedValue,
-} from '../../src/evidence/models/observation.model.js'
-import { validModel as model } from '../maturity/maturity-model.fixture.js'
+} from '../../evidence/models/observation.model.js'
+import { validModel as model } from '../../maturity/engine/maturity-model.test-fixture.js'
 
 /**
  * Sociable specification: real evidence and the real maturity engine.

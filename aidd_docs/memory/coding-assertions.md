@@ -40,6 +40,14 @@ Lefthook runs `biome format --write` on the staged files, restages what it rewro
 - a model, use-case, contract, engine or resolution file importing `node:fs`, `node:child_process`, or any vendor package
 - `assessment/` importing concrete infrastructure from `adapters/` or `loading/` — it may compose public APIs only
 
+### The cruise sees production only
+
+* `depcruise` excludes `*.test.ts`, `*.test-adapter.ts`, `*.test-fixture.ts`.
+* Why: suites sit beside their subject, so `vitest` becomes an `npm-dev` import from inside `engine/`, `resolution/`, `composition/` and `usecases/` — `domain-has-no-vendor-sdk` would fire on every one. The rules describe what `dist/cli.js` may depend on; a test file is not in that graph.
+* The cost: no rule constrains the test graph any more, `no-circular` included.
+* **A production file must never carry one of those suffixes** — it walks out of every wall at once, silently, and nothing reports it.
+* Sentinels are named `__boundary-sentinel__*.ts` and stay inside the cruise.
+
 ### The rules are themselves under test
 
 **A dependency-cruiser rule that matches nothing reports success.** A green `pnpm architecture` would otherwise be ambiguous: either the architecture holds, or the wall was never there.

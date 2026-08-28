@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { renderHumanReport } from '../../src/cli/renderers/human.renderer.js'
+import { renderHumanReport } from './human.renderer.js'
 import {
   assessmentReport,
   axisReport,
@@ -9,7 +9,7 @@ import {
   notMetRequirement,
   practiceBlocker,
   unprovenRequirement,
-} from './assessment-report.fixture.js'
+} from './assessment-report.test-fixture.js'
 
 const provenParagraph = (output: string) =>
   output.split('\n\n').find((paragraph) => paragraph.startsWith('Proven level:'))

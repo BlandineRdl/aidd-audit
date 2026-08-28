@@ -1,5 +1,5 @@
-import type { AxisId } from '../../src/evidence/models/axis.model.js'
-import type { EvidenceCollector } from '../../src/evidence/ports/evidence-collector.port.js'
+import type { AxisId } from '../models/axis.model.js'
+import type { EvidenceCollector } from '../ports/evidence-collector.port.js'
 
 /**
  * An evidence source that is unavailable. `failure` is `unknown` because that is what a

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { resolveEvidence } from '../../src/evidence/resolution/resolve-evidence.js'
-import type { Observation } from '../../src/evidence/models/observation.model.js'
+import { resolveEvidence } from './resolve-evidence.js'
+import type { Observation } from '../models/observation.model.js'
 
 function observation(overrides: Partial<Observation> & Pick<Observation, 'axis'>): Observation {
   return {

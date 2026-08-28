@@ -2,7 +2,7 @@
 
 How this project is tested: TDD boundaries, doubles, and validation.
 
-**Status: strategy and reference fixtures are frozen; `tests/maturity/`, `tests/cli/`, both `tests/evidence/` suites and `tests/assessment/` exist. Orchestration and the acceptance suite are still owed.**
+**Status: strategy and reference fixtures are frozen; the maturity, evidence, assessment and cli suites exist, each beside the code it exercises under `src/`, plus the vocabulary conformance test under `tests/assessment/`. Orchestration and the acceptance suite are still owed.**
 
 ## Strategy
 
@@ -24,6 +24,16 @@ Main behaviors:
 * `collect-evidence.usecase` — collector execution, degradation, provenance, and evidence resolution;
 * `assess-maturity.usecase` — orchestration and assessment result; coverage is `compose-assessment-report`'s to prove.
 
+## Where a test lives
+
+* A suite sits **beside the code it exercises**: `engine/maturity-engine.test.ts` next to `maturity-engine.ts`.
+* `tests/` holds only what has no such neighbour, and exists for that alone:
+  * `tests/maturity/aidd-model.test.ts` — conformance of `aidd.yml`, a data file, not a function;
+  * the acceptance suite over `profiles/` — the whole chain, no single unit;
+  * `tests/assessment/vocabulary-conformance.test.ts` — the one place allowed to import all three contexts.
+* **Co-location is not mirroring.** `resolve-evidence.test.ts` exists because resolution is a behavior, not because `resolve-evidence.ts` is a file. `scale-comparison.ts` is owed nothing.
+* Three suffixes mark what never ships: `*.test.ts`, `*.test-adapter.ts`, `*.test-fixture.ts` — one glob, read by `vitest` and by `dependency-cruiser`.
+
 ## Style and doubles
 
 Use **Chicago-style testing**: exercise real deterministic collaborators together and fake only architectural boundaries outside the behavior under test.
@@ -40,7 +50,7 @@ Examples:
 A double is one alternative implementation of the port, not a scenario machine.
 
 * Own file, never an inline factory in a suite.
-* Concrete port implementation, so `.adapter.ts`.
+* Concrete port implementation, so `.test-adapter.ts`, filed in `adapters/` with the production ones. Always an adapter — only a boundary is ever faked — and `test-` is what separates it from the one that ships.
 * Name states what it stands for: an available in-memory source, an unavailable boundary.
 * Two concepts, two classes — not one class with a union widened until it plays both parts.
 * Constructor takes what the double *is*, never a behaviour callback or a mode selector.
@@ -107,7 +117,7 @@ Missing input yields `UNKNOWN`, never fabricated negative evidence.
 
 `leodagan` is the trap the harness axis has to survive. He is expected Green, so `aidd.yml` requires `prompts` of him, yet his `session.md` — the prompt-to-commit trace — is exactly what he lacks. A collector that confirms `prompts` only from a transcript file makes Green and above unreachable, and three fixtures out of four fail at once. See the term's definition in `project-brief.md`.
 
-Vitest's `include` is restricted to `tests/**/*.test.ts`, and `profiles/` is excluded twice over. Without it vitest runs the fixtures' own `*.test.ts` as this project's suite: `profiles/bohort/code/pricing.test.ts` fails on a `zod` it does not have, and `profiles/arthur/code/usage-summary.test.ts` contributes five green tests that prove nothing about the product.
+Vitest's `include` names `src/**/*.test.ts` and `tests/**/*.test.ts`, and `profiles/` is excluded twice over. Without it vitest runs the fixtures' own `*.test.ts` as this project's suite: `profiles/bohort/code/pricing.test.ts` fails on a `zod` it does not have, and `profiles/arthur/code/usage-summary.test.ts` contributes five green tests that prove nothing about the product.
 
 One unobserved axis proves nothing at all. Every level of `aidd.yml` declares all four axes, so a single `UNKNOWN` leaves even White unproven and the report has no level to name. That is the conservative rule taken to its end, and it puts the weight on collector coverage: a collector that silently contributes nothing costs the whole assessment, not one rung.
 
@@ -149,7 +159,7 @@ serialised text carries what the case needs, then parse it.
 
 * Vitest only.
 * dependency-cruiser runs with the test command.
-* Tests live under `tests/`, grouped by use case or integration boundary.
+* A suite sits beside the code it exercises; `tests/` holds only what has no such neighbour.
 * Test names describe behavior, not implementation.
 * Do not create tests merely to mirror `src/`.
 * Prefer the smallest test boundary that proves the behavior.

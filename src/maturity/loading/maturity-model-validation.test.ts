@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { InvalidMaturityModelError } from '../../src/maturity/models/invalid-maturity-model.error.js'
-import { parseMaturityModel } from '../../src/maturity/loading/load-maturity-model.js'
-import { mutate, pick } from './maturity-model-document.fixture.js'
-import type { TestDocument } from './maturity-model-document.fixture.js'
+import { InvalidMaturityModelError } from '../models/invalid-maturity-model.error.js'
+import { parseMaturityModel } from './load-maturity-model.js'
+import { mutate, pick } from './maturity-model-document.test-fixture.js'
+import type { TestDocument } from './maturity-model-document.test-fixture.js'
 
 describe('a well-formed model that does not hold together', () => {
   describe('an axis on an undeclared scale', () => {

@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { checkMaturity } from '../../src/maturity/engine/maturity-engine.js'
-import { InvalidMaturityModelError } from '../../src/maturity/models/invalid-maturity-model.error.js'
-import { InvalidObservationError } from '../../src/maturity/engine/invalid-observation.error.js'
+import { checkMaturity } from './maturity-engine.js'
+import { InvalidMaturityModelError } from '../models/invalid-maturity-model.error.js'
+import { InvalidObservationError } from './invalid-observation.error.js'
 import type {
   AxisObservation,
   EvidenceConfidence,
   ObservedValue,
-} from '../../src/maturity/models/axis-observation.model.js'
-import type { AxisId, MaturityModel } from '../../src/maturity/models/maturity.model.js'
-import { validModel as model } from './maturity-model.fixture.js'
+} from '../models/axis-observation.model.js'
+import type { AxisId, MaturityModel } from '../models/maturity.model.js'
+import { validModel as model } from './maturity-model.test-fixture.js'
 
 /**
  * The executable specification: no filesystem, no Git, no YAML, no CLI. It

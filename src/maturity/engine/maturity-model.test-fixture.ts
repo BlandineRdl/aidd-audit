@@ -1,4 +1,4 @@
-import type { MaturityModel } from '../../src/maturity/models/maturity.model.js'
+import type { MaturityModel } from '../models/maturity.model.js'
 
 /**
  * The shape aidd.yml carries, never its thresholds. Shared so the decision spec

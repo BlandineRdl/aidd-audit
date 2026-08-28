@@ -1,16 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { checkMaturity } from '../../src/maturity/engine/maturity-engine.js'
-import { InvalidMaturityModelError } from '../../src/maturity/models/invalid-maturity-model.error.js'
-import type {
-  AxisObservation,
-  ObservedValue,
-} from '../../src/maturity/models/axis-observation.model.js'
-import type { AxisId } from '../../src/maturity/models/maturity.model.js'
-import {
-  loadMaturityModel,
-  parseMaturityModel,
-} from '../../src/maturity/loading/load-maturity-model.js'
-import { validSource } from './maturity-model-document.fixture.js'
+import { checkMaturity } from '../engine/maturity-engine.js'
+import { InvalidMaturityModelError } from '../models/invalid-maturity-model.error.js'
+import type { AxisObservation, ObservedValue } from '../models/axis-observation.model.js'
+import type { AxisId } from '../models/maturity.model.js'
+import { loadMaturityModel, parseMaturityModel } from './load-maturity-model.js'
+import { validSource } from './maturity-model-document.test-fixture.js'
 
 describe('parseMaturityModel', () => {
   it('accepts the minimal valid document unchanged', () => {

@@ -252,9 +252,12 @@ laivel-up/
 │   │   │   ├── level-requirement.model.ts
 │   │   │   └── requirement-result.model.ts
 │   │   ├── engine/
-│   │   │   └── maturity-engine.ts
+│   │   │   ├── maturity-engine.ts
+│   │   │   ├── maturity-engine.test.ts
+│   │   │   └── maturity-model.test-fixture.ts
 │   │   └── loading/
 │   │       ├── load-maturity-model.ts
+│   │       ├── load-maturity-model.test.ts
 │   │       ├── model-shape.ts
 │   │       └── model-consistency.ts
 │   │
@@ -264,14 +267,18 @@ laivel-up/
 │   │   │   ├── evidence.model.ts
 │   │   │   └── evidence-status.model.ts
 │   │   ├── usecases/
-│   │   │   └── collect-evidence.usecase.ts
+│   │   │   ├── collect-evidence.usecase.ts
+│   │   │   └── collect-evidence.usecase.test.ts
 │   │   ├── resolution/
-│   │   │   └── resolve-evidence.ts
+│   │   │   ├── resolve-evidence.ts
+│   │   │   └── resolve-evidence.test.ts
 │   │   ├── ports/
 │   │   │   └── evidence-collector.port.ts
 │   │   └── adapters/
 │   │       ├── profile-bundle.adapter.ts
-│   │       └── live-repository.adapter.ts
+│   │       ├── live-repository.adapter.ts
+│   │       ├── live-repository.adapter.test.ts
+│   │       └── fake-in-memory-evidence-collector.test-adapter.ts
 │   │
 │   ├── assessment/
 │   │   ├── models/
@@ -287,15 +294,12 @@ laivel-up/
 │       ├── assess.command.ts
 │       └── renderers/
 │           ├── json.renderer.ts
+│           ├── json.renderer.test.ts
 │           └── human.renderer.ts
 │
-└── tests/
+└── tests/                          # only what exercises no single file
     ├── maturity/
-    │   └── maturity-engine.test.ts
-    ├── evidence/
-    │   └── resolve-evidence.test.ts
-    ├── integration/
-    │   └── live-repository.adapter.test.ts
+    │   └── aidd-model.test.ts      # conformance of aidd.yml itself
     └── acceptance/
         └── profiles.test.ts
 ```
@@ -303,6 +307,10 @@ laivel-up/
 Conventions:
 
 **folder = business context · subfolder = architectural grouping · name = concept · suffix (when present) = architectural role and searchable metadata.**
+
+* A suite lives beside the code it exercises — integration tests next to their adapter, not in a folder named after their kind.
+* `tests/` holds what has no such neighbour.
+* `test` opens the suffix of everything that never ships, and is what `dependency-cruiser` excludes.
 
 ## Decision engine tests
 

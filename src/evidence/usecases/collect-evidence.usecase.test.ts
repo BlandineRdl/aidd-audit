@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import type { AxisVocabulary } from '../../src/evidence/models/axis.model.js'
-import type { Observation } from '../../src/evidence/models/observation.model.js'
-import { collectEvidence } from '../../src/evidence/usecases/collect-evidence.usecase.js'
-import { FailingEvidenceCollector } from './failing-evidence-collector.adapter.js'
-import { FakeInMemoryEvidenceCollector } from './fake-in-memory-evidence-collector.adapter.js'
+import type { AxisVocabulary } from '../models/axis.model.js'
+import type { Observation } from '../models/observation.model.js'
+import { collectEvidence } from './collect-evidence.usecase.js'
+import { FailingEvidenceCollector } from '../adapters/failing-evidence-collector.test-adapter.js'
+import { FakeInMemoryEvidenceCollector } from '../adapters/fake-in-memory-evidence-collector.test-adapter.js'
 
 function observation(overrides: Partial<Observation> & Pick<Observation, 'axis'>): Observation {
   return {

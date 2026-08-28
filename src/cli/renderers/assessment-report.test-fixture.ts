@@ -8,8 +8,8 @@ import type {
   ProvenanceEntry,
   RequirementReport,
   Threshold,
-} from '../../src/assessment/contracts/assessment-report.contract.js'
-import { ASSESSMENT_REPORT_SCHEMA_VERSION } from '../../src/assessment/contracts/assessment-report.contract.js'
+} from '../../assessment/contracts/assessment-report.contract.js'
+import { ASSESSMENT_REPORT_SCHEMA_VERSION } from '../../assessment/contracts/assessment-report.contract.js'
 
 type Unproven = Exclude<EvidenceStatus, 'CONFIRMED'>
 
