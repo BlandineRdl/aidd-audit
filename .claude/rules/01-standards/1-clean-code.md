@@ -37,6 +37,8 @@ Keep code small, intention-revealing, and aligned with one responsibility.
 - Comment reasons, invariants, tradeoffs, constraints.
 - Only when code cannot express them.
 - Never restate names, types, or control flow.
+- Do not repeat information already stated by code, another comment, or project documentation.
+- Comments describe the current invariant or reason, never the history of how the code arrived there.
 
 ## Refactoring
 
