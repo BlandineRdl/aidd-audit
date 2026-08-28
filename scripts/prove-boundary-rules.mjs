@@ -86,8 +86,24 @@ const SENTINELS = [
     },
   },
   {
-    // The domain rules cover engine/ alongside models, usecases and contracts.
-    // Widening a rule's path is only proven inside the new folder.
+    // Every rule widened into a folder needs its own sentinel there: one rule's
+    // sentinel proves nothing about the others sharing that path.
+    rule: 'domain-has-no-filesystem',
+    from: 'src/maturity/engine/__boundary-sentinel__fs.ts',
+    files: {
+      'src/maturity/engine/__boundary-sentinel__fs.ts':
+        "import { readFileSync } from 'node:fs'\nexport const breach = readFileSync\n",
+    },
+  },
+  {
+    rule: 'domain-has-no-processes',
+    from: 'src/maturity/engine/__boundary-sentinel__proc.ts',
+    files: {
+      'src/maturity/engine/__boundary-sentinel__proc.ts':
+        "import { execSync } from 'node:child_process'\nexport const breach = execSync\n",
+    },
+  },
+  {
     rule: 'domain-has-no-vendor-sdk',
     from: 'src/maturity/engine/__boundary-sentinel__vendor.ts',
     files: {
@@ -186,13 +202,16 @@ const dead = SENTINELS.filter(({ rule, from }) => !fired.has(`${rule}|${from}`))
 
 if (dead.length > 0) {
   console.error(
-    `\n✖ ${dead.length} boundary rule(s) did not fire on a deliberate violation:\n` +
+    `\n✖ ${dead.length} deliberate violation(s) did not trip their rule:\n` +
       dead.map(({ rule, from }) => `    ${rule}  (${from})`).join('\n') +
-      '\n\n  These rules match nothing, so `pnpm architecture` proves nothing about them.\n' +
+      '\n\n  Each rule matches nothing where its sentinel sits, so `pnpm architecture`\n' +
+      '  proves nothing about the rule in that folder.\n' +
       '  Check .dependency-cruiser.cjs: `to.path` matches the RESOLVED module\n' +
       "  (`node:fs` resolves to `fs`), and `dependencyTypes: ['npm']` excludes `npm-dev`.\n",
   )
   process.exit(1)
 }
 
-console.log(`✔ ${SENTINELS.length} boundary rules proven against deliberate violations`)
+const provenRules = new Set(SENTINELS.map(({ rule }) => rule)).size
+
+console.log(`✔ ${provenRules} boundary rules proven with ${SENTINELS.length} deliberate violations`)
