@@ -42,14 +42,14 @@ module.exports = {
       comment:
         'Infrastructure crosses inward through ports. Models and use cases never touch the disk.',
       severity: 'error',
-      from: { path: '^src/[^/]+/(models|usecases|contracts|engine|resolution)/' },
+      from: { path: '^src/[^/]+/(models|usecases|contracts|engine|resolution|composition)/' },
       to: { dependencyTypes: ['core'], path: '^(node:)?(fs|fs/promises|path|os)$' },
     },
     {
       name: 'domain-has-no-processes',
       comment: 'Git is reached through an adapter, never spawned from a use case.',
       severity: 'error',
-      from: { path: '^src/[^/]+/(models|usecases|contracts|engine|resolution)/' },
+      from: { path: '^src/[^/]+/(models|usecases|contracts|engine|resolution|composition)/' },
       to: { dependencyTypes: ['core'], path: '^(node:)?child_process$' },
     },
     {
@@ -57,7 +57,7 @@ module.exports = {
       comment:
         'The YAML parser belongs to maturity/loading/. No domain or use-case file imports a vendor package.',
       severity: 'error',
-      from: { path: '^src/[^/]+/(models|usecases|contracts|engine|resolution)/' },
+      from: { path: '^src/[^/]+/(models|usecases|contracts|engine|resolution|composition)/' },
       to: {
         dependencyTypes: [
           'npm',
