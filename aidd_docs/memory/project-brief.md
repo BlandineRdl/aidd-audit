@@ -29,6 +29,7 @@ What this project is, the problem it solves, and its domain language. The non-de
 | Coverage | How much of the intended evidence a collection run actually obtained |
 | Provenance | Which collector produced a given piece of evidence |
 | Profile | An acceptance fixture under `profiles/` standing in for one developer's repository |
+| No proven level | A valid assessment result, reported as `proven: null`. Evidence coverage was insufficient to establish even the baseline; it does **not** mean the subject sits below White |
 | `prompts` | Demonstrated prompt-driven AI usage. Not tied to the presence of a prompt-history or transcript file |
 | `context-engineering` | What the AI knows: project memory, architecture, conventions |
 | `behavior` | How the AI acts: rules, agents, hooks, guardrails |

@@ -7,10 +7,11 @@ import type { MaturityModel } from '../../src/maturity/models/maturity.model.js'
 /**
  * The canonical model, checked against the engine that will load it.
  *
- * Not a decision test: those stay free of the filesystem and of YAML, and this
- * one reads both on purpose. It exists so a typo in aidd.yml — a level silent
- * on an axis, a misspelt axis name, a threshold off its scale — fails at commit
- * instead of at assessment time.
+ * A model conformance test, not a decision test. Decision tests stay free of the
+ * filesystem and of YAML; this one reads both on purpose, to prove the shipped
+ * model satisfies the engine's invariants and lands on known reference points.
+ * A typo in aidd.yml — a level silent on an axis, a misspelt axis name, a
+ * threshold off its scale — fails here at commit, not at assessment time.
  */
 const model = YAML.parse(readFileSync('aidd.yml', 'utf8')) as MaturityModel
 

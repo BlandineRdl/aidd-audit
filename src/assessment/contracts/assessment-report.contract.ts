@@ -124,7 +124,15 @@ export interface AssessmentReport {
     readonly path: string
   }
 
-  /** The highest fully proven level, or null when no level can be proven. */
+  /**
+   * The highest fully proven level, or null when no level can be proven.
+   *
+   * null is a valid result, not a missing one, and never a level below White:
+   * it says the evidence was not sufficient to establish even the baseline.
+   * Never substitute a default — `proven ?? white` destroys the distinction
+   * between "we proved White" and "we could not classify you", which is the
+   * distinction this whole report exists to draw.
+   */
   readonly proven: LevelReport | null
 
   /** The first level above `proven`, or null once the top level is reached. */
