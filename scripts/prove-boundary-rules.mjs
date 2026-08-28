@@ -43,6 +43,17 @@ const SENTINELS = [
     },
   },
   {
+    // The rule reaches adapters/ and loading/; a sentinel in one proves
+    // nothing about the other.
+    rule: 'assessment-composes-never-adapts',
+    from: 'src/assessment/usecases/__boundary-sentinel__loading.ts',
+    files: {
+      'src/maturity/loading/__boundary-sentinel__target.ts': 'export const target = 1\n',
+      'src/assessment/usecases/__boundary-sentinel__loading.ts':
+        "import { target } from '../../maturity/loading/__boundary-sentinel__target.js'\nexport const breach = target\n",
+    },
+  },
+  {
     rule: 'assessment-never-depends-on-cli',
     from: 'src/assessment/usecases/__boundary-sentinel__cli.ts',
     files: {

@@ -102,7 +102,7 @@ One unobserved axis proves nothing at all. Every level of `aidd.yml` declares al
 
 That file is a **model conformance test**, not a decision test. It reads the canonical `aidd.yml` from disk on purpose, checks the four axes and the seven distinct ranks, and lands on a few expected reference points. Decision tests stay free of the filesystem and of YAML; this one exists so a typo in the model fails at commit rather than at assessment.
 
-It asserts the shipped model's shape only indirectly, through those reference points: the engine's guards reject an invalid model, so a threshold off its scale throws here. Once the loader owns those guards, this file should assert them directly again.
+It reads `aidd.yml` through `loadMaturityModel`, so the loader's guards are what fail here: a threshold off its scale, a level short of an axis or a rank that dips stops the suite at collection, naming the fault. The reference points then prove the model still grades what it should.
 
 ## Tools and conventions
 

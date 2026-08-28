@@ -1,0 +1,166 @@
+import { InvalidMaturityModelError } from '../models/invalid-maturity-model.error.js'
+import {
+  isSetRequirement,
+  type AxisId,
+  type Level,
+  type LevelRequirement,
+  type MaturityModel,
+  type Scale,
+} from '../models/maturity.model.js'
+import { requireThresholdOnScale } from '../models/threshold-on-scale.js'
+
+/**
+ * Call order is load-bearing: cumulativity compares two levels' thresholds, so
+ * it needs coverage to have proven both exist and vocabulary to have proven
+ * they are comparable.
+ */
+export function requireVocabulary(model: MaturityModel): void {
+  const scaleByAxis = new Map<AxisId, Scale>()
+  for (const axis of model.axes) {
+    // Object.hasOwn, not a bare index: `model.scales` is user-supplied keys,
+    // and a plain lookup resolves an inherited Object.prototype member
+    // (`toString`, `constructor`, …) as if it were a declared scale.
+    const scale = Object.hasOwn(model.scales, axis.scale) ? model.scales[axis.scale] : undefined
+    if (scale === undefined) {
+      throw new InvalidMaturityModelError(
+        `Axis '${axis.id}' names a scale the model does not declare: '${axis.scale}'.`,
+      )
+    }
+    scaleByAxis.set(axis.id, scale)
+  }
+
+  for (const level of model.levels) {
+    for (const requirement of level.requirements) {
+      const scale = scaleByAxis.get(requirement.axis)
+      // An axis absent from scaleByAxis is undeclared — Coverage rejects that.
+      if (scale === undefined) continue
+      requireThresholdOnScale(scale, requirement, `Level '${level.id}'`)
+    }
+  }
+}
+
+export function requireCoverage(model: MaturityModel): void {
+  requireDistinctRanks(model.levels)
+
+  const declaredAxes = new Set(model.axes.map((axis) => axis.id))
+
+  for (const level of model.levels) {
+    const counts = new Map<AxisId, number>()
+    for (const requirement of level.requirements) {
+      if (!declaredAxes.has(requirement.axis)) {
+        throw new InvalidMaturityModelError(
+          `Level '${level.id}' requires an axis the model does not declare: '${requirement.axis}'.`,
+        )
+      }
+      counts.set(requirement.axis, (counts.get(requirement.axis) ?? 0) + 1)
+    }
+
+    for (const axisId of declaredAxes) {
+      const count = counts.get(axisId) ?? 0
+      if (count === 0) {
+        throw new InvalidMaturityModelError(
+          `Level '${level.id}' declares no requirement for axis '${axisId}'.`,
+        )
+      }
+      if (count > 1) {
+        throw new InvalidMaturityModelError(
+          `Level '${level.id}' declares axis '${axisId}' more than once.`,
+        )
+      }
+    }
+  }
+}
+
+function requireDistinctRanks(levels: readonly Level[]): void {
+  const seen = new Set<number>()
+  for (const level of levels) {
+    if (seen.has(level.rank)) {
+      throw new InvalidMaturityModelError(`Rank ${level.rank} is used by more than one level.`)
+    }
+    seen.add(level.rank)
+  }
+}
+
+export function requireCumulativity(model: MaturityModel): void {
+  const scaleByAxis = new Map<AxisId, Scale>()
+  for (const axis of model.axes) {
+    const scale = Object.hasOwn(model.scales, axis.scale) ? model.scales[axis.scale] : undefined
+    if (scale !== undefined) scaleByAxis.set(axis.id, scale)
+  }
+
+  const sorted = [...model.levels].sort((a, b) => a.rank - b.rank)
+
+  for (let index = 1; index < sorted.length; index += 1) {
+    const lower = sorted[index - 1]
+    const higher = sorted[index]
+    if (lower === undefined || higher === undefined) continue
+    requireNoDip(model, lower, higher, scaleByAxis)
+  }
+}
+
+function requireNoDip(
+  model: MaturityModel,
+  lower: Level,
+  higher: Level,
+  scaleByAxis: ReadonlyMap<AxisId, Scale>,
+): void {
+  for (const axis of model.axes) {
+    const scale = scaleByAxis.get(axis.id)
+    if (scale === undefined) continue
+
+    const lowerRequirement = lower.requirements.find((requirement) => requirement.axis === axis.id)
+    const higherRequirement = higher.requirements.find(
+      (requirement) => requirement.axis === axis.id,
+    )
+    if (lowerRequirement === undefined || higherRequirement === undefined) continue
+
+    if (!reachesOrExceeds(scale, lowerRequirement, higherRequirement)) {
+      throw new InvalidMaturityModelError(
+        `Level '${higher.id}' asks less than '${lower.id}' on axis '${axis.id}': ` +
+          `a higher rank must never ask less than the rank below it.`,
+      )
+    }
+  }
+}
+
+/**
+ * A mismatch must throw, never fall through to the permissive answer: returning
+ * `true` here once let a dipping model pass. Vocabulary catches it first in the
+ * normal path, which is exactly why this must not rely on that.
+ */
+function reachesOrExceeds(
+  scale: Scale,
+  lower: LevelRequirement,
+  higher: LevelRequirement,
+): boolean {
+  switch (scale.kind) {
+    case 'set': {
+      if (!isSetRequirement(lower) || !isSetRequirement(higher)) {
+        throw new InvalidMaturityModelError(
+          `A set scale requires an 'includes' requirement to compare cumulativity.`,
+        )
+      }
+      return lower.includes.every((member) => higher.includes.includes(member))
+    }
+    case 'numeric': {
+      if (isSetRequirement(lower) || isSetRequirement(higher)) {
+        throw new InvalidMaturityModelError(
+          `A numeric scale requires a 'min' requirement to compare cumulativity.`,
+        )
+      }
+      return Number(higher.min) >= Number(lower.min)
+    }
+    case 'ordinal': {
+      if (isSetRequirement(lower) || isSetRequirement(higher)) {
+        throw new InvalidMaturityModelError(
+          `An ordinal scale requires a 'min' requirement to compare cumulativity.`,
+        )
+      }
+      return scale.values.indexOf(String(higher.min)) >= scale.values.indexOf(String(lower.min))
+    }
+    default: {
+      const exhaustive: never = scale
+      throw new InvalidMaturityModelError(`Unknown scale kind: ${JSON.stringify(exhaustive)}.`)
+    }
+  }
+}

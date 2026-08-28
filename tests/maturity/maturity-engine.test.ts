@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { checkMaturity } from '../../src/maturity/engine/maturity-engine.js'
-import { InvalidMaturityModelError } from '../../src/maturity/engine/invalid-maturity-model.error.js'
+import { InvalidMaturityModelError } from '../../src/maturity/models/invalid-maturity-model.error.js'
 import { InvalidObservationError } from '../../src/maturity/engine/invalid-observation.error.js'
 import type {
   AxisObservation,
@@ -210,6 +210,23 @@ describe('an invalid model is rejected, never scored', () => {
     levels: model.levels.map((level) => (level.id === 'high' ? { ...level, requirements } : level)),
   })
 
+  /**
+   * The engine's `scales` is a plain object built by hand — which is what every
+   * model in this suite is — so an axis naming an inherited member resolves to
+   * a function and every `kind` branch misses it.
+   */
+  it('refuses an axis whose scale only resolves off Object.prototype', () => {
+    const inherited: MaturityModel = {
+      ...model,
+      axes: model.axes.map((axis) =>
+        axis.id === 'size' ? { ...axis, scale: 'constructor' } : axis,
+      ),
+    }
+    expect(() => checkMaturity(inherited, observe({ size: confirmed('S') }))).toThrow(
+      InvalidMaturityModelError,
+    )
+  })
+
   it('refuses a level silent on an axis, which would otherwise grant it for free', () => {
     const holed = withHigh(model.levels[1]!.requirements.filter((r) => r.axis !== 'parallelism'))
     expect(() => checkMaturity(holed, observe({ parallelism: confirmed(1) }))).toThrow(
@@ -235,6 +252,16 @@ describe('an invalid model is rejected, never scored', () => {
     expect(() => checkMaturity(typo, observe())).toThrow(InvalidMaturityModelError)
   })
 
+  it('refuses a non-finite minimum on a numeric axis, rather than scoring it NOT_MET', () => {
+    const typo = withHigh([
+      { axis: 'size', min: 'L' },
+      { axis: 'harness', includes: ['prompts', 'context-engineering'] },
+      { axis: 'parallelism', min: Number.NaN },
+    ])
+    expect(() => checkMaturity(typo, observe())).toThrow(InvalidMaturityModelError)
+    expect(() => checkMaturity(typo, observe())).toThrow(/min must be a finite number/)
+  })
+
   it('refuses a non-numeric minimum on a numeric axis', () => {
     const typo = withHigh([
       { axis: 'size', min: 'L' },
@@ -251,6 +278,18 @@ describe('an invalid model is rejected, never scored', () => {
       { axis: 'parallelism', min: 3 },
     ])
     expect(() => checkMaturity(typo, observe())).toThrow(InvalidMaturityModelError)
+  })
+
+  it('refuses a min threshold on a set-scaled axis, capitalising its own sentence', () => {
+    const typo = withHigh([
+      { axis: 'size', min: 'L' },
+      { axis: 'harness', min: 'prompts' },
+      { axis: 'parallelism', min: 3 },
+    ])
+    expect(() => checkMaturity(typo, observe())).toThrow(InvalidMaturityModelError)
+    expect(() => checkMaturity(typo, observe())).toThrow(
+      /^Axis 'harness' is a set scale and needs 'includes'\.$/,
+    )
   })
 
   it('refuses a requirement pointing at an axis the model does not declare', () => {
