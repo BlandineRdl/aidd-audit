@@ -1,18 +1,9 @@
 import type { AxisVocabulary } from '../../evidence/models/axis.model.js'
 import type { Axis, MaturityModel, Scale } from '../../maturity/models/maturity.model.js'
+import { scaleNamedBy } from '../../maturity/models/scale-for-axis.js'
 
 export function axisVocabularyOf(model: MaturityModel): readonly AxisVocabulary[] {
-  return model.axes.map((axis) => vocabularyFor(axis, scaleOf(model, axis)))
-}
-
-function scaleOf(model: MaturityModel, axis: Axis): Scale {
-  // Object.hasOwn: see model-consistency.ts's requireVocabulary.
-  const scale = Object.hasOwn(model.scales, axis.scale) ? model.scales[axis.scale] : undefined
-  // Unreachable for a model loadMaturityModel accepted.
-  if (scale === undefined) {
-    throw new Error(`Axis '${axis.id}' names a scale the model does not declare: '${axis.scale}'.`)
-  }
-  return scale
+  return model.axes.map((axis) => vocabularyFor(axis, scaleNamedBy(model, axis)))
 }
 
 function vocabularyFor(axis: Axis, scale: Scale): AxisVocabulary {

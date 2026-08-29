@@ -173,6 +173,10 @@ levels:
       - axis: parallelism
         min: 3
 
+  # LIMITATION: `never-framing-included` is not observable and no collector emits it, so Gold is
+  # unreachable in the MVP. Nothing local or recorded says who chose the task, and the bundle's
+  # delivery record stops at `never-once-framed`. The level stays in the model because the grid has
+  # it; lifting the ceiling needs a source that records framing, which is post-MVP.
   - id: gold
     rank: 6
     label: Gold

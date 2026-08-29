@@ -70,12 +70,16 @@ function invokesAgentInCommandPosition(line: string): boolean {
   return invokesAgent(tokens, markCommandPositions(tokens), 0, tokens.length, new Map())
 }
 
+// SAFETY: built once, not once per scanned file. Every name is word characters only, so none needs
+// escaping; `matchAll` clones the pattern rather than advancing it, so sharing one is safe.
+const SPAWNER_CALLS: readonly RegExp[] = PROCESS_SPAWNERS.map(
+  (spawner) => new RegExp(`(^|[^A-Za-z0-9_$])${spawner}\\s*\\(`, 'g'),
+)
+
 function spawnedCommandLines(code: string, literals: readonly Literal[]): readonly string[] {
   const lines = literals.filter((literal) => literal.backQuoted).map((literal) => literal.text)
 
-  for (const spawner of PROCESS_SPAWNERS) {
-    const call = new RegExp(`(^|[^A-Za-z0-9_$])${spawner.replace('.', '\\.')}\\s*\\(`, 'g')
-
+  for (const call of SPAWNER_CALLS) {
     for (const match of code.matchAll(call)) {
       const open = match.index + match[0].length - 1
       const region = code.slice(open, endOfCall(code, open))

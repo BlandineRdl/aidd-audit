@@ -3,6 +3,11 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { AssessmentReport } from '../../assessment/contracts/assessment-report.contract.js'
+import type { Observation } from '../../evidence/models/observation.model.js'
+import type {
+  CollectorContext,
+  EvidenceCollector,
+} from '../../evidence/ports/evidence-collector.port.js'
 import type { CommandIo } from './assess.command.js'
 import { runAssess } from './assess.command.js'
 
@@ -276,5 +281,69 @@ describe('runAssess — model errors exit 2, nothing on stdout', () => {
     // Exit 2 pins the class: a TypeError would satisfy the fragment alone.
     expect(stderr()).toContain("asks less than 'low'")
     expect(stderr().endsWith('\n')).toBe(true)
+  })
+})
+
+// INVARIANT: A collector answering `parallelism` with something the loaded model cannot rank. No
+// wired collector can do this — each drops a value off the scale — which is why exit code 1 needed
+// a collector this composition root would never build. It fakes no domain collaborator: everything
+// downstream of it is the real pipeline.
+class OffVocabularyEvidenceCollector implements EvidenceCollector {
+  readonly id = 'off-vocabulary'
+  readonly supportedAxes: readonly string[] = ['parallelism']
+
+  constructor(private readonly value: string | number) {}
+
+  async collect(context: CollectorContext): Promise<readonly Observation[]> {
+    context.signal.throwIfAborted()
+    return [
+      {
+        axis: 'parallelism',
+        value: this.value,
+        kind: 'OBSERVED',
+        collector: this.id,
+        basis: 'a value this suite chose',
+      },
+    ]
+  }
+}
+
+describe('runAssess — our own failures exit 1, nothing on stdout', () => {
+  it('exits 1 when a collector answers a numeric axis with something that is not a number', async () => {
+    const { io, stdout, stderr } = capturingIo()
+
+    const exitCode = await runAssess(['assess', PERCEVAL], io, {
+      collectors: [new OffVocabularyEvidenceCollector('as many as we felt like')],
+    })
+
+    // INVARIANT: 1 is ours and 2 is the caller's. Nothing about the invocation was wrong here.
+    expect(exitCode).toBe(1)
+    expect(stdout()).toBe('')
+    expect(stderr()).toContain('parallelism')
+  })
+
+  it('refuses to publish a non-finite number under --json rather than rendering it as null', async () => {
+    const { io, stdout, stderr } = capturingIo()
+
+    const exitCode = await runAssess(['assess', PERCEVAL, '--json'], io, {
+      collectors: [new OffVocabularyEvidenceCollector(Number.POSITIVE_INFINITY)],
+    })
+
+    // INVARIANT: JSON renders Infinity as null, and null in this contract means absence. Refusing
+    // is the only truthful answer, and refusing is ours, never the caller's.
+    expect(exitCode).toBe(1)
+    expect(stdout()).toBe('')
+    expect(stderr()).toContain('Infinity')
+  })
+
+  it('still renders that same report as prose, where a non-finite number misleads nobody', async () => {
+    const { io, stdout } = capturingIo()
+
+    const exitCode = await runAssess(['assess', PERCEVAL], io, {
+      collectors: [new OffVocabularyEvidenceCollector(Number.POSITIVE_INFINITY)],
+    })
+
+    expect(exitCode).toBe(0)
+    expect(stdout()).toContain('Infinity')
   })
 })

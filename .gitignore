@@ -1,5 +1,8 @@
 node_modules/
 dist/
 *.log
+# A git worktree and its install: machine-local scratch, like dist/ above.
+.claude/worktrees/
 .DS_Store
 __boundary-sentinel__*
+.stryker-tmp/

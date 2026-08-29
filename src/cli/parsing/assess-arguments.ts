@@ -22,9 +22,13 @@ export function parseAssessArguments(argv: readonly string[]): AssessArguments {
   let jsonSeen = false
   let modelSeen = false
 
-  for (let index = 1; index < argv.length; index += 1) {
-    const token = argv[index]
-    if (token === undefined) {
+  // INVARIANT: `entries()` yields the token itself, so no branch is needed for an index that cannot
+  // be empty. A flag's value is the one position genuinely absent — when the flag ends the line.
+  const operands = argv.slice(1)
+  let valueConsumedAt = -1
+
+  for (const [index, token] of operands.entries()) {
+    if (index === valueConsumedAt) {
       continue
     }
 
@@ -36,11 +40,11 @@ export function parseAssessArguments(argv: readonly string[]): AssessArguments {
 
     if (token === '--model') {
       if (modelSeen) throw usageError("Flag '--model' was given more than once.")
-      const value = argv[index + 1]
+      const value = operands[index + 1]
       if (value === undefined) throw usageError("Flag '--model' needs a value.")
       modelSeen = true
       modelPath = value
-      index += 1
+      valueConsumedAt = index + 1
       continue
     }
 
