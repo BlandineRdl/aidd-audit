@@ -32,10 +32,15 @@ How this project is tested: TDD boundaries, doubles, and validation.
 | `collect-evidence.usecase` | collector execution, degradation, provenance, resolution | `FakeInMemoryEvidenceCollector`, `FailingEvidenceCollector`; real resolver |
 | `assess-maturity.usecase` | orchestration and assessment result; coverage is `compose-assessment-report`'s to prove | real domain collaborators, fakes at external ports only |
 | `assess.command` (`runAssess`) | argv parsing, the exit-code taxonomy, stdout/stderr, wired against the real pipeline | none — real `loadMaturityModel`, real `assessMaturity`; only `CommandIo` is an in-memory double, and it fakes no domain collaborator |
+| `tests/cli/process-contract.test.ts` | that `main.ts` and the built `dist/cli.js` deliver that taxonomy to a real shell | none — the process is spawned, nothing is faked |
 
 The first three are not use cases: each takes domain values and returns one, so it is tested directly.
 
-`src/cli/assess.command.test.ts` sits beside `assess.command.ts`, per **Where a test lives** above, and drives `runAssess(argv, io)` with a capturing `CommandIo` — two in-memory string arrays, no spawn and no build. It asserts stdout, stderr and the exit code only, never which function ran. `main.ts`, the one file that touches `process`, is exercised only by hand — running `dist/cli.js` — never imported by the suite.
+`tests/cli/process-contract.test.ts` is its complement and lives in `tests/` because it exercises no single file: it builds the bundle in `beforeAll`, spawns `node dist/cli.js`, and asserts the exit code, stdout and stderr a caller actually sees. The division: the in-process suite proves what `runAssess` **returns**, this one proves that `main.ts` turns that into `process.exitCode` and that the bundle behaves like its source. No test reimplements the taxonomy — every assertion is an integer literal, `exitCodeFor` is never imported. Message wording stays the in-process suite's to own: through the process only the caller's own input (a path it passed) and the distinguishing fragment of a branch its siblings cannot separate are asserted, so rewording an error turns one file red, not two.
+
+**It builds inside `beforeAll`, and that is a deliberate cost.** A stale `dist/` from another branch would otherwise let the suite pass against code nobody wrote today. The consequence is that `pnpm test` — and therefore `pnpm check` — now needs tsup to succeed, which `coding-assertions.md` records. It also makes `dist/` a shared mutable resource: `tsup.config.ts` sets `clean: true`, so the build empties and rewrites the folder while vitest runs files in parallel. **No other suite may read `dist/`** while that holds.
+
+`src/cli/assess.command.test.ts` sits beside `assess.command.ts`, per **Where a test lives** above, and drives `runAssess(argv, io)` with a capturing `CommandIo` — two in-memory string arrays, no spawn and no build. It asserts stdout, stderr and the exit code only, never which function ran. `main.ts` is never imported by any suite; it is reached only by spawning the built binary, which `tests/cli/process-contract.test.ts` now does.
 
 ## Doubles
 
