@@ -1,11 +1,36 @@
 import { runGit } from './git-process.js'
 
 /** The 180 days ending at the most recent commit, never wall-clock now: the same repository
- *  must not report two different levels on two different days. */
+ *  must not report two different levels on two different days. **The length is chosen, not
+ *  measured**, on the same footing as the sample floors below: long enough that two quarters of
+ *  ordinary delivery fall inside it, short enough that a practice abandoned a year ago stops
+ *  counting. Nothing observed here establishes 180 over 90 or 365. */
 const WINDOW_DAYS = 180
 const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000
 
-/** A sample is not a habit. */
+/** A sample is not a habit: below these counts a median describes an accident, and this
+ *  collector emits nothing rather than publish it. That much follows from the conservative rule.
+ *
+ *  **The number 5 is chosen, not measured, and nothing in this project establishes it.** No
+ *  distribution of delivered changes was consulted, and the four reference profiles cannot
+ *  stand in for one: they are fixture bundles, and a bundle publishes pre-aggregated medians
+ *  without the counts behind them, so they never cross this floor at all.
+ *
+ *  What is known is the shape of the cost on each side, and it is asymmetric. Too low, and a
+ *  fortnight of unusual weeks is published as a habit — a wrong level, stated confidently, on a
+ *  repository no offline reader can contradict. Too high, and a small but genuine practice stays
+ *  UNKNOWN — an evidence gap, which the report names as one and which may never be read as a
+ *  practice gap. Withholding a level is recoverable; inventing one is not. That asymmetry is the
+ *  whole argument for 5 over 3, and it is an argument about direction, not about the value.
+ *
+ *  **Not to be lowered so that a given repository classifies.** That is fitting the measure to
+ *  the result one hoped for, and this repository — 3 merges over 3 active days as this is
+ *  written — is precisely the case that invites it. Move either number only from an observed
+ *  distribution across real repositories, which needs a corpus this project does not have and
+ *  is post-MVP. Until then the floor stands and the history accumulates.
+ *
+ *  Either number changes what `assess` reports about every repository, so it is a product
+ *  decision, never a tuning knob. */
 const MINIMUM_DELIVERED_CHANGES = 5
 const MINIMUM_ACTIVE_DAYS = 5
 
