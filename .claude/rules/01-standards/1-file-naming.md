@@ -14,6 +14,9 @@ A file's folder says which context owns it. Its name expresses the concept; a su
 - Name a suffix after the role played.
 - Never after the folder it sits in.
 - A pure decision belongs outside `usecases/`.
+- A subfolder names one responsibility and makes the layout say it.
+- Holding a single concept is fine when that responsibility is nameable.
+- Never a bucket named for what it collects: `utils`, `helpers`, `common`.
 - A suite sits beside the code it exercises.
 - Never a folder mirroring `src/`, never a folder named after a kind of test.
 - A suite exercising no single file lives in `tests/`.
