@@ -1,8 +1,3 @@
-/**
- * A dependency-cruiser rule that matches nothing reports success, so a green
- * `pnpm architecture` is ambiguous: the wall may be intact, or absent. This
- * writes one deliberate violation per rule and fails unless every rule fired.
- */
 import { spawnSync } from 'node:child_process'
 import { mkdirSync, rmSync, writeFileSync, existsSync, readdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
@@ -10,10 +5,7 @@ import { dirname, join } from 'node:path'
 const PREFIX = '__boundary-sentinel__'
 const SRC = 'src'
 
-/**
- * Matched on the pair (`rule`, `from`), never the rule name alone: that is what
- * stops one sentinel from vouching for another. A rule may need several.
- */
+// Sentinels match on (rule, path): one entry proves nothing for another.
 const SENTINELS = [
   {
     rule: 'maturity-is-a-peer',
@@ -43,8 +35,6 @@ const SENTINELS = [
     },
   },
   {
-    // The rule reaches adapters/ and loading/; a sentinel in one proves
-    // nothing about the other.
     rule: 'assessment-composes-never-adapts',
     from: 'src/assessment/usecases/__boundary-sentinel__loading.ts',
     files: {
@@ -87,8 +77,8 @@ const SENTINELS = [
     },
   },
   {
-    // A devDependency resolves to `npm-dev`, not `npm`. Without this case the
-    // rule can be narrowed back to `['npm']` and still look proven.
+    // SAFETY: `dependencyTypes: ['npm']` excludes a devDependency (`npm-dev`); without this
+    // sentinel the rule could be narrowed back unnoticed.
     rule: 'domain-has-no-vendor-sdk',
     from: 'src/maturity/usecases/__boundary-sentinel__vendor-dev.ts',
     files: {
@@ -97,8 +87,6 @@ const SENTINELS = [
     },
   },
   {
-    // Every rule widened into a folder needs its own sentinel there: one rule's
-    // sentinel proves nothing about the others sharing that path.
     rule: 'domain-has-no-filesystem',
     from: 'src/maturity/engine/__boundary-sentinel__fs.ts',
     files: {
@@ -147,8 +135,6 @@ const SENTINELS = [
     },
   },
   {
-    // The composition folder is inside all three domain rules; each needs its
-    // own sentinel here, since one rule's sentinel vouches for no other.
     rule: 'domain-has-no-filesystem',
     from: 'src/assessment/composition/__boundary-sentinel__fs.ts',
     files: {
@@ -173,9 +159,6 @@ const SENTINELS = [
     },
   },
   {
-    // src/assessment/usecases/ is about to hold real code, and the three
-    // domain rules reach it under the same shared regex as composition/ —
-    // one rule's sentinel there proves nothing about this folder.
     rule: 'domain-has-no-filesystem',
     from: 'src/assessment/usecases/__boundary-sentinel__fs.ts',
     files: {
@@ -211,7 +194,7 @@ const SENTINELS = [
   },
 ]
 
-/** Directories that did not exist before this run, deepest first for removal. */
+// Deepest first, so cleanup removes child directories before their parents.
 const createdDirs = []
 
 const ensureDir = (dir) => {
@@ -249,8 +232,7 @@ const cleanup = () => {
 }
 
 const cruise = () => {
-  // The local bin, not the PATH: this script must run identically whether it is
-  // invoked by a pnpm script or by hand.
+  // Use the local bin, not PATH, so this runs the same via pnpm or by hand.
   const run = spawnSync(join('node_modules', '.bin', 'depcruise'), [SRC, '--output-type', 'json'], {
     encoding: 'utf8',
   })
@@ -264,11 +246,8 @@ const cruise = () => {
   )
 }
 
-/**
- * `finally` does not run on a signal, and a surviving sentinel deadlocks the
- * gate: `pnpm architecture` cruises before it sweeps, so the leftover makes
- * depcruise exit 1 and the sweep below never gets its turn.
- */
+// SAFETY: `finally` does not run on a signal — without this trap a killed run leaves a sentinel
+// behind, and the next `pnpm architecture` fails on the leftover file instead of proving anything.
 for (const signal of ['SIGINT', 'SIGTERM']) {
   process.on(signal, () => {
     cleanup()

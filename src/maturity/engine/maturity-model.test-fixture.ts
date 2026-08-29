@@ -1,9 +1,7 @@
 import type { MaturityModel } from '../models/maturity.model.js'
 
-/**
- * The shape aidd.yml carries, never its thresholds. Shared so the decision spec
- * and the validator spec agree on what "valid" means.
- */
+// INVARIANT: the shape aidd.yml carries, never its thresholds; shared so the decision spec and the
+// validator spec agree on what "valid" means.
 export const validModel: MaturityModel = {
   schemaVersion: 1,
   id: 'test',
@@ -41,7 +39,6 @@ export const validModel: MaturityModel = {
   ],
 }
 
-/** The same model with `high`'s requirements rewritten. */
 export const withHighRequiring = (
   requirements: MaturityModel['levels'][number]['requirements'],
 ): MaturityModel => ({

@@ -11,17 +11,14 @@ import {
   tokenize,
 } from './shell-tokens.js'
 
-/*
- * Nothing here proves `loops`; it can only make it undecidable, an evidence gap.
- *
- * Nothing outside shell is parsed, so the only question is whether a file carries the shape of
- * an invocation. Two shapes count: a literal beginning with an agent command, how every
- * language writes an argv entry — `subprocess.run(["claude", "-p", "go"])`; and a literal
- * handed to a recognised spawner or written between backticks, read as the command line it is
- * — `system("cd repo && claude -p go")`. A bare token is neither: `require('anthropic')` binds
- * a name and `gemini.generate_content()` calls a method, and a file whose tokens are not
- * invocations was read fine and decides nothing, so it leaves the scan silent.
- */
+// INVARIANT: Nothing here proves `loops`; it can only make it undecidable, an evidence gap. Nothing
+// outside shell is parsed, so the only question is whether a file carries the shape of an
+// invocation. Two shapes count: a literal beginning with an agent command, how every language
+// writes an argv entry — `subprocess.run(["claude", "-p", "go"])`; and a literal handed to a
+// recognised spawner or written between backticks, read as the command line it is — `system("cd
+// repo && claude -p go")`. A bare token is neither: `require('anthropic')` binds a name and
+// `gemini.generate_content()` calls a method, and a file whose tokens are not invocations was read
+// fine and decides nothing, so it leaves the scan silent.
 
 const AGENT_COMMANDS = ['claude', 'codex', 'gemini', 'aider', 'cursor-agent']
 
@@ -30,7 +27,7 @@ const AGENT_INVOCATION_HEAD = new RegExp(
   'i',
 )
 
-/** Matched on the name alone, so `subprocess.run` needs no entry — `run` reaches it. */
+// Matched on the name alone, so `subprocess.run` needs no entry — `run` reaches it.
 const PROCESS_SPAWNERS = [
   'run',
   'execFile',
@@ -53,7 +50,7 @@ export function looksLikeAnAgentInvocation(content: string): boolean {
   return spawnedCommandLines(code, literals).some(invokesAgentInCommandPosition)
 }
 
-/** Two bare words are prose: `claude finished` is a log line, not an invocation. */
+// Two bare words are prose: `claude finished` is a log line, not an invocation.
 function beginsACommand(literal: string): boolean {
   const head = AGENT_INVOCATION_HEAD.exec(literal)
   if (head === null) return false
@@ -62,10 +59,10 @@ function beginsACommand(literal: string): boolean {
   return rest.length === 0 || COMMAND_LIKE.test(rest)
 }
 
-/** A flag, or an operator joining commands. Either says the words around it are a command. */
+// A flag, or an operator joining commands. Either says the words around it are a command.
 const COMMAND_LIKE = /(^|\s)-{1,2}[A-Za-z0-9]|&&|\|\||;|\|/
 
-/** A backtick is a command in Ruby and a template literal in JS, so it faces the same test. */
+// A backtick is a command in Ruby and a template literal in JS, so it faces the same test.
 function invokesAgentInCommandPosition(line: string): boolean {
   if (!COMMAND_LIKE.test(line) && !AGENT_COMMANDS.includes(basenameOf(line.trim()))) return false
 
@@ -98,12 +95,12 @@ interface Literal {
   readonly backQuoted: boolean
 }
 
-/** Marks where a literal stood, so a spawner's arguments can be recovered from `code`. */
+// Marks where a literal stood, so a spawner's arguments can be recovered from `code`.
 const PLACEHOLDER = /\u0000(\d+)\u0000/g
 
 const placeholderFor = (index: number): string => `\u0000${index}\u0000`
 
-/** Language-agnostic: it parses nothing, it removes where an agent's name carries no call. */
+// Language-agnostic: it parses nothing, it removes where an agent's name carries no call.
 function stripCommentsAndLiterals(source: string): { code: string; literals: Literal[] } {
   let code = ''
   const literals: Literal[] = []

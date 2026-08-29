@@ -10,13 +10,11 @@ import { scanHarness } from './harness/harness-scan.js'
 
 const COLLECTOR_ID = 'fixture-bundle'
 
-/** A marker, never a source: nothing in it is admissible for any axis. */
+// A marker, never a source: nothing in it is admissible for any axis.
 const BUNDLE_MANIFEST = 'profile.json'
 
-/**
- * Every observation is `OBSERVED`: the one declarative artifact a bundle carries is prose, and
- * prose is never parsed.
- */
+// INVARIANT: Every observation is `OBSERVED`: the one declarative artifact a bundle carries is
+// prose, and prose is never parsed.
 export class FixtureBundleEvidenceCollector implements EvidenceCollector {
   readonly id = COLLECTOR_ID
   readonly supportedAxes: readonly AxisId[] = ['size', 'harness', 'intervention', 'parallelism']

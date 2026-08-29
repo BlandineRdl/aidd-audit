@@ -4,8 +4,8 @@ import { describe, expect, it } from 'vitest'
 import type { AssessmentReport } from '../../src/assessment/contracts/assessment-report.contract.js'
 import { type CommandIo, runAssess } from '../../src/cli/commands/assess.command.js'
 
-/** In process rather than through `dist/cli.js`: `process-contract.test.ts` builds that bundle
- *  with `clean: true` while vitest runs files in parallel, and reads it alone. */
+// SAFETY: In process rather than through `dist/cli.js`: `process-contract.test.ts` builds that
+// bundle with `clean: true` while vitest runs files in parallel, and reads it alone.
 const EXPECTED_LEVEL = {
   perceval: 'Red',
   bohort: 'Blue',

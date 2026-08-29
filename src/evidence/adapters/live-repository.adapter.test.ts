@@ -10,11 +10,7 @@ import type { Observation } from '../models/observation.model.js'
 import type { CollectorContext } from '../ports/evidence-collector.port.js'
 import { LiveRepositoryEvidenceCollector } from './live-repository.adapter.js'
 
-/**
- * Integration, against real temporary Git repositories: Git and the disk are the boundary
- * under test. Only the wiring the adapter owns — which axes it answers, what it refuses to
- * publish, and that one unreadable source never costs the other.
- */
+// Integration: Git and the disk are the boundary under test.
 
 const run = promisify(execFile)
 
@@ -35,7 +31,7 @@ const FULL_VOCABULARY: readonly AxisVocabulary[] = [
   { axis: 'parallelism', kind: 'numeric' },
 ]
 
-/** Only the harness axis: the Git-derived source returns before it spawns anything. */
+// Only the harness axis: the Git-derived source returns before it spawns anything.
 const HARNESS_ONLY: readonly AxisVocabulary[] = [
   {
     axis: 'harness',
@@ -44,7 +40,7 @@ const HARNESS_ONLY: readonly AxisVocabulary[] = [
   },
 ]
 
-/** Only the Git-derived axes: the harness source returns before it spawns anything. */
+// Only the Git-derived axes: the harness source returns before it spawns anything.
 const HISTORY_ONLY: readonly AxisVocabulary[] = [
   { axis: 'size', kind: 'ordinal', values: ['none', 'S', 'M', 'L', 'XL'] },
   { axis: 'parallelism', kind: 'numeric' },
@@ -57,7 +53,7 @@ afterEach(async () => {
 })
 
 async function git(cwd: string, args: readonly string[], date?: string): Promise<void> {
-  // Never bare `process.env`: a git hook exports GIT_DIR, and an inherited one would send
+  // SAFETY: never bare `process.env` — a git hook exports GIT_DIR, and an inherited one would send
   // these fixture commits into the repository under test instead of the temporary one.
   const env =
     date === undefined
@@ -66,7 +62,7 @@ async function git(cwd: string, args: readonly string[], date?: string): Promise
   await run('git', [...args], { cwd, env, maxBuffer: 64 * 1024 * 1024 })
 }
 
-/** `os.tmpdir()` is a symlink on macOS, and git reports the resolved path back. */
+// COMPAT: `os.tmpdir()` is a symlink on macOS, and git reports the resolved path back.
 async function emptyDirectory(): Promise<string> {
   const path = await mkdtemp(join(await realpath(tmpdir()), 'aidd-live-adapter-'))
   workspaces.push(path)
@@ -99,10 +95,8 @@ function day(index: number): string {
   return `2026-03-${String(index + 1).padStart(2, '0')}T10:00:00+00:00`
 }
 
-/**
- * Six delivered changes on six branches over six days: past the minimum sample on both
- * Git-derived axes, so a null from either is the adapter's doing and not the history's.
- */
+// INVARIANT: past the minimum sample on both Git-derived axes, so a null from either is the
+// adapter's doing and not the history's.
 async function repositoryDeliveringSixChanges(
   files: Readonly<Record<string, string>> = {},
   executable: readonly string[] = [],
@@ -131,13 +125,9 @@ async function repositoryDeliveringSixChanges(
 const SPAWN_LOG = 'AIDD_TEST_SPAWN_LOG'
 const REAL_GIT = 'AIDD_TEST_REAL_GIT'
 
-/**
- * Puts a `git` on `PATH` that records every spawn and holds every spawn after the first.
- *
- * The collector spawns once for the work-tree check and awaits it before either source
- * starts, so a second recorded spawn proves a source is in flight — by construction, not by
- * a timing ratio. Holding it keeps the source there until the budget is spent.
- */
+// INVARIANT: the collector spawns once for the work-tree check and awaits it before either source
+// starts, so a second recorded spawn proves a source is in flight — by construction, not by a
+// timing ratio.
 async function gitHoldingEverySpawnAfterTheFirst(): Promise<{
   readonly waitForASourceToSpawn: () => Promise<void>
   readonly restore: () => void
@@ -199,7 +189,7 @@ async function gitHoldingEverySpawnAfterTheFirst(): Promise<{
   }
 }
 
-/** Collects with the budget spent at the moment a source has git in flight, and nowhere else. */
+// Budget spent at the moment a source has git in flight, and nowhere else.
 async function collectWithTheBudgetSpentInsideItsFirstSource(
   repository: string,
   vocabulary: readonly AxisVocabulary[],
@@ -212,7 +202,7 @@ async function collectWithTheBudgetSpentInsideItsFirstSource(
     const collecting = new LiveRepositoryEvidenceCollector().collect(
       contextFor(repository, vocabulary, budget.signal),
     )
-    // Nothing consumes it until the abort has landed, and an unwatched rejection in between
+    // SAFETY: nothing consumes it until the abort has landed, and an unwatched rejection in between
     // would surface as an unhandled one.
     void collecting.catch(() => undefined)
 
@@ -245,8 +235,21 @@ describe('the live repository evidence collector', () => {
       contextFor(notARepository),
     )
 
-    // A tracked tree is what makes a file versioned, and there is none here: the CLAUDE.md
-    // on disk proves nothing, and its absence is an evidence gap, never a practice gap.
+    // INVARIANT: a tracked tree is what makes a file versioned. The CLAUDE.md on disk proves
+    // nothing, and its absence is an evidence gap, never a practice gap.
+    expect(observations).toEqual([])
+  })
+
+  it('observes nothing about a directory that merely sits inside a Git work tree', async () => {
+    const repository = await repositoryDeliveringSixChanges({ 'CLAUDE.md': 'project memory\n' })
+    const inside = join(repository, 'nested')
+    await mkdir(inside, { recursive: true })
+    await write(repository, { 'nested/README.md': 'a subject of its own\n' })
+
+    const observations = await new LiveRepositoryEvidenceCollector().collect(contextFor(inside))
+
+    // INVARIANT: answering would publish the surrounding repository's harness as this subject's
+    // evidence. Emitting nothing is an evidence gap, never a practice one.
     expect(observations).toEqual([])
   })
 
@@ -256,8 +259,8 @@ describe('the live repository evidence collector', () => {
 
     const observations = await collector.collect(contextFor(repository))
 
-    // supportedAxes is what a collector may attempt, never what it delivered: the provenance
-    // says who was asked, the evidence says who answered.
+    // INVARIANT: supportedAxes is what a collector may attempt, never what it delivered. Provenance
+    // says who was asked, evidence says who answered.
     expect(collector.supportedAxes).toContain('intervention')
     expect(observations.map((observation) => observation.axis)).not.toContain('intervention')
     expect(observations.length).toBeGreaterThan(0)
@@ -298,8 +301,8 @@ describe('the live repository evidence collector', () => {
       contextFor(repository, [{ axis: 'harness', kind: 'set', members: ['prompts'] }]),
     )
 
-    // A custom --model may narrow the vocabulary, and a term outside it is one this model
-    // cannot rank.
+    // INVARIANT: a term outside the loaded vocabulary is one this model cannot rank, and is dropped
+    // rather than invented.
     expect(harness?.value).toEqual(['prompts'])
   })
 
@@ -314,8 +317,8 @@ describe('the live repository evidence collector', () => {
 
     const observations = await new LiveRepositoryEvidenceCollector().collect(contextFor(repository))
 
-    // Publishing the set without `loops` would report a practice gap nobody observed.
-    // Withholding it is UNKNOWN, an evidence gap, which is what the situation is.
+    // INVARIANT: publishing the set without `loops` would report a practice gap nobody observed.
+    // Withholding it is UNKNOWN, which is what the situation is.
     expect(observations.map((observation) => observation.axis)).not.toContain('harness')
     // And it costs that axis alone: the Git-derived ones are untouched.
     expect(observations.map((observation) => observation.axis).sort()).toEqual([
@@ -333,8 +336,8 @@ describe('the live repository evidence collector', () => {
       ['tools/agent-loop.py'],
     )
 
-    // The same undecidable script against a `--model` with no `loops` member: failing to
-    // decide a term the engine cannot rank hides nothing the report could have carried.
+    // INVARIANT: failing to decide a term the engine cannot rank hides nothing the report could
+    // have carried, so it costs the axis nothing.
     const [harness] = await new LiveRepositoryEvidenceCollector().collect(
       contextFor(repository, [
         { axis: 'harness', kind: 'set', members: ['prompts', 'context-engineering'] },
@@ -352,20 +355,18 @@ describe('the live repository evidence collector', () => {
 
     const observations = await new LiveRepositoryEvidenceCollector().collect(contextFor(repository))
 
-    // A linear history recovers no delivered change, and the two sources fail
-    // independently: one unreadable source must not cost the other.
+    // INVARIANT: the two sources fail independently — one unreadable source must not cost the
+    // other.
     expect(observations.map((observation) => observation.axis)).toEqual(['harness'])
   })
 
   it('surfaces a budget spent while it was reading the harness, rather than an empty answer', async () => {
     const repository = await repositoryDeliveringSixChanges({ 'CLAUDE.md': 'project memory\n' })
 
-    // The signal that matters trips mid-read: an entry check alone leaves every `catch` free
-    // to swallow the abort and resolve `[]`, which the port forbids outright.
-    //
-    // This model names only the harness axis, so the rejection can only have come through
-    // its `catch`. Asserted alone: a test green whichever of two guards you delete holds
-    // neither.
+    // SAFETY: the signal that matters trips mid-read. An entry check alone leaves every `catch`
+    // free to swallow the abort and resolve `[]`, which the port forbids. This model names only the
+    // harness axis, so the rejection can only have come through its `catch`. Asserted alone: a test
+    // green whichever of two guards you delete holds neither.
     const collecting = collectWithTheBudgetSpentInsideItsFirstSource(
       repository,
       HARNESS_ONLY,

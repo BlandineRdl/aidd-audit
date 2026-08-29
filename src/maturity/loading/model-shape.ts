@@ -8,7 +8,7 @@ import type {
   ScaleId,
 } from '../models/maturity.model.js'
 
-/** Field types only. Whether the model holds together is `model-consistency`. */
+// Field types only. Whether the model holds together is `model-consistency`.
 export function requireShape(document: unknown): MaturityModel {
   if (!isRecord(document)) {
     throw new InvalidMaturityModelError(
@@ -25,8 +25,8 @@ export function requireShape(document: unknown): MaturityModel {
   }
 }
 
-// A document declaring another version may carry fields this parser would
-// silently drop, and `--model` takes an arbitrary file.
+// SAFETY: a document declaring another version may carry fields this parser would silently drop,
+// and `--model` takes an arbitrary file.
 function requireSchemaVersion(value: unknown): number {
   if (typeof value !== 'number' || value !== 1) {
     const got = typeof value === 'number' ? String(value) : describeType(value)
@@ -44,12 +44,10 @@ function requireNonEmptyString(value: unknown, field: string): string {
   return value
 }
 
-/**
- * `NaN` is a number and orders against nothing: `requireDistinctRanks` sees a
- * single Set member, `sort` by difference leaves the order unspecified, and
- * `levelAbove`'s `rank >` comparison is then always false — so `next` would go
- * silently null. A rank that cannot be ordered is a model defect, not a rank.
- */
+// SAFETY: `NaN` is a number that orders against nothing — `requireDistinctRanks` sees a single Set
+// member, `sort` by difference leaves the order unspecified, and `levelAbove`'s `rank >` comparison
+// is then always false, so `next` would go silently null. A rank that cannot be ordered is a model
+// defect, not a rank.
 function requireNumber(value: unknown, field: string): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) {
     throw new InvalidMaturityModelError(
@@ -78,9 +76,9 @@ function requireScales(value: unknown): Readonly<Record<ScaleId, Scale>> {
     throw new InvalidMaturityModelError(`'scales' must declare at least one scale.`)
   }
 
-  // Object.create(null): a plain object literal inherits Object.prototype, so
-  // an axis naming `scale: toString` or `scale: constructor` would later read
-  // as "declared" off the prototype chain instead of failing the lookup below.
+  // SAFETY: `Object.create(null)` — a plain object literal inherits `Object.prototype`, so an axis
+  // naming `scale: toString` or `scale: constructor` would otherwise read as declared off the
+  // prototype chain instead of failing the lookup below.
   const scales: Record<ScaleId, Scale> = Object.create(null)
   for (const [scaleId, raw] of entries) {
     scales[scaleId] = requireScale(raw, scaleId)

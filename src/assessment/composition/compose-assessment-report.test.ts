@@ -16,10 +16,6 @@ import type {
 } from '../../evidence/models/observation.model.js'
 import { validModel as model } from '../../maturity/engine/maturity-model.test-fixture.js'
 
-/**
- * Sociable specification: real evidence and the real maturity engine.
- * Only external boundaries would be doubled here.
- */
 type Unresolved = Exclude<EvidenceStatus, 'CONFIRMED'>
 
 type Reading =

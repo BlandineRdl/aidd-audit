@@ -295,8 +295,8 @@ describe('8. arrays are never sorted or deduped', () => {
     ])
   })
 
-  // Two blockers can legitimately be byte-identical: deduping them would drop a
-  // count the consumer is entitled to, which is still reinterpretation.
+  // INVARIANT: two blockers can legitimately be byte-identical; deduping them would drop a count
+  // the consumer is entitled to.
   it('renders two identical blocking requirements twice, not deduped', () => {
     const blocker = practiceBlocker('blue', 'size')
     const output = renderJsonReport(assessmentReport({ blocking: [blocker, blocker] }))
@@ -352,9 +352,8 @@ describe('10. coverage counters and header scalars are each proven distinct', ()
     expect(parsed.model.schemaVersion).toBe(7)
   })
 
-  // --model ships, so model.id is how a consumer learns which model produced
-  // the verdict. Hard-coding it would attribute a custom model's result to
-  // canonical AIDD.
+  // INVARIANT: model.id lets a consumer tell a custom --model result from canonical AIDD;
+  // hard-coding it would misattribute the verdict.
   it('renders model.id from the input, so a custom --model is not reported as the canonical one', () => {
     const report = assessmentReport({ model: { id: 'custom-house-model', schemaVersion: 1 } })
     const output = renderJsonReport(report)
@@ -371,9 +370,6 @@ describe('11. indentation width is pinned', () => {
 })
 
 describe('12. a non-finite number is refused, never published as null', () => {
-  // JSON renders NaN and Infinity as null, and null in this report means
-  // absence: "not observed", "no level proven". Publishing one would fabricate
-  // an evidence gap no collector reported.
   it.each([
     ['NaN', Number.NaN],
     ['Infinity', Number.POSITIVE_INFINITY],

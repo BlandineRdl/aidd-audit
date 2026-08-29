@@ -1,10 +1,8 @@
 import type { AxisId } from '../models/axis.model.js'
 import type { Evidence, Observation, ObservedValue } from '../models/observation.model.js'
 
-/**
- * Resolving requested axes explicitly keeps axes with no observations
- * visible as UNKNOWN.
- */
+// INVARIANT: maps over requested axes, not observed ones, so an axis with no observation stays
+// visible as UNKNOWN.
 export function resolveEvidence(
   observations: readonly Observation[],
   axes: readonly AxisId[],

@@ -7,9 +7,7 @@ import { gitEnvironment } from './git-process.js'
 import { afterEach, describe, expect, it } from 'vitest'
 import { hasAiAttributionTrailer, readGitDerivedMetrics } from './git-history.js'
 
-/** Integration, against real temporary Git repositories: Git is the boundary under test, so
- *  nothing here mocks it. Every commit date is explicit, so the suite carries no timezone or
- *  wall-clock dependency of its own. */
+// Integration, against real temporary Git repositories: Git is the boundary under test.
 
 const run = promisify(execFile)
 
@@ -23,7 +21,7 @@ afterEach(async () => {
 })
 
 async function git(cwd: string, args: readonly string[], date?: string): Promise<string> {
-  // Never bare `process.env`: a git hook exports GIT_DIR, and an inherited one would send
+  // SAFETY: never bare `process.env`: a git hook exports GIT_DIR, and an inherited one would send
   // these fixture commits into the repository under test instead of the temporary one.
   const env =
     date === undefined
@@ -33,7 +31,7 @@ async function git(cwd: string, args: readonly string[], date?: string): Promise
   return stdout
 }
 
-/** `os.tmpdir()` is a symlink on macOS, and git reports the resolved path back. */
+// `os.tmpdir()` is a symlink on macOS, and git reports the resolved path back.
 async function emptyDirectory(): Promise<string> {
   const path = await mkdtemp(join(await realpath(tmpdir()), 'aidd-git-history-'))
   workspaces.push(path)
@@ -74,8 +72,8 @@ async function repositoryWithABaseCommit(date: string): Promise<string> {
   return repository
 }
 
-/** A branch, its commit, and a `--no-ff` merge back into the mainline. `mergedOn` is separate
- *  because a branch is worked on one day and lands on another. */
+// INVARIANT: A branch, its commit, and a `--no-ff` merge back into the mainline. `mergedOn` is
+// separate because a branch is worked on one day and lands on another.
 async function deliverChange(
   repository: string,
   branch: string,
@@ -106,7 +104,7 @@ async function deliverDeletion(
   await git(repository, ['merge', '--no-ff', '-q', '-m', `merge ${branch}`, branch], date)
 }
 
-/** `count` files whose added lines sum to exactly `total`. */
+// `count` files whose added lines sum to exactly `total`.
 function fileSizesTotalling(count: number, total: number): readonly number[] {
   return [total - (count - 1), ...Array.from({ length: count - 1 }, () => 1)]
 }
@@ -218,7 +216,7 @@ describe('readGitDerivedMetrics', () => {
     'lands a half-integer median in exactly one bucket',
     async () => {
       const repository = await repositoryWithABaseCommit(DAY(1))
-      // Six changes of 30 files each: XL by files. Three of 999 lines and three of 1000
+      // INVARIANT: six changes of 30 files each: XL by files. Three of 999 lines and three of 1000
       // give a median of 999.5, which the half-open bound puts in L, never XL.
       const lineTotals = [999, 999, 999, 1000, 1000, 1000]
       for (const [index, total] of lineTotals.entries()) {
@@ -237,8 +235,8 @@ describe('readGitDerivedMetrics', () => {
     A_LONG_TIME,
   )
 
-  /** Each bound bracketed to the unit on either side. Since the two readings combine by taking
-   *  the lower bucket, every row holds the scale it is not measuring at or above the answer. */
+  // INVARIANT: each bound bracketed to the unit on either side. Since the two readings combine by
+  // taking the lower bucket, every row holds the scale it is not measuring at or above the answer.
   const SIZE_TABLE = [
     { files: 4, lines: 100, bucket: 'S' },
     { files: 5, lines: 99, bucket: 'S' },
@@ -298,7 +296,7 @@ describe('readGitDerivedMetrics', () => {
     A_LONG_TIME,
   )
 
-  /** The window is the 180 days ending at the most recent commit, and both ends are closed. */
+  // The window is the 180 days ending at the most recent commit, and both ends are closed.
   const OLDEST_INSIDE_THE_WINDOW = '2026-01-01T12:00:00+00:00'
   const A_SECOND_TOO_OLD = '2026-01-01T11:59:59+00:00'
   const MOST_RECENT_COMMIT = '2026-06-30T12:00:00+00:00'
@@ -312,8 +310,8 @@ describe('readGitDerivedMetrics', () => {
         await deliverChange(repository, `recent-${index}`, MOST_RECENT_COMMIT, [10])
       }
 
-      // The fifth change is the one sitting exactly on the bound: a window shorter by a day, or
-      // one excluding its own edge, leaves four, and four is not a habit.
+      // INVARIANT: the fifth change is the one sitting exactly on the bound: a window shorter by a
+      // day, or one excluding its own edge, leaves four, and four is not a habit.
       await expect(readGitDerivedMetrics(repository, NEVER_ABORTED)).resolves.toMatchObject({
         sizeBucket: 'S',
       })
@@ -385,8 +383,8 @@ describe('readGitDerivedMetrics', () => {
         '2026-01-05T12:00:00+00:00',
       )
 
-      // The window then holds the five recent changes alone: S. Ending it at HEAD's own date
-      // pulls in the five XL ones and answers L.
+      // INVARIANT: the window then holds the five recent changes alone: S. Ending it at HEAD's own
+      // date pulls in the five XL ones and answers L.
       await expect(readGitDerivedMetrics(repository, NEVER_ABORTED)).resolves.toMatchObject({
         sizeBucket: 'S',
       })
@@ -457,8 +455,8 @@ describe('readGitDerivedMetrics', () => {
         )
       }
 
-      // Only the quiet days fall in the window: one branch each, median 1. The whole history
-      // would find five days at two branches and answer 1.5.
+      // INVARIANT: only the quiet days fall in the window: one branch each, median 1. The whole
+      // history would find five days at two branches and answer 1.5.
       await expect(readGitDerivedMetrics(repository, NEVER_ABORTED)).resolves.toEqual({
         sizeBucket: null,
         parallelism: 1,
@@ -468,8 +466,8 @@ describe('readGitDerivedMetrics', () => {
   )
 
   it('counts a merge side as one branch, and the mainline it landed on as another', async () => {
-    // The one fixture where a branch as a *merge side* and a branch as any parent diverge:
-    // the mainline advances after the branch point, so the sides see the mainline and one
+    // INVARIANT: the one fixture where a branch as a *merge side* and a branch as any parent
+    // diverge: the mainline advances after the branch point, so the sides see the mainline and one
     // topic each day, while taking every parent re-counts that mainline commit as a branch.
     const repository = await repositoryWithABaseCommit('2026-03-01T09:00:00+00:00')
 
@@ -520,8 +518,8 @@ describe('readGitDerivedMetrics', () => {
       const repository = await repositoryWithABaseCommit('2026-03-01T12:00:00+00:00')
       await deliverChange(repository, 'a-branch', '2026-03-01T12:00:00+00:00', [1])
       await commitOnMainline(repository, { 'b.txt': 'b\n' }, 'second', '2026-03-02T12:00:00+00:00')
-      // Each pair opens and closes one calendar day in its author's own offset, and the two
-      // offsets are far enough apart that no single reader's timezone leaves both intact.
+      // INVARIANT: each pair opens and closes one calendar day in its author's own offset, and the
+      // two offsets are far enough apart that no single reader's timezone leaves both intact.
       for (const [index, date] of [
         '2026-03-10T00:00:00+05:30',
         '2026-03-10T23:59:00+05:30',
@@ -562,7 +560,7 @@ describe('hasAiAttributionTrailer', () => {
     return repository
   }
 
-  /** Every display name here is an ordinary person's, so the address is what has to decide. */
+  // Every display name here is an ordinary person's, so the address is what has to decide.
   const A_KNOWN_AGENT_ADDRESS = [
     { address: 'noreply@anthropic.com', trailer: 'Jane Doe <noreply@anthropic.com>' },
     {
@@ -582,8 +580,8 @@ describe('hasAiAttributionTrailer', () => {
     A_LONG_TIME,
   )
 
-  /** Every token and every domain appears once: the pairing holds the rule, it does not claim
-   *  that agent uses that domain. */
+  // INVARIANT: every token and every domain appears once: the pairing holds the rule, it does not
+  // claim that agent uses that domain.
   const AN_AGENT_TOKEN_AT_A_VENDOR_DOMAIN = [
     'claude@anthropic.com',
     'codex@google.com',
@@ -607,8 +605,8 @@ describe('hasAiAttributionTrailer', () => {
     A_LONG_TIME,
   )
 
-  /** Every address here is an ordinary one at an ordinary domain, so the display name is what
-   *  has to decide. */
+  // INVARIANT: every address here is an ordinary one at an ordinary domain, so the display name is
+  // what has to decide.
   const AN_AGENT_DISPLAY_NAME = [
     'Claude',
     'Claude Code',
@@ -632,8 +630,8 @@ describe('hasAiAttributionTrailer', () => {
     A_LONG_TIME,
   )
 
-  /** Histories read and holding no AI attribution — `false`, never `null`. One ordinary name
-   *  component is enough to make a display name a person's again. */
+  // INVARIANT: histories read and holding no AI attribution — `false`, never `null`. One ordinary
+  // name component is enough to make a display name a person's again.
   const NOT_AN_AGENT = [
     { why: 'no trailer at all', message: 'feat: something' },
     {
@@ -725,7 +723,7 @@ describe('hasAiAttributionTrailer', () => {
       await commitOnMainline(repository, { 'a.txt': 'a\n' }, 'chore: first', DAY(1))
       await writeFile(join(repository, '.git', 'refs', 'heads', 'main'), `${'0'.repeat(40)}\n`)
 
-      // The fault this fixture has to carry: an ordinary work tree, only the history
+      // INVARIANT: the fault this fixture has to carry: an ordinary work tree, only the history
       // unreadable — which is what makes a false answer indistinguishable from no trailer.
       await expect(git(repository, ['log', '-1', '--format=%H', 'HEAD'])).rejects.toThrow(
         /bad object/i,

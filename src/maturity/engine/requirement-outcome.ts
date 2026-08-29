@@ -3,7 +3,7 @@ import type { AxisObservation } from '../models/axis-observation.model.js'
 import type { Outcome } from '../models/requirement-result.model.js'
 import { reaches } from './scale-comparison.js'
 
-/** The conservative rule: anything short of CONFIRMED is UNPROVEN, never NOT_MET. */
+// The conservative rule: anything short of CONFIRMED is UNPROVEN, never NOT_MET.
 export function outcomeOf(
   model: MaturityModel,
   requirement: LevelRequirement,
@@ -16,10 +16,8 @@ export function outcomeOf(
   return reaches(model, requirement, observation.value) ? 'MET' : 'NOT_MET'
 }
 
-/**
- * NOT_MET dominates UNPROVEN because proven failure is stronger than missing evidence.
- * Requires at least one outcome: a level silent on an axis would otherwise score MET.
- */
+// INVARIANT: NOT_MET dominates UNPROVEN — proven failure is stronger than missing evidence.
+// Requires at least one outcome, or a level silent on an axis would score MET.
 export function aggregate(outcomes: readonly Outcome[]): Outcome {
   if (outcomes.includes('NOT_MET')) return 'NOT_MET'
   if (outcomes.includes('UNPROVEN')) return 'UNPROVEN'

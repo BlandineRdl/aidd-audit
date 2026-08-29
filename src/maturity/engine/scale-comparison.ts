@@ -79,7 +79,7 @@ function meetsNumericMinimum(requirement: MinRequirement, value: ObservedValue):
   return value >= Number(requirement.min)
 }
 
-/** `Array.isArray` does not narrow the readonly array member of ObservedValue. */
+// `Array.isArray` does not narrow the readonly array member of ObservedValue.
 function isMemberSet(value: ObservedValue): value is readonly string[] {
   return Array.isArray(value)
 }

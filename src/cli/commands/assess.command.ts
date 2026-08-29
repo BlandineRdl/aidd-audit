@@ -16,8 +16,8 @@ export interface CommandIo {
   stderr(text: string): void
 }
 
-// The two read disjoint subject kinds — a work tree root, a recorded bundle — and each stays
-// silent on the other's, so both are asked and only one ever answers.
+// INVARIANT: The two read disjoint subject kinds — a work tree root, a recorded bundle — and each
+// stays silent on the other's, so both are asked and only one ever answers.
 const collectors: readonly EvidenceCollector[] = [
   new LiveRepositoryEvidenceCollector(),
   new FixtureBundleEvidenceCollector(),
@@ -48,7 +48,7 @@ export async function runAssess(argv: readonly string[], io: CommandIo): Promise
   }
 }
 
-/** Validates the argument; never reads inside the subject. */
+// Never reads inside the subject: a failure met during collection is the collector's.
 function requireExistingSubject(subjectPath: string): void {
   let stats: Stats
   try {

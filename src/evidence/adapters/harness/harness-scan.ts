@@ -6,14 +6,14 @@ import { hasShellExtension, readScriptCandidate } from './script-candidate.js'
 import { readShellLoops } from './shell-loop.js'
 
 export interface HarnessScan {
-  /** A union set, incomplete while `undecidable` names any member. */
+  // A union set, incomplete while `undecidable` names any member.
   readonly capabilities: readonly string[]
   readonly undecidable: readonly string[]
 }
 
 type HarnessMember = 'prompts' | 'context-engineering' | 'behavior' | 'loops'
 
-/** The vocabulary, and the order both lists are reported in. */
+// The vocabulary, and the order both lists are reported in.
 const HARNESS_MEMBERS: readonly HarnessMember[] = [
   'prompts',
   'context-engineering',
@@ -21,12 +21,10 @@ const HARNESS_MEMBERS: readonly HarnessMember[] = [
   'loops',
 ]
 
-/**
- * `hasAiAttributionTrailer` comes from the commit walk with three answers: `true` proves
- * `prompts` on its own, with no transcript file in the tree; `false` is a history read and
- * holding none; `null` is a history unread, which makes `prompts` undecidable unless the tree
- * proves it another way.
- */
+// INVARIANT: `hasAiAttributionTrailer` comes from the commit walk with three answers: `true` proves
+// `prompts` on its own, with no transcript file in the tree; `false` is a history read and holding
+// none; `null` is a history unread, which makes `prompts` undecidable unless the tree proves it
+// another way.
 export async function scanHarness(
   tree: HarnessTree,
   hasAiAttributionTrailer: boolean | null,
@@ -55,8 +53,8 @@ export async function scanHarness(
   if (scripts.proven) capabilities.push('loops')
   if (scripts.undecidable) undecidable.add('loops')
 
-  // A member already proven by another route suppresses undecidability about it: nothing is
-  // hidden once the set is known to contain it.
+  // INVARIANT: A member already proven by another route suppresses undecidability about it: nothing
+  // is hidden once the set is known to contain it.
   return {
     capabilities,
     undecidable: HARNESS_MEMBERS.filter(
@@ -65,8 +63,8 @@ export async function scanHarness(
   }
 }
 
-/** Undecidable rather than absent, on every route out: reporting absence would tell a
- *  developer who built a loop to go build one. */
+// SAFETY: Undecidable rather than absent, on every route out: reporting absence would tell a
+// developer who built a loop to go build one.
 async function scanScripts(
   tree: HarnessTree,
   tracked: readonly HarnessTreeEntry[],

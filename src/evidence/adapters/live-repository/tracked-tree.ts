@@ -3,11 +3,9 @@ import { join } from 'node:path'
 import type { HarnessTree, HarnessTreeEntry } from '../harness/harness-tree.js'
 import { runGit } from './git-process.js'
 
-/**
- * The `HarnessTree` over a Git work tree: `git ls-files` for the listing, `join(root, path)`
- * for a read. The root is resolved once and reused, so a subject naming a subdirectory of the
- * tree still opens files relative to the tree it was resolved against.
- */
+// INVARIANT: The `HarnessTree` over a Git work tree: `git ls-files` for the listing, `join(root,
+// path)` for a read. The root is resolved once and reused, so a subject naming a subdirectory of
+// the tree still opens files relative to the tree it was resolved against.
 export async function trackedTree(path: string, signal: AbortSignal): Promise<HarnessTree> {
   let root: Promise<string> | null = null
   const resolvedRoot = (): Promise<string> => {
@@ -33,20 +31,16 @@ export async function trackedTree(path: string, signal: AbortSignal): Promise<Ha
   }
 }
 
-/**
- * The subject may name a subdirectory, and `git ls-files` lists only what sits under its
- * working directory while the Git-derived axes walk the whole history: left to disagree, a
- * root `CLAUDE.md` goes unseen from `packages/api`. Reading from the root keeps listed paths
- * and opened paths in one frame; listing repository-wide would make every root file unread.
- */
+// SAFETY: The subject may name a subdirectory, and `git ls-files` lists only what sits under its
+// working directory while the Git-derived axes walk the whole history: left to disagree, a root
+// `CLAUDE.md` goes unseen from `packages/api`. Reading from the root keeps listed paths and opened
+// paths in one frame; listing repository-wide would make every root file unread.
 async function repositoryRoot(path: string, signal: AbortSignal): Promise<string> {
   return (await runGit(path, ['rev-parse', '--show-toplevel'], signal)).trim()
 }
 
-/**
- * The mode is the one Git recorded, never the one the working copy carries: a clone with
- * `core.fileMode=false` reads `0644` off a `100755` file, failing `scanHarness`'s candidate gate.
- */
+// COMPAT: The mode is the one Git recorded, never the one the working copy carries: a clone with
+// `core.fileMode=false` reads `0644` off a `100755` file, failing `scanHarness`'s candidate gate.
 interface TrackedEntry {
   readonly path: string
   readonly mode: string
@@ -70,14 +64,12 @@ async function listTrackedEntries(
     })
 }
 
-/** `100644` and `100755` are blobs in this tree; `120000` is a symlink, `160000` a submodule. */
+// `100644` and `100755` are blobs in this tree; `120000` is a symlink, `160000` a submodule.
 const isRegularFileMode = (mode: string): boolean => mode.startsWith('100')
 const isExecutableMode = (mode: string): boolean => mode === '100755'
 
-/**
- * The probe reads only its first `bytes` bytes, so a candidacy check never loads a whole file.
- * One `try` covers open, read and close, so any failure is one unreadable source.
- */
+// SAFETY: The probe reads only its first `bytes` bytes, so a candidacy check never loads a whole
+// file. One `try` covers open, read and close, so any failure is one unreadable source.
 async function probeFile(absolute: string, bytes: number): Promise<string | null> {
   let handle: Awaited<ReturnType<typeof open>> | null = null
   try {

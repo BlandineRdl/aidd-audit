@@ -34,11 +34,7 @@ Keep code small, intention-revealing, and aligned with one responsibility.
 
 ## Comments
 
-- Comment reasons, invariants, tradeoffs, constraints.
-- Only when code cannot express them.
-- Never restate names, types, or control flow.
-- Do not repeat information already stated by code, another comment, or project documentation.
-- Comments describe the current invariant or reason, never the history of how the code arrived there.
+See `1-comments.md`. Comments are exceptional, and a multi-line block declares its purpose with a tag.
 
 ## Refactoring
 

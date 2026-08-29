@@ -9,16 +9,12 @@ import { trackedTree } from './live-repository/tracked-tree.js'
 
 const COLLECTOR_ID = 'live-repository'
 
-/**
- * Evidence read from a local working copy, entirely offline.
- *
- * It declares `intervention` and never emits it: `supportedAxes` is what a collector may
- * attempt, never what it delivered. No local history recovers that axis, merge histories
- * included, because a merge records that a branch landed and never what followed review.
- *
- * Every observation is `OBSERVED`. There is no `DECLARED` source by construction — the only
- * declarative artifact in reach is prose, and prose is never parsed.
- */
+// INVARIANT: Evidence read from a local working copy, entirely offline. It declares `intervention`
+// and never emits it: `supportedAxes` is what a collector may attempt, never what it delivered. No
+// local history recovers that axis, merge histories included, because a merge records that a branch
+// landed and never what followed review. Every observation is `OBSERVED`. There is no `DECLARED`
+// source by construction — the only declarative artifact in reach is prose, and prose is never
+// parsed.
 export class LiveRepositoryEvidenceCollector implements EvidenceCollector {
   readonly id = COLLECTOR_ID
   readonly supportedAxes: readonly AxisId[] = ['size', 'harness', 'intervention', 'parallelism']
@@ -26,13 +22,12 @@ export class LiveRepositoryEvidenceCollector implements EvidenceCollector {
   async collect(context: CollectorContext): Promise<readonly Observation[]> {
     context.signal.throwIfAborted()
 
-    // This collector reads one subject kind: a repository. Outside a work tree nothing is
-    // readable, and *inside* one the subject must be the repository itself — a directory
-    // that merely sits in a checkout is a different subject, and answering for it would
-    // publish the surrounding repository's harness as that subject's own evidence. A fixture
-    // bundle tracked in this repository is exactly that case. Either way nothing is emitted,
-    // which is UNKNOWN, an evidence gap, and never an observation that the subject lacks a
-    // practice.
+    // SAFETY: This collector reads one subject kind: a repository. Outside a work tree nothing is
+    // readable, and *inside* one the subject must be the repository itself — a directory that
+    // merely sits in a checkout is a different subject, and answering for it would publish the
+    // surrounding repository's harness as that subject's own evidence. A fixture bundle tracked in
+    // this repository is exactly that case. Either way nothing is emitted, which is UNKNOWN, an
+    // evidence gap, and never an observation that the subject lacks a practice.
     if (!(await isRepositoryRoot(context.path, context.signal))) return []
 
     // The two sources fail independently, and one unreadable source must not cost the other.

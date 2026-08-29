@@ -1,12 +1,12 @@
 import type { HarnessTree } from './harness-tree.js'
 import { basenameOf } from './shell-tokens.js'
 
-/** Only shell is reliably recognisable, so only shell is decidable. */
+// Only shell is reliably recognisable, so only shell is decidable.
 const SHELL_INTERPRETERS = ['sh', 'bash', 'zsh']
 
 const SHELL_EXTENSIONS = ['.sh', '.bash', '.zsh']
 
-/** Enough to hold any shebang line; a script is only read in full once it is a candidate. */
+// Enough to hold any shebang line; a script is only read in full once it is a candidate.
 const SHEBANG_PROBE_BYTES = 256
 
 type ScriptCandidate =
@@ -14,7 +14,7 @@ type ScriptCandidate =
   | { readonly outcome: 'unreadable' }
   | { readonly outcome: 'script'; readonly content: string; readonly shell: boolean }
 
-/** Either read returning null means the file was not read, the same outcome whichever failed. */
+// Either read returning null means the file was not read, the same outcome whichever failed.
 export async function readScriptCandidate(
   tree: HarnessTree,
   path: string,
@@ -24,8 +24,8 @@ export async function readScriptCandidate(
   if (head === null) return { outcome: 'unreadable' }
 
   const shell = hasShellShebang(head)
-  // A tree recording no mode has only the shebang to go on, so any interpreter counts there.
-  // Reading such a file as not-a-script would drop `loops` from a published set, a practice
+  // COMPAT: A tree recording no mode has only the shebang to go on, so any interpreter counts
+  // there. Reading such a file as not-a-script would drop `loops` from a published set, a practice
   // gap, where undecidable is the evidence gap the situation actually is.
   if (!shell && !(executable ?? hasShebang(head))) return { outcome: 'not-a-script' }
 

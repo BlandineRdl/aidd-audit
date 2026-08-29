@@ -9,17 +9,14 @@ import {
 } from '../models/maturity.model.js'
 import { requireThresholdOnScale } from '../models/threshold-on-scale.js'
 
-/**
- * Call order is load-bearing: cumulativity compares two levels' thresholds, so
- * it needs coverage to have proven both exist and vocabulary to have proven
- * they are comparable.
- */
+// INVARIANT: call order is load-bearing — cumulativity compares two levels' thresholds, so it needs
+// coverage to have proven both levels exist and vocabulary to have proven they are comparable.
 export function requireVocabulary(model: MaturityModel): void {
   const scaleByAxis = new Map<AxisId, Scale>()
   for (const axis of model.axes) {
-    // Object.hasOwn, not a bare index: `model.scales` is user-supplied keys,
-    // and a plain lookup resolves an inherited Object.prototype member
-    // (`toString`, `constructor`, …) as if it were a declared scale.
+    // SAFETY: `Object.hasOwn`, not a bare index — `model.scales` is user-supplied keys, and a plain
+    // lookup would resolve an inherited `Object.prototype` member (`toString`, `constructor`, …) as
+    // if it were a declared scale.
     const scale = Object.hasOwn(model.scales, axis.scale) ? model.scales[axis.scale] : undefined
     if (scale === undefined) {
       throw new InvalidMaturityModelError(
@@ -123,12 +120,9 @@ function requireNoDip(
   }
 }
 
-/**
- * The `never` in `default` is the only thing requiring a new `Scale` kind to be
- * given a comparison here; without it a fourth kind silently inherits `true`,
- * and every model becomes cumulative. No test can reach that branch, so nothing
- * but this compiles it shut.
- */
+// SAFETY: the `never` in `default` is what forces a new `Scale` kind to get a comparison here —
+// without it a fourth kind silently inherits `true` and every model becomes cumulative. No test can
+// reach that branch; only this compiles it shut.
 function reachesOrExceeds(
   scale: Scale,
   lower: LevelRequirement,

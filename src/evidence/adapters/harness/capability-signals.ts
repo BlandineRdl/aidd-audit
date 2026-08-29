@@ -1,14 +1,14 @@
 import type { HarnessTree, HarnessTreeEntry } from './harness-tree.js'
 import { DECIDED_PRESENT, type MemberScan } from './member-scan.js'
 
-/** Every table here is closed, and matched by exact name: `prompt-*.md` would let
- *  `prompt-toolkit-notes.md` prove `prompts`. A capability whose artifact sits off a table is
- *  omitted from a set still published `CONFIRMED`, which reads as a practice gap nobody saw. */
+// SAFETY: Every table here is closed, and matched by exact name: `prompt-*.md` would let
+// `prompt-toolkit-notes.md` prove `prompts`. A capability whose artifact sits off a table is
+// omitted from a set still published `CONFIRMED`, which reads as a practice gap nobody saw.
 
-/** A named file matches anywhere in the tracked tree: an artifact counts wherever it sits. */
+// A named file matches anywhere in the tracked tree: an artifact counts wherever it sits.
 const TRANSCRIPT_FILES = ['session.md', 'prompt-history.md', '.aider.chat.history.md']
 
-/** A named directory matches at the root only. */
+// A named directory matches at the root only.
 const TRANSCRIPT_DIRECTORIES = ['.specstory/', '.claude/history/']
 
 const CONTEXT_FILES = ['CLAUDE.md', 'AGENTS.md', 'GEMINI.md', '.github/copilot-instructions.md']
@@ -26,7 +26,7 @@ const BEHAVIOR_DIRECTORIES = [
 
 const BEHAVIOR_FILES = ['.cursorrules', '.windsurfrules']
 
-/** JSON only: a name here promises the recogniser below can read the file, schema and all. */
+// JSON only: a name here promises the recogniser below can read the file, schema and all.
 const SETTINGS_FILES = [
   '.claude/settings.json',
   '.claude/settings.local.json',
@@ -59,7 +59,7 @@ export async function provesBehavior(
   return declaresPermissions(tree, paths, signal)
 }
 
-/** An empty allow/deny list is an observation; an unreadable or unparseable file is not. */
+// An empty allow/deny list is an observation; an unreadable or unparseable file is not.
 async function declaresPermissions(
   tree: HarnessTree,
   tracked: readonly string[],
@@ -101,7 +101,7 @@ function parseSettings(content: string): ParsedSettings {
   }
 }
 
-/** By shape, not by any tool's schema: covering another takes its filename and its shape. */
+// By shape, not by any tool's schema: covering another takes its filename and its shape.
 function declaresPermissionList(settings: unknown): boolean {
   if (typeof settings !== 'object' || settings === null) return false
 
@@ -114,7 +114,7 @@ function declaresPermissionList(settings: unknown): boolean {
 
 const isNonEmptyArray = (value: unknown): boolean => Array.isArray(value) && value.length > 0
 
-/** Matched on whole path segments, so `prompt-toolkit-notes.md` is not `prompt-history.md`. */
+// Matched on whole path segments, so `prompt-toolkit-notes.md` is not `prompt-history.md`.
 const holdsFileNamedAnywhere = (tracked: readonly string[], names: readonly string[]): boolean =>
   tracked.some((file) => names.some((name) => file === name || file.endsWith(`/${name}`)))
 

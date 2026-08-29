@@ -7,12 +7,6 @@ import type {
 } from '../../src/maturity/models/axis-observation.model.js'
 import type { AxisId } from '../../src/maturity/models/maturity.model.js'
 
-/**
- * A conformance test, not a decision test: it reads the filesystem and YAML on
- * purpose, so a typo in aidd.yml fails at commit rather than at assessment.
- * Loading is itself the claim under test: the canonical model passes every
- * check without throwing.
- */
 const model = loadMaturityModel('aidd.yml')
 
 const confirmed = (axis: AxisId, value: ObservedValue): AxisObservation => ({
@@ -67,10 +61,6 @@ describe('aidd.yml', () => {
     expect(check.next?.outcome).toBe('NOT_MET')
   })
 
-  /**
-   * Every level declares all four axes, so one unobserved axis makes even White
-   * unprovable. The conservative rule taken to its end.
-   */
   it('proves nothing at all when a single axis stays unknown', () => {
     const check = checkMaturity(model, [
       confirmed('size', 'L'),

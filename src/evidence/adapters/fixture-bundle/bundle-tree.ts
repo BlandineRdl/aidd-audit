@@ -2,19 +2,17 @@ import { readdir, readFile, open } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { HarnessTree, HarnessTreeEntry } from '../harness/harness-tree.js'
 
-/**
- * `repo-context/` is the recorded repository's root, so a path under it is reported without the
- * prefix and a root-anchored name — `docs/context/`, `.claude/rules/` — matches there. Every
- * other path keeps its bundle-relative form, which is what lets a transcript filed beside the
- * record rather than inside the recorded tree still prove what it proves.
- */
+// INVARIANT: `repo-context/` is the recorded repository's root, so a path under it is reported
+// without the prefix and a root-anchored name — `docs/context/`, `.claude/rules/` — matches there.
+// Every other path keeps its bundle-relative form, which is what lets a transcript filed beside the
+// record rather than inside the recorded tree still prove what it proves.
 const RECORDED_ROOT = 'repo-context/'
 
 export async function bundleTree(bundlePath: string, signal: AbortSignal): Promise<HarnessTree> {
   const files = await walk(bundlePath, signal)
 
-  // A bundle-root file and its namesake under the recorded root claim one recorded path, and
-  // only reads are decided by it: name matching cannot tell the two apart either way.
+  // SAFETY: A bundle-root file and its namesake under the recorded root claim one recorded path,
+  // and only reads are decided by it: name matching cannot tell the two apart either way.
   const sources = new Map<string, string>()
   const entries: HarnessTreeEntry[] = []
 
@@ -36,9 +34,9 @@ function recordedPath(file: string): string {
   return file.startsWith(RECORDED_ROOT) ? file.slice(RECORDED_ROOT.length) : file
 }
 
-/** Sorted by codepoint, never by collation, so a bundle reads the same way on any machine.
- *  Symlinks are skipped: a bundle records files, and following one would read outside what it
- *  recorded. */
+// INVARIANT: Sorted by codepoint, never by collation, so a bundle reads the same way on any
+// machine. Symlinks are skipped: a bundle records files, and following one would read outside what
+// it recorded.
 async function walk(root: string, signal: AbortSignal, prefix = ''): Promise<readonly string[]> {
   signal.throwIfAborted()
 
