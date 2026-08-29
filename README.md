@@ -154,12 +154,19 @@ prose, y compris sous `--json`.
 ```bash
 pnpm check      # typage, tests, frontières d'architecture, règle de commentaires — au premier échec, stop
 pnpm format     # Biome
+pnpm mutation   # sweep de mutation sur la logique de décision — des minutes, pas des secondes
 ```
 
 `pnpm architecture` lance les règles de frontières dependency-cruiser **puis prouve que chaque règle
 mord encore**, en écrivant une violation délibérée par règle et en échouant si l'une d'elles passe
 inaperçue. Sans cela, une règle qui ne correspond à rien rend un succès, indiscernable d'un mur qui
 tient.
+
+`pnpm mutation` reste **hors de `pnpm check`**, délibérément : treize minutes, c'est un rapport à
+lire, pas une porte à passer. Il répond à la question qu'une suite verte ne pose jamais — est-ce que
+ces tests tomberaient si le code changeait de sens ? Ici la réponse a déplacé le travail : le
+chargement du modèle tenait, et 83 % des mutants survivants étaient dans le lexer shell, sous 1588
+lignes de suite qui ne l'atteignaient presque jamais.
 
 L'architecture, la stratégie de test et les décisions derrière les deux sont documentées dans
 [`aidd_docs/memory/`](aidd_docs/memory/).
