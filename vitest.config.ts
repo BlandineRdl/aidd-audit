@@ -1,6 +1,6 @@
 import { defineConfig } from 'vitest/config'
 
-// Unit suites sit next to the code they exercise, under src/. tests/ keeps only
+// INVARIANT: unit suites sit next to the code they exercise, under src/. tests/ keeps only
 // what has no such neighbour: the conformance of aidd.yml itself, the suites
 // that spawn the shipped binary, and the acceptance suite over the profiles.
 //
