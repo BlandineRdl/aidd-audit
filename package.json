@@ -8,7 +8,8 @@
     "format:check": "biome format .",
     "test": "vitest run",
     "architecture": "depcruise src && node scripts/prove-boundary-rules.mjs",
-    "check": "pnpm typecheck && pnpm test && pnpm architecture",
+    "comments": "node scripts/check-comment-tags.mjs",
+    "check": "pnpm typecheck && pnpm test && pnpm architecture && pnpm comments",
     "build": "tsup",
     "prepare": "lefthook install"
   },

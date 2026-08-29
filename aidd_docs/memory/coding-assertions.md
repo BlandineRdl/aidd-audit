@@ -11,11 +11,24 @@ One assertion, one command, one verdict. An agent reading `pnpm architecture fai
 | `pnpm typecheck` | TypeScript, `strict` |
 | `pnpm test` | Vitest, behavior only — and tsup, which `tests/cli/process-contract.test.ts` runs to build the binary it spawns |
 | `pnpm architecture` | dependency-cruiser boundary rules, then the proof that those rules bite |
-| `pnpm check` | the three above, in that order, fail-fast |
+| `pnpm comments` | that every multi-line `//` block in the changed files declares its purpose |
+| `pnpm check` | the four above, in that order, fail-fast |
 | `pnpm format` | Biome, rewrites files in place |
 | `pnpm format:check` | Biome, reports without rewriting |
 
 Formatting is deliberately outside `check`: a mis-indented file blocks nothing about correctness. That reason once covered `build` too; it no longer does — see **Before push**. Biome is a formatter here and nothing else — its linter is off, `typecheck` and `architecture` already own those verdicts.
+
+### Comments are judged mechanically, on the changed files only
+
+`.claude/rules/01-standards/1-comments.md` bans `/** */` outright and requires a multi-line `//` block to open with `INVARIANT:`, `SAFETY:`, `COMPAT:` or `LIMITATION:`. `scripts/check-comment-tags.mjs` is what makes that a verdict rather than a suggestion — it was the one rule in `.claude/rules/` with no mechanical counterpart, and a rule nothing checks is a rule nobody has checked.
+
+**The docblock is banned because TypeScript already does its job.** A signature states the parameters, the return and the shape, so what remains of the form is an invitation to restate the name. It was also the one place narration could hide from a check that governed only `//`; an attempt to keep docblocks and judge them *by placement* was written and thrown away — sixty lines, a state machine for multi-line imports, wrong twice before it was right, and it still left the genre unjudged. Removing the form removed the hole and the machinery at once.
+
+**File-header prose is not an exception.** What a module is for belongs in `aidd_docs/`, and a header repeating it is duplication. One line, or nothing.
+
+**It judges the files the current branch changed, never the whole tree.** The repository predates the rule — 153 docblocks in 34 files, and 87 untagged `//` blocks — and a check failing on all of that would be suppressed rather than followed. Two consequences, both real: a file nobody touches stays outside the guard, and touching a file for one line puts its whole comment history under the rule. The second is the intended pressure; the first is paid off by a separate pass.
+
+The script checks two things and reads nothing: no `/**`, and a run of two or more `//` lines opens with a tag. A tag is therefore a claim, not a passport — `INVARIANT:` in front of narration satisfies it and defeats it. What it buys is that an untagged block and a docblock are both impossible, and that a mislabelled tag is a sharp review target, which is a better position than prose nobody enforced.
 
 `pnpm check` is the single source of truth. A human, an agent, a worktree or a future CI run the same gate without depending on anything being installed.
 
