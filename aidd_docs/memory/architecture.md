@@ -6,7 +6,7 @@ What exists and what is still planned is in `codebase-map.md`. `aidd_docs/INSTAL
 
 ## Stack
 
-* TypeScript `strict`, Node.js LTS, ESM.
+* TypeScript `strict`, Node.js LTS, ESM. **Held at 5.x deliberately.** 7.0 is the native-port compiler and a full major; nothing in this codebase needs it, and taking it would be its own change measured against `pnpm check`, never a line in a dependency bump. `pnpm outdated` naming it is expected, not a finding.
 * No framework or DI container — explicit composition in `cli/`.
 * pnpm, pinned through `packageManager`.
 * tsup/esbuild bundles one entrypoint, `dist/cli.js`.
