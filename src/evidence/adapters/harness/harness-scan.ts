@@ -74,6 +74,11 @@ async function scanScripts(
   let undecidable = false
 
   for (const entry of tracked) {
+    // INVARIANT: once `loops` is proven nothing later can change the answer — `scanHarness`
+    // suppresses undecidability about a member already in `capabilities`, and this scan reports no
+    // other member. Reading on would open every remaining file in the tree for nothing.
+    if (loops) break
+
     signal.throwIfAborted()
 
     if (!entry.regularFile) continue
