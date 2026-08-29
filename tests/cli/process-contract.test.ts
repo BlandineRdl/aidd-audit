@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import type { AssessmentReport } from '../../src/assessment/contracts/assessment-report.contract.js'
 
 /**
  * The exit-code and stream contract, observed the way a caller observes it: by
@@ -207,5 +208,58 @@ describe('7. the assessment result never reaches the exit code', () => {
     )
 
     expect(new Set(codes)).toEqual(new Set([0]))
+  })
+})
+
+describe('8. the live repository collector reaches the pipeline through the binary', () => {
+  function reportFor(...args: readonly string[]): AssessmentReport {
+    const run = runCli(...args, '--json')
+    expect(run.status).toBe(0)
+    expect(run.stderr).toBe('')
+    return JSON.parse(run.stdout) as AssessmentReport
+  }
+
+  it('runs the collector the composition root wired, on the repository itself', () => {
+    // Provenance is the proof the wiring is real rather than a shape the report would
+    // have had anyway: `main.ts` built a collector set, the use case ran it, and the
+    // entry survived composition into the published contract. `axes` is what the
+    // collector was asked to attempt, never what it answered.
+    expect(reportFor('assess', '.').provenance).toEqual([
+      {
+        collector: 'live-repository',
+        status: 'COMPLETED',
+        axes: ['size', 'harness', 'intervention', 'parallelism'],
+      },
+    ])
+  })
+
+  it('carries something it observed on disk into the rendered report', () => {
+    // Coupled to this repository having a harness at all, which it does — it is an AIDD
+    // project with tracked instruction files. What is asserted is that an observation
+    // survived collection, resolution and composition, never that it amounts to a level.
+    const report = reportFor('assess', '.')
+
+    expect(report.coverage.axesRequested).toBe(4)
+    expect(report.coverage.axesObserved).toBeGreaterThan(0)
+  })
+
+  it('stays silent about a bundle, which is not its subject', () => {
+    // `profiles/` is tracked inside this repository, so without the repository-root gate
+    // the collector would resolve to this checkout and publish AIDD's own harness as the
+    // bundle's evidence. Asked, ran, answered nothing: an evidence gap, not a wrong one.
+    const report = reportFor('assess', 'profiles/perceval')
+
+    expect(report.provenance.map((entry) => entry.status)).toEqual(['COMPLETED'])
+    expect(report.coverage.axesObserved).toBe(0)
+  })
+
+  it('reports no proven level for a repository, and says so in the human rendering', () => {
+    // `intervention` is unobservable on any local history, so `proven: null` is this
+    // command's normal output. Asserted as the ceiling it is, not as a level.
+    expect(reportFor('assess', '.').proven).toBeNull()
+
+    const human = runCli('assess', '.')
+    expect(human.status).toBe(0)
+    expect(human.stdout).toContain('could not be established')
   })
 })
