@@ -23,9 +23,24 @@ const collectors: readonly EvidenceCollector[] = [
   new FixtureBundleEvidenceCollector(),
 ]
 
-const neverAborts = new AbortController().signal
+// INVARIANT: the wired set is the default, never the only one. A suite that needs a collector this
+// composition root would not build — one emitting a value off the loaded scale, which is the only
+// route to exit code 1 — passes its own, and nothing about the production wiring moves.
+export interface AssessOptions {
+  readonly collectors?: readonly EvidenceCollector[]
+}
 
-export async function runAssess(argv: readonly string[], io: CommandIo): Promise<number> {
+export async function runAssess(
+  argv: readonly string[],
+  io: CommandIo,
+  options: AssessOptions = {},
+): Promise<number> {
+  // SAFETY: the controller is held, not discarded. No budget is set yet — honouring one is a
+  // collector's own duty and no number here has been measured — but aborting in `finally` is what
+  // makes the seam real: an in-flight `git` child is cancelled when the command returns, and the
+  // day a budget lands it is a timer on this controller rather than a restructuring.
+  const budget = new AbortController()
+
   try {
     const args = parseAssessArguments(argv)
     requireExistingSubject(args.subjectPath)
@@ -35,8 +50,8 @@ export async function runAssess(argv: readonly string[], io: CommandIo): Promise
     const report = await assessMaturity({
       subjectPath: args.subjectPath,
       model,
-      collectors,
-      signal: neverAborts,
+      collectors: options.collectors ?? collectors,
+      signal: budget.signal,
     })
 
     const rendered = args.json ? renderJsonReport(report) : renderHumanReport(report)
@@ -45,6 +60,8 @@ export async function runAssess(argv: readonly string[], io: CommandIo): Promise
   } catch (error) {
     io.stderr(`${messageOf(error)}\n`)
     return error instanceof UsageError || error instanceof InvalidMaturityModelError ? 2 : 1
+  } finally {
+    budget.abort()
   }
 }
 
