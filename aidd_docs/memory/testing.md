@@ -30,9 +30,12 @@ How this project is tested: TDD boundaries, doubles, and validation.
 | `resolve-evidence` | evidence resolution | none — takes domain values, returns one |
 | `compose-assessment-report` | projection into the public contract, coverage derivation | none — real evidence, real `checkMaturity` |
 | `collect-evidence.usecase` | collector execution, degradation, provenance, resolution | `FakeInMemoryEvidenceCollector`, `FailingEvidenceCollector`; real resolver |
-| `assess-maturity.usecase` **(owed)** | orchestration and assessment result; coverage is `compose-assessment-report`'s to prove | real domain collaborators, fakes at external ports only |
+| `assess-maturity.usecase` | orchestration and assessment result; coverage is `compose-assessment-report`'s to prove | real domain collaborators, fakes at external ports only |
+| `assess.command` (`runAssess`) | argv parsing, the exit-code taxonomy, stdout/stderr, wired against the real pipeline | none — real `loadMaturityModel`, real `assessMaturity`; only `CommandIo` is an in-memory double, and it fakes no domain collaborator |
 
 The first three are not use cases: each takes domain values and returns one, so it is tested directly.
+
+`src/cli/assess.command.test.ts` sits beside `assess.command.ts`, per **Where a test lives** above, and drives `runAssess(argv, io)` with a capturing `CommandIo` — two in-memory string arrays, no spawn and no build. It asserts stdout, stderr and the exit code only, never which function ran. `main.ts`, the one file that touches `process`, is exercised only by hand — running `dist/cli.js` — never imported by the suite.
 
 ## Doubles
 
@@ -84,6 +87,7 @@ Gap: `NOT_MET` is a practice gap, `UNPROVEN` an evidence gap — see **The conse
 | `leodagan` | Green    | no `session.md`    |
 | `arthur`   | Copper   | no `declaratif.md` |
 
+* **None of the four profiles reaches its expected level yet.** `aidd-audit assess <profile>` runs today with an empty production collector set — see `cli.md` — so every axis resolves `UNKNOWN` and every profile reports `proven: null`, whatever this table says. The table records the target once collectors exist; it is not yet an assertion any suite makes.
 * **`leodagan` is the trap the harness axis has to survive.** Expected Green, so `aidd.yml` requires `prompts` of him, yet `session.md` — the prompt-to-commit trace — is exactly what he lacks. A collector that confirms `prompts` only from a transcript file makes Green and above unreachable, and three fixtures out of four fail at once.
 * `profiles/` ship their own `*.test.ts`. They stay out through vitest's `include` and a second exclusion; drop either and `profiles/bohort/code/pricing.test.ts` fails on a `zod` it does not have while `profiles/arthur/code/usage-summary.test.ts` adds five green tests that prove nothing.
 
