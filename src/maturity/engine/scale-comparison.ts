@@ -38,8 +38,7 @@ function scaleForAxis(model: MaturityModel, axisId: AxisId): Scale {
     throw new InvalidMaturityModelError(`Unknown axis '${axisId}'.`)
   }
 
-  // Object.hasOwn, not a bare index: a plain lookup resolves an inherited
-  // Object.prototype member (`toString`, …) as if it were a declared scale.
+  // Object.hasOwn: see model-consistency.ts's requireVocabulary.
   const scale = Object.hasOwn(model.scales, axis.scale) ? model.scales[axis.scale] : undefined
   if (scale === undefined) {
     throw new InvalidMaturityModelError(`Unknown scale '${axis.scale}'.`)
