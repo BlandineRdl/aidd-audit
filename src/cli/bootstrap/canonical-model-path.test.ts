@@ -21,8 +21,7 @@ describe('canonicalModelPath', () => {
   })
 
   it('resolves the packaged aidd.yml relative to this module, not to process.cwd()', () => {
-    // A cwd-based resolution is indistinguishable from this one at the repo
-    // root. An unrelated cwd with its own decoy forces them apart.
+    // An unrelated cwd with its own decoy aidd.yml forces the two resolutions apart.
     tempDir = mkdtempSync(join(tmpdir(), 'aidd-audit-cwd-'))
     const decoyModel = join(tempDir, 'aidd.yml')
     writeFileSync(decoyModel, 'schemaVersion: 1\nid: decoy\n')
@@ -41,8 +40,8 @@ describe('canonicalModelPath', () => {
   })
 
   it('bounds the walk at the nearest package.json and refuses a foreign aidd.yml above it', async () => {
-    // `aidd.yml` missing from the package, one present in an ancestor by
-    // coincidence. The module is copied in so the walk starts inside it.
+    // INVARIANT: aidd.yml is absent from the package but present in an ancestor; the module is
+    // copied in so the walk starts inside the package.
     tempDir = mkdtempSync(join(tmpdir(), 'aidd-audit-package-'))
     writeFileSync(join(tempDir, 'aidd.yml'), 'schemaVersion: 1\nid: foreign-ancestor\n')
 
@@ -59,9 +58,8 @@ describe('canonicalModelPath', () => {
       /* @vite-ignore */ pathToFileURL(copiedModulePath).href
     )
 
-    // Pins both the error class and a fragment naming the offending start
-    // directory, so a bare `toThrow()` from an unrelated crash cannot pass
-    // this in place of the guard actually firing.
+    // SAFETY: pins the error class and the offending directory, so an unrelated crash cannot pass
+    // as this guard firing.
     expect(() => copiedCanonicalModelPath()).toThrow(Error)
     expect(() => copiedCanonicalModelPath()).toThrow(moduleDir)
   })

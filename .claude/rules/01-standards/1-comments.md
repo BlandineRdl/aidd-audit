@@ -57,6 +57,12 @@ A single `//` line needs no tag. Use one where the code is genuinely non-obvious
 
 ## Enforcement
 
-`pnpm comments` — `scripts/check-comment-tags.mjs`, run by `pnpm check`. It judges **only the files the current branch changed**, so the rule bites on new code without demanding one migration of the whole tree.
+`pnpm comments` — `scripts/check-comment-tags.mjs`, run by `pnpm check`, over every governed file in the tree, tracked or not.
 
 It checks two things and reads nothing: no `/**`, and a run of two or more `//` lines opens with a tag. Everything else this rule asks for is a review finding.
+
+## One line is not an escape hatch
+
+A single line needs no tag, so a long reason compressed onto one line passes the check. It is still wrong when it overruns: `biome.json` sets `lineWidth` to 100 and Biome does not wrap comments, so nothing reports it. Wrapped back to 100 the comment becomes a block, and a block needs a tag — which is the question the one-liner deferred rather than answered.
+
+Write it at width, then decide. If no tag is honest, the comment is prose in the wrong place.

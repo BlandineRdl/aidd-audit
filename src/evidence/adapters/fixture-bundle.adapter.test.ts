@@ -292,7 +292,7 @@ describe('a bundle records no file mode, so a script is known by its shebang', (
   })
 
   it('weighs a script whose interpreter is not a shell, rather than passing over it', async () => {
-    // A recorded tree cannot mark a file executable, so passing over it would drop `loops`
+    // COMPAT: A recorded tree cannot mark a file executable, so passing over it would drop `loops`
     // from a published set — a practice gap, where undecidable is the evidence gap it is.
     const path = bundleHolding({
       ...MANIFEST,
@@ -320,7 +320,7 @@ describe('a bundle records no file mode, so a script is known by its shebang', (
       'repo-context/docs/brainstorm/auto-retry.md': `# One day\n\n\`\`\`sh\n${RETRY_LOOP}\`\`\`\n`,
     })
 
-    // Both other answers are wrong: undecidable costs the whole axis, proven credits a
+    // SAFETY: Both other answers are wrong: undecidable costs the whole axis, proven credits a
     // practice the subject wrote down and never built.
     expect(valueFor(await collectFrom(path), 'harness')).toEqual(['prompts'])
   })

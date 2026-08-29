@@ -9,16 +9,12 @@ import type {
 } from '../../assessment/contracts/assessment-report.contract.js'
 import { UnrenderableReportError } from './unrenderable-report.error.js'
 
-// Projecting field by field, rather than stringifying the report, is what keeps
-// a field the contract does not declare out of the published output.
 export function renderJsonReport(report: AssessmentReport): string {
   const projected = projectReport(report)
   assertEveryNumberFinite(projected, '$')
   return JSON.stringify(projected, null, 2)
 }
 
-// JSON serialises NaN and Infinity as null. In this contract, null carries
-// domain meaning, so non-finite numbers must be rejected before serialisation.
 function assertEveryNumberFinite(value: unknown, path: string): void {
   if (typeof value === 'number') {
     if (!Number.isFinite(value)) {
@@ -125,8 +121,8 @@ function projectCoverage(coverage: CoverageReport): CoverageReport {
   }
 }
 
-// `reason` exists only on a non-COMPLETED entry; the switch is what keeps it
-// from being emitted as `undefined` on a COMPLETED one.
+// SAFETY: `reason` exists only on a non-COMPLETED entry — the switch is what keeps it from being
+// emitted as `undefined` on a COMPLETED one.
 function projectProvenanceEntry(entry: ProvenanceEntry): ProvenanceEntry {
   switch (entry.status) {
     case 'COMPLETED':

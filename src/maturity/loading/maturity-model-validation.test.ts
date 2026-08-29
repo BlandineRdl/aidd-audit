@@ -17,8 +17,8 @@ describe('a well-formed model that does not hold together', () => {
   })
 
   describe('an axis naming a scale that only resolves off Object.prototype', () => {
-    // None of these keys is ever declared under `scales:`, but a plain lookup
-    // resolves each one off Object.prototype as if it were.
+    // SAFETY: none of these keys is ever declared under `scales:`, but a plain lookup resolves each
+    // one off Object.prototype as if it were.
     it.each(['constructor', 'toString', 'valueOf', '__proto__', 'hasOwnProperty'])(
       "rejects an axis naming a scale of '%s'",
       (scaleName) => {
@@ -114,11 +114,8 @@ describe('a well-formed model that does not hold together', () => {
       })
       const run = () => parseMaturityModel(source)
       expect(run).toThrow(InvalidMaturityModelError)
-      // This exact phrase can only come from Vocabulary's numeric check. If
-      // requireVocabulary were disabled, Cumulativity would still throw on
-      // this document (Number('not-a-number') >= Number('not-a-number') is
-      // NaN >= NaN, false) but with a dip message that names no "minimum" —
-      // so this assertion fails unless Vocabulary is the one that fired.
+      // SAFETY: this exact phrase can only come from Vocabulary's numeric check — Cumulativity
+      // would also throw here (NaN >= NaN) but with a message naming no "minimum".
       expect(run).toThrow(/minimum is not a number/)
     })
   })
@@ -168,7 +165,7 @@ describe('a well-formed model that does not hold together', () => {
         (requirement) => requirement.axis === axis,
       )
 
-    /** One case per scale kind: each compares differently, so each needs pinning. */
+    // One case per scale kind: each compares differently, so each needs pinning.
     it('rejects a dip on an ordinal axis, where the higher rank ranks lower', () => {
       const source = mutate((document) => {
         requirementFor(document, 'low', 'size').min = 'L'
@@ -210,11 +207,8 @@ describe('a well-formed model that does not hold together', () => {
       expect(run).toThrow(/Rank 1/)
     })
 
-    /**
-     * NaN is a number, so a typed check alone lets it through: it survives the
-     * distinctness Set, leaves `sort` unspecified, and makes the engine's
-     * `next` silently null. A rank that orders against nothing is a defect.
-     */
+    // SAFETY: NaN is a number, so a typed check alone lets it through — it survives the
+    // distinctness Set and leaves sort unspecified.
     it.each([
       ['NaN', Number.NaN],
       ['Infinity', Number.POSITIVE_INFINITY],
@@ -223,8 +217,8 @@ describe('a well-formed model that does not hold together', () => {
       const source = mutate((document) => {
         pick(document.levels ?? [], (level) => level.id === 'high').rank = rank
       })
-      // Guard the guard: the string '.nan' round-trips as a quoted string and
-      // would be caught by the type check instead, proving nothing.
+      // SAFETY: the string '.nan' round-trips as a quoted string and would be caught by the type
+      // check instead, proving nothing.
       expect(source).toMatch(/rank: -?\.(nan|inf)/)
 
       const run = () => parseMaturityModel(source)
@@ -244,7 +238,7 @@ describe('a well-formed model that does not hold together', () => {
   })
 
   describe('a threshold that is not a finite number', () => {
-    /** Never met by any observation, so it would report a practice gap. */
+    // Never met by any observation, so it would report a practice gap.
     it.each([
       ['NaN', Number.NaN],
       ['Infinity', Number.POSITIVE_INFINITY],
@@ -278,7 +272,4 @@ describe('a well-formed model that does not hold together', () => {
       expect(run).toThrow(/'levels' declares 'low' more than once/)
     })
   })
-
-  // One test per guard, each pinning the error class and a fragment of the
-  // message naming the offending field.
 })

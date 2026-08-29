@@ -6,12 +6,12 @@ import type { AssessmentReport } from '../../assessment/contracts/assessment-rep
 import type { CommandIo } from './assess.command.js'
 import { runAssess } from './assess.command.js'
 
-/** `profiles/perceval` is the subject of record for this suite, and named
- *  nowhere in `src/` outside it: production code holds no profile knowledge. */
+// INVARIANT: profiles/perceval is the subject of record for this suite; production code holds no
+// profile knowledge of it.
 const PERCEVAL = 'profiles/perceval'
 
-/** The repository itself: `intervention` is not recoverable from any local history, so one
- *  axis is always UNKNOWN and no level can be proven of it. */
+// LIMITATION: The repository itself: `intervention` is not recoverable from any local history, so
+// one axis is always UNKNOWN and no level can be proven of it.
 const THIS_REPOSITORY = '.'
 
 function capturingIo(): { io: CommandIo; stdout: () => string; stderr: () => string } {
@@ -61,8 +61,8 @@ describe('runAssess — happy path', () => {
     expect(report.proven?.label).toBe('Red')
     expect(report.coverage.axesRequested).toBe(4)
 
-    // A bundle is tracked inside this repository, so the live collector's gate is what stands
-    // between perceval's own evidence and this repository's harness published as his.
+    // SAFETY: A bundle is tracked inside this repository, so the live collector's gate is what
+    // stands between perceval's own evidence and this repository's harness published as his.
     expect(report.provenance).toEqual([
       {
         collector: 'live-repository',
@@ -156,8 +156,8 @@ describe('runAssess — usage errors exit 2, nothing on stdout', () => {
 
     expect(exitCode).toBe(2)
     expect(stdout()).toBe('')
-    // "Unknown flag" discriminates: '--verbose' alone also appears in the
-    // second-subject rejection, which is the wrong guard.
+    // SAFETY: "Unknown flag" discriminates — '--verbose' alone also appears in the second-subject
+    // rejection, the wrong guard.
     expect(stderr()).toContain("Unknown flag '--verbose'.")
     expect(stderr().endsWith('\n')).toBe(true)
   })

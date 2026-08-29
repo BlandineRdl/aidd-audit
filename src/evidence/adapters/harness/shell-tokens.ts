@@ -12,13 +12,11 @@ export function endOfCall(code: string, open: number): number {
   return code.length
 }
 
-/**
- * The shell expands parameters inside double quotes and not inside single quotes, so
- * single-quoted content is dropped whole while double-quoted content keeps its expansions and
- * drops its words: an agent named in an echoed message is not an invocation, and
- * `while [ "$rc" -ne 0 ]` — the quoting ShellCheck mandates — still reads as a loop hanging on
- * a status. Line breaks survive either way; losing one would move a command position.
- */
+// COMPAT: The shell expands parameters inside double quotes and not inside single quotes, so
+// single-quoted content is dropped whole while double-quoted content keeps its expansions and drops
+// its words: an agent named in an echoed message is not an invocation, and `while [ "$rc" -ne 0 ]`
+// — the quoting ShellCheck mandates — still reads as a loop hanging on a status. Line breaks
+// survive either way; losing one would move a command position.
 export function stripShellNoise(source: string): string {
   let out = ''
   let index = 0
@@ -99,10 +97,10 @@ function readDoubleQuoted(source: string, from: number): Quoted {
   return { text: `${text} `, end: index + 1 }
 }
 
-/** Shaped as a reference to a name nothing assigns, so the unsettled-origin rule covers it. */
+// Shaped as a reference to a name nothing assigns, so the unsettled-origin rule covers it.
 const COMMAND_SUBSTITUTION = '$__command_substitution__'
 
-/** `$?`, `$name` and `${name}` are the references this module reads; the rest are noise. */
+// `$?`, `$name` and `${name}` are the references this module reads; the rest are noise.
 function readExpansion(source: string, from: number): Quoted {
   const next = source[from + 1] ?? ''
 
@@ -113,9 +111,9 @@ function readExpansion(source: string, from: number): Quoted {
     return { text: ` ${source.slice(from, close + 1)} `, end: close + 1 }
   }
   if (next === '(') {
-    // A header that ran `$( … )` is not one this module has read, so it leaves a mark. No
-    // bracket: the tokeniser splits those, and a stray `)` in command position would read as
-    // the very command the substitution was hiding.
+    // SAFETY: A header that ran `$( … )` is not one this module has read, so it leaves a mark. No
+    // bracket: the tokeniser splits those, and a stray `)` in command position would read as the
+    // very command the substitution was hiding.
     return { text: ` ${COMMAND_SUBSTITUTION} `, end: endOfCall(source, from + 1) }
   }
   if (/[A-Za-z_]/.test(next)) {
@@ -133,7 +131,7 @@ export function startsAWord(source: string, index: number): boolean {
   return /[\s;&|(]/.test(previous)
 }
 
-/** `((...))` is arithmetic, not a command whose exit status gates anything. */
+// `((...))` is arithmetic, not a command whose exit status gates anything.
 export const stripArithmetic = (code: string): string => code.replace(/\(\([^()]*\)\)/g, ' : ')
 
 const TOKEN_PATTERN = /&&|\|\||;;|;|\||&|\(|\)|\n|[^\s;|&()\n]+/g
@@ -159,10 +157,9 @@ export const KEYWORDS_BEFORE_COMMAND = new Set([
   '}',
 ])
 
-/**
- * A prefix runs the word after it, so the command position passes through — past the prefix's
- * own operands, as `timeout 300 claude` needs. An unlisted wrapper hides the call behind it.
- */
+// SAFETY: A prefix runs the word after it, so the command position passes through — past the
+// prefix's own operands, as `timeout 300 claude` needs. An unlisted wrapper hides the call behind
+// it.
 const COMMAND_PREFIXES = new Set([
   'env',
   'command',
@@ -182,18 +179,16 @@ const COMMAND_PREFIXES = new Set([
   'dlx',
 ])
 
-/** An option, or a duration or a niceness: a prefix's own operand, never its command. */
+// An option, or a duration or a niceness: a prefix's own operand, never its command.
 const OPERAND_OF_A_PREFIX = /^-|^\d+(\.\d+)?[smhd]?$/
 
 const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/
 
 const SHELL_NAME = /^[A-Za-z_][A-Za-z0-9_-]*$/
 
-/**
- * Constructs a loop may hang on without any separate command of the project's being run.
- * `read` belongs here: `while read -r line` consumes input, and iterating is not re-running.
- * Closing brackets never reach a command position, so no test could hold an entry for them.
- */
+// INVARIANT: Constructs a loop may hang on without any separate command of the project's being run.
+// `read` belongs here: `while read -r line` consumes input, and iterating is not re-running.
+// Closing brackets never reach a command position, so no test could hold an entry for them.
 export const NOT_A_COMMAND = new Set(['true', 'false', ':', '[', '[[', 'test', 'read', '!'])
 
 export function markCommandPositions(tokens: readonly string[]): readonly boolean[] {
@@ -203,7 +198,7 @@ export function markCommandPositions(tokens: readonly string[]): readonly boolea
     return SEPARATORS.has(previous) || KEYWORDS_BEFORE_COMMAND.has(previous)
   })
 
-  // An assignment or a prefix such as `env` hands the command position on, always to the
+  // INVARIANT: An assignment or a prefix such as `env` hands the command position on, always to the
   // right, so one forward pass resolves a chain of them.
   for (let index = 0; index < tokens.length; index++) {
     if (!markAt(marks, index)) continue
@@ -238,10 +233,8 @@ export interface FunctionBody {
   readonly end: number
 }
 
-/**
- * A loop calling a function defined beside it invokes whatever that function invokes, so
- * `run_agent() { claude -p fix; }` with `until pnpm check; do run_agent; done` is a retry loop.
- */
+// INVARIANT: A loop calling a function defined beside it invokes whatever that function invokes, so
+// `run_agent() { claude -p fix; }` with `until pnpm check; do run_agent; done` is a retry loop.
 export function findFunctionBodies(
   tokens: readonly string[],
   marks: readonly boolean[],

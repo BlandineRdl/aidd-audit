@@ -7,9 +7,9 @@ import type {
 } from '../../src/assessment/contracts/assessment-report.contract.js'
 import { REPO_ROOT, runCli } from './spawn-cli.test-fixture.js'
 
-// INVARIANT: AIDD assessing AIDD tests the capability and its invariants, never the
-// state of this checkout or of the collector set. `process-contract.test.ts` owns the
-// exit codes; `live-repository.adapter.test.ts` owns which subjects the collector answers for.
+// INVARIANT: AIDD assessing AIDD tests the capability and its invariants, never the state of this
+// checkout or of the collector set. `process-contract.test.ts` owns the exit codes;
+// `live-repository.adapter.test.ts` owns which subjects the collector answers for.
 
 function reportFor(...args: readonly string[]): AssessmentReport {
   const run = runCli(...args, '--json')
@@ -53,18 +53,17 @@ describe('1. the shipped CLI assesses the repository it ships from', () => {
 })
 
 describe('2. the live repository collector is what produced it', () => {
-  it('assesses through the production collector, with no double standing in for it', () => {
-    // The criterion is that nothing was faked, not that one collector exists.
-    const collectors = report.provenance.map((entry) => entry.collector)
-
-    expect(collectors).toContain('live-repository')
-    expect(collectors.filter((id) => /fake|stub|mock|fixture|self/i.test(id))).toEqual([])
+  it('assesses through the collectors the composition root wired', () => {
+    // INVARIANT: the bundle carries no double by construction — a double is a
+    // `.test-adapter.ts`, which never reaches `dist/cli.js`. What this adds is that the live
+    // collector was asked.
+    expect(report.provenance.map((entry) => entry.collector)).toContain('live-repository')
   })
 })
 
-// INVARIANT: three of these four are guards, not observations — the contract's union
-// makes NOT_MET-without-CONFIRMED unrepresentable and this checkout emits no practice
-// gap. Kept because a producer abandoning the conservative rule would surface here first.
+// INVARIANT: three of these four are guards, not observations — the contract's union makes
+// NOT_MET-without-CONFIRMED unrepresentable and this checkout emits no practice gap. Kept because a
+// producer abandoning the conservative rule would surface here first.
 describe('3. the verdict follows from evidence, never from its absence', () => {
   it('never calls a practice deficient on evidence it did not confirm', () => {
     const inferred = everyRequirement(report).filter(

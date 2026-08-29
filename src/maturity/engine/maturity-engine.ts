@@ -10,15 +10,15 @@ import { InvalidObservationError } from './invalid-observation.error.js'
 import { aggregate, outcomeOf } from './requirement-outcome.js'
 
 export interface MaturityCheck {
-  /** Ordered by rank, whatever order the model declared them in. */
+  // Ordered by rank, whatever order the model declared them in.
   readonly levels: readonly LevelResult[]
   readonly proven: LevelResult | null
-  /** Strictly the level above the proven one — the lowest when none is proven.
-   *  Its own outcome says why it blocks. Null once the top level is proven. */
+  // INVARIANT: strictly the level above proven, or the lowest level when none is proven; its own
+  // outcome says why it blocks. Null once the top level is proven.
   readonly next: LevelResult | null
 }
 
-/** Assumes a well-formed, cumulative model. `loading/` owes both. */
+// Assumes a well-formed, cumulative model. `loading/` owes both.
 export function checkMaturity(
   model: MaturityModel,
   observations: readonly AxisObservation[],
@@ -33,7 +33,7 @@ export function checkMaturity(
 
 type ObservationsByAxis = ReadonlyMap<AxisId, AxisObservation>
 
-/** Keeping the last would let collection order decide. Resolution is the evidence context's job. */
+// Keeping the last would let collection order decide. Resolution is the evidence context's job.
 function indexObservations(observations: readonly AxisObservation[]): ObservationsByAxis {
   const byAxis = new Map<AxisId, AxisObservation>()
   for (const observation of observations) {
@@ -65,10 +65,8 @@ function evaluateLevel(
   return { level, outcome: aggregate(axes.map((axis) => axis.outcome)), axes }
 }
 
-/**
- * Evaluation walks the model's axes, so a requirement naming an axis the model
- * does not declare would be dropped without a word.
- */
+// SAFETY: evaluation walks the model's axes, so a requirement naming an axis the model doesn't
+// declare would be dropped without a word instead of rejected.
 function requireDeclaredAxes(model: MaturityModel, level: Level): void {
   const declared = new Set(model.axes.map((axis) => axis.id))
   for (const requirement of level.requirements) {

@@ -33,8 +33,7 @@ export interface AssessmentComposition {
   readonly provenance: readonly CollectorProvenance[]
 }
 
-/** Composes the two peer contexts into the public report. Every maturity
- *  verdict it publishes is the engine's; it decides none of them itself. */
+// Publishes only the engine's own verdicts; this function decides none of them.
 export function composeAssessmentReport(input: AssessmentComposition): AssessmentReport {
   const { model, evidence, subjectPath, provenance } = input
 
@@ -60,8 +59,8 @@ export function composeAssessmentReport(input: AssessmentComposition): Assessmen
   }
 }
 
-/** `axesRequested` comes from the model, not from `evidence.length`: an axis
- *  absent from `evidence` altogether still counts as requested and unobserved. */
+// INVARIANT: axesRequested counts the model's axes, not evidence.length — an axis missing from
+// evidence entirely is still requested, just unobserved.
 function deriveCoverage(model: MaturityModel, evidence: readonly Evidence[]): CoverageReport {
   return {
     axesRequested: model.axes.length,
@@ -91,11 +90,9 @@ interface ProjectionContext {
   readonly labelsByAxis: ReadonlyMap<AxisId, string>
 }
 
-/**
- * The engine walks the model's axes, so evidence for an axis the model does not
- * declare would be dropped without a word — and a collector speaking off the
- * vocabulary would be silently forgiven instead of rejected.
- */
+// SAFETY: the engine walks the model's axes, so evidence for an axis the model doesn't declare
+// would be dropped without a word — throw here or a collector speaking off the vocabulary is
+// silently forgiven instead of rejected.
 function requireDeclaredAxes(model: MaturityModel, evidence: readonly Evidence[]): void {
   const declared = new Set(model.axes.map((axis) => axis.id))
   for (const entry of evidence) {
@@ -107,8 +104,7 @@ function requireDeclaredAxes(model: MaturityModel, evidence: readonly Evidence[]
   }
 }
 
-/** Only CONFIRMED evidence carries a value into the engine. What the absence of
- *  a value then means is the engine's conservative rule, not this mapping's. */
+// This mapping only carries CONFIRMED values; what null means from here is the engine's rule.
 function toObservation(evidence: Evidence): AxisObservation {
   switch (evidence.status) {
     case 'CONFIRMED':

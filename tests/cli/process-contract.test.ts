@@ -2,11 +2,12 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, describe, expect, it } from 'vitest'
+import type { AssessmentReport } from '../../src/assessment/contracts/assessment-report.contract.js'
 import { runCli } from './spawn-cli.test-fixture.js'
 
-// INVARIANT: the exit code classifies responsibility, not error sub-type — `0` ran,
-// `2` the caller's fault, `1` ours. Observed by running the process, because what
-// `runAssess` returns is `assess.command.test.ts`'s subject, not this one's.
+// INVARIANT: the exit code classifies responsibility, not error sub-type — `0` ran, `2` the
+// caller's fault, `1` ours. Observed by running the process, because what `runAssess` returns is
+// `assess.command.test.ts`'s subject, not this one's.
 
 let tempDir: string | undefined
 
@@ -172,9 +173,9 @@ describe('7. the assessment result never reaches the exit code', () => {
   })
 })
 
-// The two wired collectors keeping subjects apart is a fact about the composition root, and
-// only visible with both of them running. `self-assessment.test.ts` owns the assessment
-// itself; the exit codes and the streams are this suite's.
+// INVARIANT: The two wired collectors keeping subjects apart is a fact about the composition root,
+// and only visible with both of them running. `self-assessment.test.ts` owns the assessment itself;
+// the exit codes and the streams are this suite's.
 describe('8. the wired collectors answer for their own subject, never the neighbour', () => {
   function reportFor(...args: readonly string[]): AssessmentReport {
     const run = runCli(...args, '--json')
@@ -191,9 +192,9 @@ describe('8. the wired collectors answer for their own subject, never the neighb
 
   it('answers for the bundle out of the bundle, never out of the checkout holding it', () => {
     // SAFETY: `profiles/` is tracked inside this repository, so without the live collector's
-    // repository-root gate that collector would resolve to this checkout and publish AIDD's
-    // own harness as the bundle's evidence. The two harness sets are what tell the sources
-    // apart: this project has instruction files and rules, that subject has neither.
+    // repository-root gate that collector would resolve to this checkout and publish AIDD's own
+    // harness as the bundle's evidence. The two harness sets are what tell the sources apart: this
+    // project has instruction files and rules, that subject has neither.
     const bundle = reportFor('assess', 'profiles/perceval')
     const checkout = reportFor('assess', '.')
 

@@ -8,8 +8,8 @@ export interface AssessArguments {
   readonly json: boolean
 }
 
-/** Hand-rolled rather than `node:util`'s `parseArgs`, which does not let a
- *  caller shape its rejection messages. */
+// COMPAT: hand-rolled rather than `node:util`'s `parseArgs`, which doesn't let a caller shape its
+// rejection messages.
 export function parseAssessArguments(argv: readonly string[]): AssessArguments {
   const command = argv[0]
   if (command !== 'assess') {

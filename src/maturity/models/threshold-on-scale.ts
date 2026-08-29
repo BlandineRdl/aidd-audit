@@ -1,7 +1,7 @@
 import { InvalidMaturityModelError } from './invalid-maturity-model.error.js'
 import { isSetRequirement, type LevelRequirement, type Scale } from './maturity.model.js'
 
-/** One rule, two callers: the loader gates YAML, the engine backstops a hand-built model. */
+// One rule, two callers: the loader gates YAML, the engine backstops a hand-built model.
 export function requireThresholdOnScale(
   scale: Scale,
   requirement: LevelRequirement,
@@ -36,11 +36,9 @@ export function requireThresholdOnScale(
         sentence(prefix, `axis '${requirement.axis}' is numeric but its minimum is not a number.`),
       )
     }
-    /**
-     * A non-finite threshold is never met: `value >= NaN` is false for every
-     * observation. That reports NOT_MET — a *practice* gap — so a defect in
-     * the model would make AIDD blame the assessed repository.
-     */
+    // SAFETY: a non-finite threshold is never met — `value >= NaN` is false for every observation —
+    // which reports NOT_MET, a practice gap. Left unguarded, a defect in the model would make AIDD
+    // blame the assessed repository.
     if (!Number.isFinite(requirement.min)) {
       throw new InvalidMaturityModelError(
         sentence(

@@ -10,11 +10,8 @@ import type {
 import type { AxisId, MaturityModel } from '../models/maturity.model.js'
 import { validModel as model } from './maturity-model.test-fixture.js'
 
-/**
- * The executable specification: no filesystem, no Git, no YAML, no CLI. It
- * assumes a well-formed model, as the engine does. When prose and these tests
- * disagree, these decide.
- */
+// INVARIANT: the executable specification assumes a well-formed model, as the engine does; when
+// prose and these tests disagree, these decide.
 type Unproven = Exclude<EvidenceConfidence, 'CONFIRMED'>
 
 type Reading =
@@ -175,7 +172,6 @@ describe('level satisfaction', () => {
   })
 })
 
-/** An invalid model is refused at the loading boundary, before anything is scored. */
 describe('an unusable observation is rejected, never worked around', () => {
   it('refuses two observations of the same axis instead of keeping the last', () => {
     const twice = [...observe(), { axis: 'size', confidence: 'CONFIRMED', value: 'S' } as const]
@@ -198,10 +194,8 @@ describe('an unusable observation is rejected, never worked around', () => {
   })
 })
 
-/**
- * A model defect is rejected, never scored. These guards live in the engine only
- * until the loader owns them; the behaviour they protect is permanent.
- */
+// LIMITATION: these guards live in the engine only until the loader owns them; the behaviour they
+// protect is permanent.
 describe('an invalid model is rejected, never scored', () => {
   const withHigh = (
     requirements: MaturityModel['levels'][number]['requirements'],
@@ -210,11 +204,8 @@ describe('an invalid model is rejected, never scored', () => {
     levels: model.levels.map((level) => (level.id === 'high' ? { ...level, requirements } : level)),
   })
 
-  /**
-   * The engine's `scales` is a plain object built by hand — which is what every
-   * model in this suite is — so an axis naming an inherited member resolves to
-   * a function and every `kind` branch misses it.
-   */
+  // COMPAT: scales is a plain object built by hand, so an axis naming an inherited member resolves
+  // to a function and every kind branch misses it.
   it('refuses an axis whose scale only resolves off Object.prototype', () => {
     const inherited: MaturityModel = {
       ...model,

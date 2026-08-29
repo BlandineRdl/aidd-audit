@@ -13,13 +13,11 @@ import {
   tokenize,
 } from './shell-tokens.js'
 
-/**
- * A loop invoking an agent has three answers, not two: `loops` when the continuation is
- * positively recognised as hanging on a separate command's exit status; decidably no when it is
- * positively recognised as not — a list iterated, input consumed, a counter counted;
- * undecidable only in between. The middle answer keeps an ordinary `for f in *.ts` or
- * `while read -r line` from costing the whole axis.
- */
+// INVARIANT: A loop invoking an agent has three answers, not two: `loops` when the continuation is
+// positively recognised as hanging on a separate command's exit status; decidably no when it is
+// positively recognised as not — a list iterated, input consumed, a counter counted; undecidable
+// only in between. The middle answer keeps an ordinary `for f in *.ts` or `while read -r line` from
+// costing the whole axis.
 export function readShellLoops(source: string): MemberScan {
   const noise = stripShellNoise(source)
   const tokens = tokenize(stripArithmetic(noise))
@@ -31,16 +29,16 @@ export function readShellLoops(source: string): MemberScan {
   let undecidable = false
 
   for (const loop of findLoops(tokens, commandPositions)) {
-    // The header is scanned with the body: `while claude -p fix && ! pnpm check; do` invokes
-    // the agent in the condition, which is still an agent invoked by the loop.
+    // INVARIANT: The header is scanned with the body: `while claude -p fix && ! pnpm check; do`
+    // invokes the agent in the condition, which is still an agent invoked by the loop.
     if (!invokesAgent(tokens, commandPositions, loop.headerStart, loop.bodyEnd, functions)) {
       continue
     }
     if (continuationDependsOnExitStatus(tokens, commandPositions, loop, origins.status)) {
       return DECIDED_PRESENT
     }
-    // `for x in <list>` runs the agent once per item and no exit status decides whether it
-    // runs again. `|| exit 1` inside one is fail-fast, which re-runs nothing either.
+    // INVARIANT: `for x in <list>` runs the agent once per item and no exit status decides whether
+    // it runs again. `|| exit 1` inside one is fail-fast, which re-runs nothing either.
     if (loop.keyword === 'for') continue
     if (iterates(tokens, commandPositions, loop, origins)) continue
 
@@ -50,11 +48,9 @@ export function readShellLoops(source: string): MemberScan {
   return { proven: false, undecidable }
 }
 
-/**
- * The header must reference nothing of unsettled origin — a counter, a `read` variable and a
- * literal qualify, a command substitution does not — and the body must hold no early stop,
- * since an unattributable `break` is where a retry may hide.
- */
+// SAFETY: The header must reference nothing of unsettled origin — a counter, a `read` variable and
+// a literal qualify, a command substitution does not — and the body must hold no early stop, since
+// an unattributable `break` is where a retry may hide.
 function iterates(
   tokens: readonly string[],
   marks: readonly boolean[],
@@ -64,7 +60,7 @@ function iterates(
   if (holdsAnEarlyStop(tokens, marks, loop)) return false
 
   for (let index = loop.headerStart; index < loop.headerEnd; index++) {
-    // Only references. A command check here could not fire, so no test could hold one:
+    // LIMITATION: Only references. A command check here could not fire, so no test could hold one:
     // `continuationDependsOnExitStatus` already returned `loops` for every header it rejects.
     if (!isSettledReference(tokenAt(tokens, index), origins)) return false
   }
@@ -181,11 +177,9 @@ function continuationDependsOnExitStatus(
   return breaksOnAnExitStatus(tokens, marks, loop.bodyStart, loop.bodyEnd, statusVariables)
 }
 
-/**
- * `status` is what the exit-status analysis reads: `rc=$?` is that status one hop away.
- * `settled` is why a counter loop is decidable — arithmetic, a literal and `read` cannot carry
- * an exit status. A name from anything else is in neither set, and unknown stays undecidable.
- */
+// INVARIANT: `status` is what the exit-status analysis reads: `rc=$?` is that status one hop away.
+// `settled` is why a counter loop is decidable — arithmetic, a literal and `read` cannot carry an
+// exit status. A name from anything else is in neither set, and unknown stays undecidable.
 interface VariableOrigins {
   readonly status: ReadonlySet<string>
   readonly settled: ReadonlySet<string>
@@ -235,14 +229,14 @@ function readVariableOrigins(tokens: readonly string[]): VariableOrigins {
     else unknown.add(name)
   }
 
-  // Only the unknown origins. Subtracting `status` too could not fire, so no test could hold
-  // it: `runsACommand` decides the loop `loops` before `iterates` is ever asked.
+  // LIMITATION: Only the unknown origins. Subtracting `status` too could not fire, so no test could
+  // hold it: `runsACommand` decides the loop `loops` before `iterates` is ever asked.
   for (const name of unknown) settled.delete(name)
 
   return { status, settled }
 }
 
-/** `true`, `false`, `:` and the test builtins run no command; `$?` and its aliases are one. */
+// `true`, `false`, `:` and the test builtins run no command; `$?` and its aliases are one.
 function runsACommand(
   tokens: readonly string[],
   marks: readonly boolean[],
@@ -284,7 +278,7 @@ function breaksOnAnExitStatus(
   return false
 }
 
-/** `pnpm check && break` — the break is reached only on that command's exit status. */
+// `pnpm check && break` — the break is reached only on that command's exit status.
 function isChainedOnACommand(
   tokens: readonly string[],
   marks: readonly boolean[],
@@ -305,7 +299,7 @@ function isChainedOnACommand(
   return runsACommand(tokens, marks, listStart, breakIndex - 1, statusVariables)
 }
 
-/** `if pnpm check; then break; fi` — the branch is taken on that command's exit status. */
+// `if pnpm check; then break; fi` — the branch is taken on that command's exit status.
 function isGuardedByABranch(
   tokens: readonly string[],
   marks: readonly boolean[],

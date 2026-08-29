@@ -26,7 +26,9 @@ Formatting is deliberately outside `check`: a mis-indented file blocks nothing a
 
 **File-header prose is not an exception.** What a module is for belongs in `aidd_docs/`, and a header repeating it is duplication. One line, or nothing.
 
-**It judges the files the current branch changed, never the whole tree.** The repository predates the rule — 153 docblocks in 34 files, and 87 untagged `//` blocks — and a check failing on all of that would be suppressed rather than followed. Two consequences, both real: a file nobody touches stays outside the guard, and touching a file for one line puts its whole comment history under the rule. The second is the intended pressure; the first is paid off by a separate pass.
+**It judges every governed file in the tree**, tracked or not — `git ls-files --cached --others`, so a new file is caught before it is ever added. It was scoped to the current branch's changed files while the repository still held 220 non-conforming blocks; that migration is done and the scoping went with it.
+
+**A single line needs no tag, and that is the rule's one soft edge.** A long reason compressed onto one line passes; wrapped back to the project's `lineWidth` of 100 it becomes a block, and a block needs a tag. Biome does not wrap comments, so nothing reports the overrun — this is a review catch, and the migration produced nineteen of them in one batch.
 
 The script checks two things and reads nothing: no `/**`, and a run of two or more `//` lines opens with a tag. A tag is therefore a claim, not a passport — `INVARIANT:` in front of narration satisfies it and defeats it. What it buys is that an untagged block and a docblock are both impossible, and that a mislabelled tag is a sharp review target, which is a better position than prose nobody enforced.
 

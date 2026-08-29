@@ -34,8 +34,8 @@ function renderHeader(report: AssessmentReport): string {
 
 function renderProvenSection(report: AssessmentReport): string {
   const { proven } = report
-  // INVARIANT: "no proven level" is a result, never White and never a rank
-  // below the floor. It names no cause either — the blockers know which.
+  // INVARIANT: "no proven level" is a result, never White and never a rank below the floor. It
+  // names no cause either — the blockers know which.
   if (proven === null) {
     return "Proven level: could not be established. No level's requirements were fully proven."
   }
@@ -51,8 +51,8 @@ function renderCoverageSection(report: AssessmentReport): string {
   return `Evidence coverage: ${axesConfirmed} of ${axesRequested} axes confirmed (${axesObserved} observed).`
 }
 
-// INVARIANT: "nothing was looked at" is a third state above both gaps, and
-// must never read as either.
+// INVARIANT: "nothing was looked at" is a third state above both gaps, and must never read as
+// either.
 function renderNoCollectorsSection(report: AssessmentReport): string {
   if (report.provenance.length > 0) {
     return ''
@@ -183,10 +183,9 @@ function renderPracticeGap(report: AssessmentReport, blocker: PracticeBlocker): 
   return `  [practice gap] ${axisLabel} at ${levelLabel}: the observed practice does not meet the requirement. Improve ${axisLabel} to close the gap.`
 }
 
-// LIMITATION: BlockingRequirement carries no requirement identity, so the
-// requirement is re-derived from a key that is not unique. Ambiguous means no
-// threshold, never a guessed one. Fix belongs in the contract — see
-// aidd_docs/memory/architecture.md, "Frozen before the split".
+// LIMITATION: BlockingRequirement carries no requirement identity, so the requirement is re-derived
+// from a key that is not unique. Ambiguous means no threshold, never a guessed one. Fix belongs in
+// the contract — see aidd_docs/memory/architecture.md, "Frozen before the split".
 function findUniquePracticeRequirement(
   axis: AxisReport | undefined,
   blocker: PracticeBlocker,
@@ -214,9 +213,9 @@ function explainEvidenceGap(report: AssessmentReport, blocker: EvidenceBlocker):
   }
 }
 
-// LIMITATION: the contract records that a collector ran, never why it emitted
-// nothing for one axis, so the gap stays unexplained rather than invented. A
-// per-axis reason on ProvenanceEntry would lift it.
+// LIMITATION: the contract records that a collector ran, never why it emitted nothing for one axis,
+// so the gap stays unexplained rather than invented. A per-axis reason on ProvenanceEntry would
+// lift it.
 function whoWasAsked(report: AssessmentReport, axis: string): string {
   const asked = report.provenance.filter((entry) => entry.axes.includes(axis))
   if (asked.length === 0) {

@@ -1,10 +1,3 @@
-/**
- * Public assessment contract emitted by --json and consumed by driving adapters.
- *
- * Self-contained and versioned so internal refactors cannot silently change the
- * published shape.
- */
-
 export const ASSESSMENT_REPORT_SCHEMA_VERSION = 1
 
 export type EvidenceStatus = 'CONFIRMED' | 'CLAIMED' | 'CONFLICTING' | 'UNKNOWN'
@@ -60,16 +53,11 @@ export type BlockingRequirement =
       readonly gap: 'EVIDENCE'
     }
 
-/**
- * Which axes a collector was **asked to attempt**, fixed before it ran and never revised by
- * what it answered. A COMPLETED entry lists every such axis whether the collector emitted an
- * observation for each, for one, or for none — so an entry here is not a claim that anything
- * was observed. `coverage` and the axis reports say what was.
- *
- * Stated in full rather than by reference: this contract is self-contained on purpose, and
- * `evidence/models/collector-provenance.model.ts` carries the same definition for the same
- * reason. The two must not drift.
- */
+// INVARIANT: axes lists what a collector was asked to attempt, fixed before it ran and never
+// revised by what it answered — a COMPLETED entry is not a claim that anything was observed;
+// `coverage` and the axis reports say what was. Stated in full rather than by reference since this
+// contract is self-contained on purpose; `evidence/models/collector-provenance.model.ts` carries
+// the same shape and the two must not drift.
 export type ProvenanceEntry =
   | {
       readonly collector: string
@@ -101,21 +89,17 @@ export interface AssessmentReport {
     readonly path: string
   }
 
-  /**
-   * Highest fully proven level.
-   *
-   * null means the available evidence could not establish even the baseline.
-   * It must never be replaced with White or any other default.
-   */
+  // INVARIANT: null means evidence could not establish even the baseline — never replace it with
+  // White or any other default.
   readonly proven: LevelReport | null
 
-  /** Level immediately above proven, or null once the highest level is proven. */
+  // Level immediately above proven, or null once the highest level is proven.
   readonly next: LevelReport | null
 
-  /** Full model evaluation ordered by rank. */
+  // Full model evaluation ordered by rank.
   readonly levels: readonly LevelReport[]
 
-  /** Requirements preventing next from being proven. */
+  // Requirements preventing next from being proven.
   readonly blocking: readonly BlockingRequirement[]
 
   readonly coverage: CoverageReport

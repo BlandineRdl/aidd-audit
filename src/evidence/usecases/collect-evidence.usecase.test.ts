@@ -230,10 +230,8 @@ describe('collectEvidence', () => {
       signal: noSignal(),
     })
 
-    // The distinction `axes` turns on, asserted from both sides at once: provenance names
-    // the two axes the collector was asked to attempt, and the evidence shows it answered on
-    // neither. Read as "axes it contributed to", this entry would be a lie. A reader naming
-    // what is missing must read the evidence, never the provenance.
+    // INVARIANT: provenance.axes names what the collector was asked to attempt, not what it
+    // contributed; a reader naming what is missing must read the evidence, never the provenance.
     expect(result.provenance).toEqual([
       { collector: 'silent', status: 'COMPLETED', axes: ['size', 'harness'] },
     ])

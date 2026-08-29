@@ -8,10 +8,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { GitCommandFailedError } from './git-command-failed.error.js'
 import { gitEnvironment, isRepositoryRoot, runGit } from './git-process.js'
 
-/**
- * Integration, against real temporary Git repositories: the subprocess is the boundary under
- * test, and a fake one would prove nothing about the duty the port names.
- */
+// Integration, against real temporary Git repositories: the subprocess is the boundary under test.
 
 const run = promisify(execFile)
 
@@ -23,7 +20,7 @@ afterEach(async () => {
   await Promise.all(workspaces.splice(0).map((path) => rm(path, { recursive: true, force: true })))
 })
 
-/** `os.tmpdir()` is a symlink on macOS, and git reports the resolved path back. */
+// `os.tmpdir()` is a symlink on macOS, and git reports the resolved path back.
 async function emptyDirectory(): Promise<string> {
   const path = await mkdtemp(join(await realpath(tmpdir()), 'aidd-git-process-'))
   workspaces.push(path)
@@ -39,12 +36,9 @@ async function initRepository(): Promise<string> {
   return repository
 }
 
-/**
- * A `git` invocation that takes `seconds` and then leaves a file behind.
- *
- * The marker is what separates "the promise stopped waiting" from "the command stopped
- * running": a subprocess merely abandoned still creates it.
- */
+// INVARIANT: A `git` invocation that takes `seconds` and then leaves a file behind. The marker is
+// what separates "the promise stopped waiting" from "the command stopped running": a subprocess
+// merely abandoned still creates it.
 function lingeringCommand(seconds: number, marker: string): readonly string[] {
   return ['-c', `alias.linger=!sh -c 'sleep ${seconds}; : > ${marker}'`, 'linger']
 }
@@ -71,8 +65,8 @@ describe('running git', () => {
       NEVER_ABORTED,
     )
 
-    // Naming the invocation is what lets a caller tell an answer of "no" from a source it
-    // never managed to ask.
+    // INVARIANT: naming the invocation is what lets a caller tell an answer of "no" from a source
+    // it never managed to ask.
     await expect(running).rejects.toThrow(GitCommandFailedError)
     await expect(running).rejects.toThrow(/git rev-parse --verify refs\/heads\/absent failed/)
   })
@@ -93,25 +87,25 @@ describe('running git', () => {
     const marker = join(repository, 'the-command-ran-to-its-end')
     const LINGER_SECONDS = 2
 
-    // The negative assertion below is worth nothing unless this command can create a file at
-    // all, so prove the mechanism first and only then deny it the chance.
+    // INVARIANT: the negative assertion below is worth nothing unless this command can create a
+    // file at all, so prove the mechanism first and only then deny it the chance.
     await runGit(repository, lingeringCommand(0, proof), NEVER_ABORTED)
     expect(existsSync(proof)).toBe(true)
 
     const budget = new AbortController()
     const started = Date.now()
-    // `execFile` spawns before it returns, so the child is already running here: no clock
-    // decides when this abort lands, and none has to.
+    // INVARIANT: `execFile` spawns before it returns, so the child is already running here: no
+    // clock decides when this abort lands, and none has to.
     const running = runGit(repository, lingeringCommand(LINGER_SECONDS, marker), budget.signal)
     budget.abort(new Error('git budget exhausted mid-command'))
 
     await expect(running).rejects.toThrow(Error)
     await expect(running).rejects.toThrow(/git budget exhausted mid-command/)
-    // A promise that settles only once the command it gave up on has finished is a silent
+    // SAFETY: a promise that settles only once the command it gave up on has finished is a silent
     // hang wearing a rejection.
     expect(Date.now() - started).toBeLessThan(LINGER_SECONDS * 1000)
 
-    // And gone, not merely abandoned: the side effect never lands, even after the full
+    // INVARIANT: and gone, not merely abandoned: the side effect never lands, even after the full
     // window has passed.
     await delay((LINGER_SECONDS + 1) * 1000)
     expect(existsSync(marker)).toBe(false)
@@ -123,9 +117,9 @@ describe('choosing which repository to act on', () => {
     const subject = await initRepository()
     const decoy = await initRepository()
 
-    // Exactly what a git hook exports. Inherited, it wins over `cwd`, and every command
-    // below would act on the decoy — which is how running `pnpm check` from `pre-commit`
-    // once built fixture commits inside the repository being committed to.
+    // SAFETY: exactly what a git hook exports. Inherited, it wins over `cwd`, and every command
+    // below would act on the decoy — which is how running `pnpm check` from `pre-commit` once built
+    // fixture commits inside the repository being committed to.
     process.env.GIT_DIR = join(decoy, '.git')
     process.env.GIT_WORK_TREE = decoy
     try {
@@ -153,9 +147,9 @@ describe('recognising the root of a repository', () => {
     const inside = join(repository, 'packages/api')
     await mkdir(inside, { recursive: true })
 
-    // A directory of a repository is not the repository. Answering true here would let the
-    // enclosing checkout's harness be published as this subject's own evidence — which is
-    // what a fixture bundle tracked inside this repository would otherwise get.
+    // SAFETY: a directory of a repository is not the repository. Answering true here would let the
+    // enclosing checkout's harness be published as this subject's own evidence — which is what a
+    // fixture bundle tracked inside this repository would otherwise get.
     await expect(isRepositoryRoot(inside, NEVER_ABORTED)).resolves.toBe(false)
   })
 
@@ -172,7 +166,7 @@ describe('recognising the root of a repository', () => {
 
     const probing = isRepositoryRoot(repository, spent)
 
-    // Only a refusal git itself issued means "not a repository". Swallowing a spent budget
+    // SAFETY: only a refusal git itself issued means "not a repository". Swallowing a spent budget
     // here would turn every axis below into an observation that there is no harness.
     await expect(probing).rejects.toThrow(Error)
     await expect(probing).rejects.toThrow(/root probe budget exhausted/)

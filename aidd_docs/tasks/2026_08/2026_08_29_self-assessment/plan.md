@@ -118,38 +118,21 @@ a self-assessment suite red for a reason having nothing to do with self-assessme
 
 ## What this repository cannot prove, and why that is right
 
-`proven: null`, with `harness` `CONFIRMED` and `size`, `intervention` and `parallelism`
+`proven: null`, with `harness` and `size` `CONFIRMED`, `intervention` and `parallelism`
 `UNKNOWN`.
 
-* `intervention` is unobservable on any local history — the documented MVP ceiling.
-* `size` and `parallelism` are unobservable **here** for a different reason:
-  `MINIMUM_DELIVERED_CHANGES` and `MINIMUM_ACTIVE_DAYS` are both `5`, and this repository
-  has three merge commits. A sample is not a habit.
+* `intervention` is unobservable on any local history — the documented MVP ceiling, and the
+  one axis every level declares, so it alone is enough to make `proven: null` this command's
+  normal output.
+* `parallelism` is unobservable **here** for a different reason: `MINIMUM_ACTIVE_DAYS` is
+  `5`, and this repository has fewer. A sample is not a habit.
 
-Both were left alone. Lowering a minimum, or letting the model ask less, would have bought
-a nicer self-assessment by weakening the rule that makes any assessment worth reading. The
-honest answer to "how mature is AIDD" is that its own history is too short to say, and the
-report says exactly that.
+`size` crossed its own floor while this branch was open, which is worth recording: the
+branch was written when it had not, and the first draft of this file said both Git-derived
+axes were out of reach. **The floors were not touched.** Lowering one, or letting the model
+ask less, would buy a nicer self-assessment by weakening the rule that makes any assessment
+worth reading — and `git-history.ts` now says so at the constant itself, in a `LIMITATION:`
+that names the temptation and this repository as the case that invites it.
 
-## What the blocking section still cannot say
-
-`no observable evidence was established` was `UNKNOWN` restated in longer words. It named
-nothing missing, which is exactly what `project-brief.md`'s conservative rule owes a reader:
-*"AIDD must explain what evidence is missing or conflicting."* The line now names who was
-asked — `asked live-repository, and no value was observed` — and prose gained a
-`Collectors that ran:` line, since only failures had a section and a clean run never told
-the reader whether one collector had looked or ten.
-
-**Why a collector that ran emitted nothing for a given axis is still unsaid.** The reasons
-exist and are known — `intervention` is a forge concept; `size` and `parallelism` need five
-delivered changes against this repository's three — but none of them is in the report. A
-`COMPLETED` provenance entry carries no per-axis reason, so a renderer that explained the
-gap would be holding domain knowledge the contract never gave it, which is business logic in
-a driving adapter. Lifting it needs a field on `ProvenanceEntry`, and the contract is frozen.
-Recorded as owed, and deliberately not faked here.
-
-## One cost taken knowingly
-
-* **`expect(run.stderr).toBe('')`** is stricter than `cli.md` promises — it reserves the
-  right to warn on a successful run. Held anyway: a warning appearing on the tool assessing
-  itself is worth one red suite.
+The honest answer to "how mature is AIDD" is still that its own history cannot establish
+even the baseline, and the report says which axes are missing rather than guessing.

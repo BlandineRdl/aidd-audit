@@ -7,27 +7,13 @@ const TAGS = ['INVARIANT', 'SAFETY', 'COMPAT', 'LIMITATION']
 const TAGGED = new RegExp(`^//\\s*(${TAGS.join('|')}):`)
 const GOVERNED = /^(src\/.*\.ts|tests\/.*\.ts|scripts\/.*\.mjs)$/
 
-const git = (args) => execFileSync('git', args, { encoding: 'utf8' })
-const lines = (output) => output.split('\n').filter((line) => line !== '')
-
-function changedFiles() {
-  const paths = [
-    ...sinceMain(),
-    ...lines(git(['diff', '--name-only', 'HEAD'])),
-    ...lines(git(['ls-files', '--others', '--exclude-standard'])),
-  ]
-  return [...new Set(paths)].filter((path) => GOVERNED.test(path))
-}
-
-function sinceMain() {
-  try {
-    const base = git(['merge-base', 'HEAD', 'main']).trim()
-    return lines(git(['diff', '--name-only', `${base}...HEAD`]))
-  } catch {
-    // LIMITATION: no main to compare against — a fresh clone, or another trunk.
-    // The working tree alone is judged.
-    return []
-  }
+// `--others` so a new file is judged before it is ever tracked.
+function governedFiles() {
+  return execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard'], {
+    encoding: 'utf8',
+  })
+    .split('\n')
+    .filter((path) => GOVERNED.test(path))
 }
 
 function offencesIn(path) {
@@ -52,7 +38,11 @@ function offencesIn(path) {
     const line = raw.trim()
     if (line.startsWith('/*')) {
       close()
-      found.push({ line: index + 1, first: line, why: 'is a docblock' })
+      // A single-line `/* ... */` carrying code after it is a pragma, not a docblock.
+      const spans = !line.includes('*/')
+      if (line.startsWith('/**') || spans) {
+        found.push({ line: index + 1, first: line, why: 'is a docblock' })
+      }
       continue
     }
     if (line.startsWith('//')) {
@@ -66,12 +56,12 @@ function offencesIn(path) {
   return found
 }
 
-const offences = changedFiles().flatMap((path) =>
+const offences = governedFiles().flatMap((path) =>
   offencesIn(path).map((offence) => ({ path, ...offence })),
 )
 
 if (offences.length === 0) {
-  console.log('✔ comments in the changed files are `//`, and every block declares its purpose')
+  console.log('✔ comments are `//`, and every block declares its purpose')
   process.exit(0)
 }
 

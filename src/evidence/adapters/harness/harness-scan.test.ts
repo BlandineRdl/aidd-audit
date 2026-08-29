@@ -6,22 +6,21 @@ import { runGit } from '../live-repository/git-process.js'
 import { trackedTree } from '../live-repository/tracked-tree.js'
 import { scanHarness } from './harness-scan.js'
 
-// Integration: real temporary Git repositories on the real filesystem. The tracked tree and
-// the recorded file modes are the boundary under test, so neither is faked.
+// Integration: the tracked tree and the recorded file modes are the boundary under test.
 
 const unbounded = new AbortController().signal
 const NO_TRAILER = false
 const A_TRAILER = true
-/** The commit history could not be read at all, which is not the same as holding no trailer. */
+// The commit history could not be read at all, which is not the same as holding no trailer.
 const AN_UNREADABLE_HISTORY = null
 
 interface FileSpec {
   readonly path: string
   readonly content?: string
   readonly executable?: boolean
-  /** `100755` in the index, no execute bit on disk: a clone with `core.fileMode=false`. */
+  // `100755` in the index, no execute bit on disk: a clone with `core.fileMode=false`.
   readonly executableInTheIndexOnly?: boolean
-  /** Tracked, then removed from the working copy: listed by `ls-files`, unreadable on disk. */
+  // Tracked, then removed from the working copy: listed by `ls-files`, unreadable on disk.
   readonly deletedFromTheWorkingCopy?: boolean
 }
 
@@ -38,7 +37,7 @@ async function writeInto(root: string, file: FileSpec): Promise<void> {
   await chmod(absolute, file.executable === true ? 0o755 : 0o644)
 }
 
-/** `os.tmpdir()` is a symlink on macOS, so the root is resolved before anything joins onto it. */
+// `os.tmpdir()` is a symlink on macOS, so the root is resolved before anything joins onto it.
 async function repositoryWith(
   tracked: readonly FileSpec[],
   untracked: readonly FileSpec[] = [],
@@ -205,8 +204,8 @@ describe('scanHarness', () => {
       { path: 'packages/api/index.ts' },
     ])
 
-    // Bare `ls-files` under `packages/api` would miss the root `CLAUDE.md`, and the set would
-    // publish without `context-engineering` — a practice gap on a repository that has it.
+    // SAFETY: Bare `ls-files` under `packages/api` would miss the root `CLAUDE.md`, and the set
+    // would publish without `context-engineering` — a practice gap on a repository that has it.
     await expect(
       scanHarness(await trackedTree(join(root, 'packages/api'), unbounded), NO_TRAILER, unbounded),
     ).resolves.toEqual({
@@ -281,9 +280,9 @@ describe('scanHarness', () => {
     })
   })
 
-  // Every entry is the only proof its repository holds, so removing it from the table turns
-  // its case red. The entries are written out here because a list read out of the module
-  // would only shrink with it.
+  // INVARIANT: every entry is the only proof its repository holds, so removing it from the table
+  // turns its case red. The entries are written out rather than read from the module, which would
+  // only shrink with it.
   describe('the closed tables, each entry pinned by the capability it alone proves', () => {
     it.each(['session.md', 'prompt-history.md', '.aider.chat.history.md'])(
       'proves prompts from a tracked %s',
@@ -394,8 +393,8 @@ describe('scanHarness', () => {
 
     it('proves nothing from a tracked .aider.conf.yml and does not cost the axis, because the list names no file the recogniser cannot read', async () => {
       const aiderConfiguration = 'read:\n  - CONVENTIONS.md\nauto-commits: false\n'
-      // The fixture only means anything if the document is not JSON: listing it would make
-      // every repository holding one an unparseable source, and the harness axis UNKNOWN.
+      // INVARIANT: the fixture only means anything if the document is not JSON: listing it would
+      // make every repository holding one an unparseable source, and the harness axis UNKNOWN.
       expect(() => JSON.parse(aiderConfiguration)).toThrow(SyntaxError)
 
       const root = await repositoryWith([{ path: '.aider.conf.yml', content: aiderConfiguration }])
@@ -839,8 +838,8 @@ describe('scanHarness', () => {
       },
     ])
 
-    // The unreadable settings file was the only route to `behavior`, and it is also a tracked
-    // file that could have held the loop; the history answered for neither.
+    // INVARIANT: The unreadable settings file was the only route to `behavior`, and it is also a
+    // tracked file that could have held the loop; the history answered for neither.
     await expect(
       scanHarness(await trackedTree(root, unbounded), AN_UNREADABLE_HISTORY, unbounded),
     ).resolves.toEqual({
@@ -895,11 +894,11 @@ describe('scanHarness', () => {
     })
   })
 
-  // The scan checks the budget before each piece of work, so an abort raised at any point
-  // surfaces as a rejection rather than a completed scan on a half-read tree. The counts
+  // INVARIANT: the scan checks the budget before each piece of work, so an abort raised at any
+  // point surfaces as a rejection rather than a completed scan on a half-read tree. The counts
   // below are what pins each check: drop one and the highest checkpoint stops existing.
 
-  /** A real signal exhausted on its `nth` check, so a checkpoint is addressable by position. */
+  // A real signal exhausted on its `nth` check, so a checkpoint is addressable by position.
   function signalExhaustedAt(
     nth: number,
     reason: Error,
@@ -931,12 +930,7 @@ describe('scanHarness', () => {
     { path: 'README.md' },
   ]
 
-  /**
-   * Entry, the root resolution's own check inside `runGit`, the tracked listing's, before the
-   * behavior pass, the settings file, before the script walk, then one per tracked file. Two
-   * of those sit inside `runGit`, which this module does not own, so a bare count mismatch
-   * here is most likely that coupling moving rather than a regression in what the scan decides.
-   */
+  // Integration: the tracked tree and the recorded file modes are the boundary under test.
   const EXPECTED_CHECKS = 4 + 2 + A_TREE_WITH_A_SETTINGS_FILE.length
 
   it('checks the budget at every phase boundary it owns', async () => {
@@ -991,8 +985,8 @@ describe('scanHarness', () => {
     await expect(scan).rejects.toThrow(/harness scan budget exhausted/)
   })
 
-  // The shell expands parameters inside double quotes and not inside single ones, so reading
-  // both as opaque costs `loops` on the better-written of two identical scripts.
+  // SAFETY: the shell expands parameters inside double quotes and not inside single ones, so
+  // reading both as opaque costs `loops` on the better-written of two identical scripts.
   const retryOn = (condition: string, capture = 'rc=$?'): string =>
     `#!/bin/bash\nrc=1\nwhile ${condition}; do\n  claude -p "fix"\n  pnpm check\n  ${capture}\ndone\n`
 
@@ -1040,8 +1034,8 @@ describe('scanHarness', () => {
       { path: 'scripts/retry.sh', content: retryOn('[ "$rc" -ne 0 ]'), executable: true },
     ])
 
-    // The contrast is the assertion: `'$rc'` is three characters and `"$rc"` is a reference,
-    // so one loop hangs on an exit status and the other hangs on a constant.
+    // INVARIANT: The contrast is the assertion: `'$rc'` is three characters and `"$rc"` is a
+    // reference, so one loop hangs on an exit status and the other hangs on a constant.
     await expect(
       scanHarness(await trackedTree(single, unbounded), NO_TRAILER, unbounded),
     ).resolves.toEqual({
@@ -1079,7 +1073,7 @@ describe('scanHarness', () => {
       },
     ])
 
-    // `$( … )` is another command's exit status, not this loop's test of `rc`. Reading the
+    // SAFETY: `$( … )` is another command's exit status, not this loop's test of `rc`. Reading the
     // name through it would prove a retry on a coincidence of spelling.
     await expect(
       scanHarness(await trackedTree(root, unbounded), NO_TRAILER, unbounded),
@@ -1240,8 +1234,8 @@ describe('scanHarness', () => {
       },
     ])
 
-    // Known-not-status is decidable; unknown origin is not. `compute_start` may well return
-    // the exit code this loop is retrying on, and nothing here says otherwise.
+    // INVARIANT: known-not-status is decidable; unknown origin is not. `compute_start` may well
+    // return the exit code this loop is retrying on, and nothing here says otherwise.
     await expect(
       scanHarness(await trackedTree(root, unbounded), NO_TRAILER, unbounded),
     ).resolves.toEqual({
@@ -1260,8 +1254,8 @@ describe('scanHarness', () => {
       },
     ])
 
-    // The header references `line`, and `read` is where `line` came from: a line of input is
-    // not an exit status, so the continuation is positively recognised as iteration.
+    // INVARIANT: The header references `line`, and `read` is where `line` came from: a line of
+    // input is not an exit status, so the continuation is positively recognised as iteration.
     await expect(
       scanHarness(await trackedTree(root, unbounded), NO_TRAILER, unbounded),
     ).resolves.toEqual({
@@ -1298,7 +1292,7 @@ describe('scanHarness', () => {
         },
       ])
 
-      // An early stop is where a retry can hide: the loop runs the agent again unless
+      // SAFETY: an early stop is where a retry can hide: the loop runs the agent again unless
       // something ends it, and what ends it here was not read.
       await expect(
         scanHarness(await trackedTree(root, unbounded), NO_TRAILER, unbounded),
@@ -1463,12 +1457,12 @@ describe('scanHarness', () => {
         },
       ])
 
-      // The rare branch that answers a decided NO rather than "undecidable", and a decided NO
-      // becomes NOT_MET downstream — a practice gap. It is right under the product's own
-      // definition: `loops` is "a script re-runs the AI until a project command passes", and
-      // `[ -f .migration-lock ]` tests a file, not the outcome of a build, test or check.
-      // Admitting `test` as a project command instead would let `while [ $i -lt 10 ]` grant
-      // Silver to a repository that never built a retry loop.
+      // SAFETY: The rare branch that answers a decided NO rather than "undecidable", and a decided
+      // NO becomes NOT_MET downstream — a practice gap. It is right under the product's own
+      // definition: `loops` is "a script re-runs the AI until a project command passes", and `[ -f
+      // .migration-lock ]` tests a file, not the outcome of a build, test or check. Admitting
+      // `test` as a project command instead would let `while [ $i -lt 10 ]` grant Silver to a
+      // repository that never built a retry loop.
       await expect(
         scanHarness(await trackedTree(root, unbounded), NO_TRAILER, unbounded),
       ).resolves.toEqual({
@@ -1507,11 +1501,9 @@ describe('scanHarness', () => {
       },
     )
 
-    /**
-     * Every keyword sits on the same line as the word it opens a command position for: a
-     * newline is a separator and would mark that word anyway, so a fixture wrapping after the
-     * keyword pins nothing.
-     */
+    // INVARIANT: every keyword sits on the same line as the word it opens a command position for: a
+    // newline is a separator and would mark that word anyway, so a fixture wrapping after the
+    // keyword pins nothing.
     const KEYWORD_SHAPES = [
       ['do', '#!/bin/bash\nuntil pnpm check; do claude -p "fix"; done\n'],
       ['if', '#!/bin/bash\nwhile true; do claude -p fix; if pnpm check; then break; fi; done\n'],

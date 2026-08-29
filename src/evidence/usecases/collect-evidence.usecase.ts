@@ -39,10 +39,9 @@ export async function collectEvidence(
     request.collectors.map((collector) => runCollector(collector, requestedAxes, context)),
   )
 
-  // A rejected collect() carries no observations, so with today's port every FAILED,
-  // TIMED_OUT or SKIPPED run has observations: []. Concatenating every run's observations
-  // unconditionally, rather than filtering to COMPLETED runs, is what keeps this correct
-  // unchanged the day the port lets a partial run carry some.
+  // SAFETY: concatenate every run's observations unconditionally rather than filtering to COMPLETED
+  // — today a rejected collect() always yields observations: [], but filtering would silently drop
+  // future partial runs.
   const observations = outcomes.flatMap((outcome) => outcome.run.observations)
 
   return {

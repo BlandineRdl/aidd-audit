@@ -2,21 +2,17 @@ import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { bucketForFiles, bucketForLines, lowerBucket } from '../size-buckets.js'
 
-/**
- * The delivery record a bundle carries, read from `git-activity.json`.
- *
- * A bundle publishes medians already aggregated over its own declared period, so nothing here
- * re-slices a window or checks a sample size: the counts behind an aggregate are not in it.
- *
- * `null` is a value the record did not yield, never a measurement of zero — the axis it belongs
- * to goes unobserved rather than being published low, which a minimum-threshold scale would
- * turn into a practice gap nobody saw.
- */
+// INVARIANT: The delivery record a bundle carries, read from `git-activity.json`. A bundle
+// publishes medians already aggregated over its own declared period, so nothing here re-slices a
+// window or checks a sample size: the counts behind an aggregate are not in it. `null` is a value
+// the record did not yield, never a measurement of zero — the axis it belongs to goes unobserved
+// rather than being published low, which a minimum-threshold scale would turn into a practice gap
+// nobody saw.
 export interface RecordedActivity {
   readonly sizeBucket: string | null
   readonly intervention: string | null
   readonly parallelism: number | null
-  /** `false` is a commit record read and holding no AI attribution; `null` is one not read. */
+  // `false` is a commit record read and holding no AI attribution; `null` is one not read.
   readonly aiAttribution: boolean | null
 }
 
@@ -29,8 +25,8 @@ const NOTHING_RECORDED: RecordedActivity = {
   aiAttribution: null,
 }
 
-/** A change opened and never corrected. At this share the subject is granted the autonomy the
- *  corrective-commit median alone cannot express. */
+// INVARIANT: A change opened and never corrected. At this share the subject is granted the autonomy
+// the corrective-commit median alone cannot express.
 const ZERO_TOUCH_SHARE_FOR_AUTONOMY = 0.9
 
 export async function readRecordedActivity(bundlePath: string): Promise<RecordedActivity> {

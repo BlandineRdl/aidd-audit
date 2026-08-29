@@ -1,6 +1,6 @@
 import YAML from 'yaml'
 
-/** Loosely typed on purpose, so a test can build a malformed document without casting. */
+// Loosely typed on purpose, so a test can build a malformed document without casting.
 interface TestRequirement {
   axis: string
   min?: number | string
@@ -34,7 +34,6 @@ interface TestDocument {
   levels?: TestLevel[] | undefined
 }
 
-/** Finds an item or fails the test setup loudly — never an unchecked index. */
 function pick<T>(items: readonly T[], match: (item: T) => boolean): T {
   const found = items.find(match)
   if (found === undefined) {
@@ -43,10 +42,8 @@ function pick<T>(items: readonly T[], match: (item: T) => boolean): T {
   return found
 }
 
-/**
- * One axis per scale kind: cumulativity compares differently on each, so a
- * fixture missing a kind leaves that comparison unpinned.
- */
+// INVARIANT: one axis per scale kind — cumulativity compares differently on each, so a fixture
+// missing a kind leaves that comparison unpinned.
 const validDocument: TestDocument = {
   schemaVersion: 1,
   id: 'test',
@@ -86,17 +83,14 @@ const validDocument: TestDocument = {
 
 const validSource = YAML.stringify(validDocument)
 
-/** Deep-clones the valid document and lets the caller mutate the clone. */
 function mutate(edit: (document: TestDocument) => void): string {
   const document = structuredClone(validDocument)
   edit(document)
   return YAML.stringify(document)
 }
 
-/**
- * `TestDocument` cannot express the `id: 123` a shape test must send. The JSON
- * round-trip clones it as `JSON.parse`'s own `any`, which is not a cast.
- */
+// LIMITATION: TestDocument cannot express the `id: 123` a shape test must send; the JSON round-trip
+// clones it as JSON.parse's own `any`, which is not a cast.
 function mutateShape(edit: (document: ReturnType<typeof JSON.parse>) => void): string {
   const document = JSON.parse(JSON.stringify(validDocument))
   edit(document)
