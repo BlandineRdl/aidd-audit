@@ -29,6 +29,18 @@ const NOTHING_RECORDED: RecordedActivity = {
 // the corrective-commit median alone cannot express.
 const ZERO_TOUCH_SHARE_FOR_AUTONOMY = 0.9
 
+// LIMITATION: The two cut points between the three corrected degrees of `intervention`. **Chosen,
+// not measured**, on the same footing as `git-history.ts`'s sample floors: no distribution of
+// corrective commits was consulted, and the four reference profiles are fixtures rather than a
+// corpus. They sit on half-integers because the record publishes a median, which is a half-integer
+// whenever the sample is even — a boundary on a whole number would put a median of exactly 2 and a
+// median of 2 reached by rounding on opposite sides of a line nobody controls. The cost is
+// asymmetric in the usual direction: too low credits a practice with autonomy it has not shown,
+// which is a level stated confidently and wrongly; too high grades a real practice down, which the
+// report names as a practice gap. Move either only from an observed distribution.
+const CORRECTIONS_FOR_MOST_CHANGES = 2.5
+const CORRECTIONS_FOR_SOME_CHANGES = 1.5
+
 export async function readRecordedActivity(bundlePath: string): Promise<RecordedActivity> {
   const document = await readJsonFile(join(bundlePath, ACTIVITY_FILE))
   if (document === null) return NOTHING_RECORDED
@@ -61,8 +73,8 @@ function readIntervention(pullRequests: unknown, total: number | null): string |
   if (corrections === null) return null
 
   if (isAutonomous(pullRequests, total)) return 'never-once-framed'
-  if (corrections >= 2.5) return 'after-the-fact-most'
-  if (corrections >= 1.5) return 'after-the-fact-some'
+  if (corrections >= CORRECTIONS_FOR_MOST_CHANGES) return 'after-the-fact-most'
+  if (corrections >= CORRECTIONS_FOR_SOME_CHANGES) return 'after-the-fact-some'
   return 'key-steps'
 }
 
