@@ -11,14 +11,15 @@ One assertion, one command, one verdict. An agent reading `pnpm architecture fai
 | `pnpm typecheck` | TypeScript, `strict` |
 | `pnpm test` | Vitest, behavior only — and tsup, which `tests/cli/process-contract.test.ts` runs to build the binary it spawns |
 | `pnpm architecture` | dependency-cruiser boundary rules, then the proof that those rules bite |
-| `pnpm comments` | that every multi-line `//` block in the changed files declares its purpose |
-| `pnpm check` | the four above, in that order, fail-fast |
+| `pnpm comments` | that every multi-line `//` block declares its purpose |
+| `pnpm mutation` | Stryker over the decision logic. Minutes, not seconds — see `testing.md` |
+| `pnpm check` | `typecheck`, `test`, `architecture`, `comments`, in that order, fail-fast. Not `mutation` |
 | `pnpm format` | Biome, rewrites files in place |
 | `pnpm format:check` | Biome, reports without rewriting |
 
 Formatting is deliberately outside `check`: a mis-indented file blocks nothing about correctness. That reason once covered `build` too; it no longer does — see **Before push**. Biome is a formatter here and nothing else — its linter is off, `typecheck` and `architecture` already own those verdicts.
 
-### Comments are judged mechanically, on the changed files only
+### Comments are judged mechanically, over the whole tree
 
 `.claude/rules/01-standards/1-comments.md` bans `/** */` outright and requires a multi-line `//` block to open with `INVARIANT:`, `SAFETY:`, `COMPAT:` or `LIMITATION:`. `scripts/check-comment-tags.mjs` is what makes that a verdict rather than a suggestion — it was the one rule in `.claude/rules/` with no mechanical counterpart, and a rule nothing checks is a rule nobody has checked.
 
@@ -27,6 +28,8 @@ Formatting is deliberately outside `check`: a mis-indented file blocks nothing a
 **File-header prose is not an exception.** What a module is for belongs in `aidd_docs/`, and a header repeating it is duplication. One line, or nothing.
 
 **It judges every governed file in the tree**, tracked or not — `git ls-files --cached --others`, so a new file is caught before it is ever added. It was scoped to the current branch's changed files while the repository still held 220 non-conforming blocks; that migration is done and the scoping went with it.
+
+**Governed is `src/**.ts`, `tests/**.ts`, `scripts/**.mjs` and the root configs** — `*.config.ts`, `*.cjs`, `*.mjs`. The root was outside it once, and that is where the last docblock in the repository sat: `.dependency-cruiser.cjs`, the file defining the architecture rules. A gate that cannot reach the files configuring the gate is the same failure this whole section exists to close.
 
 **A single line needs no tag, and that is the rule's one soft edge.** A long reason compressed onto one line passes; wrapped back to the project's `lineWidth` of 100 it becomes a block, and a block needs a tag. Biome does not wrap comments, so nothing reports the overrun — this is a review catch, and the migration produced nineteen of them in one batch.
 
@@ -65,6 +68,8 @@ The walls themselves are in `architecture.md` under **Dependency rules**. `pnpm 
 `scripts/prove-boundary-rules.mjs` closes that gap. It writes a sentinel violation for every rule in every folder that rule reaches, cruises, and fails unless each one fired — matching on the pair *(rule, violating file)*, so no sentinel can vouch for another. It always removes what it wrote, and sweeps stale sentinels before starting.
 
 Adding a boundary rule means adding its sentinel, and so does widening one: a rule extended to a new folder is unproven there until a sentinel sits in it. When several rules widen into the same folder, each one needs its own sentinel there — one rule's sentinel proves nothing about the others sharing that path. A rule with no sentinel is a rule nobody has checked.
+
+**`ports/` is domain and the three `domain-has-no-*` rules say so.** They omitted it once while `no-orphans` in the same file exempted `contracts/` and `ports/` as domain — one config calling the same folder two things, and `evidence-collector.port.ts`, frozen in `architecture.md`, free to import `node:fs` with the gate green. Widening those three earned three sentinels in `src/evidence/ports/`, one per rule.
 
 **Moving a file can walk it out from under a rule, and nothing says so.** These rules match on paths, so a rule written against `^src/[^/]+/adapters/` stops applying the moment the file it guarded moves to `^src/[^/]+/loading/` — no violation, no warning, one fewer wall. The sentinel keeps passing, because it still proves the rule bites in the folder it names. Whenever a file crosses folders, re-read every rule whose path mentioned the folder it left, and give the folder it entered its own sentinel.
 

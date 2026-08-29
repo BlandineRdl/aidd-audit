@@ -1,15 +1,13 @@
 import {
   isSetRequirement,
-  type AxisId,
   type LevelRequirement,
   type MaturityModel,
   type MinRequirement,
   type OrdinalScale,
-  type Scale,
   type SetRequirement,
 } from '../models/maturity.model.js'
 import type { ObservedValue } from '../models/axis-observation.model.js'
-import { InvalidMaturityModelError } from '../models/invalid-maturity-model.error.js'
+import { scaleForAxis } from '../models/scale-for-axis.js'
 import { requireThresholdOnScale } from '../models/threshold-on-scale.js'
 import { InvalidObservationError } from './invalid-observation.error.js'
 
@@ -30,21 +28,6 @@ export function reaches(
   }
 
   return meetsNumericMinimum(requirement, value)
-}
-
-function scaleForAxis(model: MaturityModel, axisId: AxisId): Scale {
-  const axis = model.axes.find((candidate) => candidate.id === axisId)
-  if (axis === undefined) {
-    throw new InvalidMaturityModelError(`Unknown axis '${axisId}'.`)
-  }
-
-  // Object.hasOwn: see model-consistency.ts's requireVocabulary.
-  const scale = Object.hasOwn(model.scales, axis.scale) ? model.scales[axis.scale] : undefined
-  if (scale === undefined) {
-    throw new InvalidMaturityModelError(`Unknown scale '${axis.scale}'.`)
-  }
-
-  return scale
 }
 
 function holdsEveryMember(requirement: SetRequirement, value: ObservedValue): boolean {

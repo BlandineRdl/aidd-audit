@@ -5,7 +5,10 @@ import { readFileSync } from 'node:fs'
 
 const TAGS = ['INVARIANT', 'SAFETY', 'COMPAT', 'LIMITATION']
 const TAGGED = new RegExp(`^//\\s*(${TAGS.join('|')}):`)
-const GOVERNED = /^(src\/.*\.ts|tests\/.*\.ts|scripts\/.*\.mjs)$/
+// INVARIANT: the root configs are governed too. The rule was written for the code and the one
+// docblock left in the repository sat in `.dependency-cruiser.cjs`, which defines the
+// architecture rules — a rule its own gate could not reach is a rule nobody had checked.
+const GOVERNED = /^(src\/.*\.ts|tests\/.*\.ts|scripts\/.*\.mjs|[^/]*\.(config\.ts|cjs|mjs))$/
 
 // `--others` so a new file is judged before it is ever tracked.
 function governedFiles() {

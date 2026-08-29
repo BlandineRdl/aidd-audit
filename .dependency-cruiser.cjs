@@ -1,9 +1,6 @@
-/**
- * Architecture boundaries, enforced mechanically.
- *
- * INSTALL.md step 5: this is the wall parallel worktree agents are most likely
- * to breach, so it must fail in `pnpm architecture`, not in review.
- */
+// INVARIANT: architecture boundaries, enforced mechanically. INSTALL.md step 5: this is the wall
+// parallel worktree agents are most likely to breach, so it must fail in `pnpm architecture`,
+// not in review.
 module.exports = {
   forbidden: [
     {
@@ -42,14 +39,14 @@ module.exports = {
       comment:
         'Infrastructure crosses inward through ports. Models and use cases never touch the disk.',
       severity: 'error',
-      from: { path: '^src/[^/]+/(models|usecases|contracts|engine|resolution|composition)/' },
+      from: { path: '^src/[^/]+/(models|usecases|contracts|engine|ports|resolution|composition)/' },
       to: { dependencyTypes: ['core'], path: '^(node:)?(fs|fs/promises|path|os)$' },
     },
     {
       name: 'domain-has-no-processes',
       comment: 'Git is reached through an adapter, never spawned from a use case.',
       severity: 'error',
-      from: { path: '^src/[^/]+/(models|usecases|contracts|engine|resolution|composition)/' },
+      from: { path: '^src/[^/]+/(models|usecases|contracts|engine|ports|resolution|composition)/' },
       to: { dependencyTypes: ['core'], path: '^(node:)?child_process$' },
     },
     {
@@ -57,7 +54,7 @@ module.exports = {
       comment:
         'The YAML parser belongs to maturity/loading/. No domain or use-case file imports a vendor package.',
       severity: 'error',
-      from: { path: '^src/[^/]+/(models|usecases|contracts|engine|resolution|composition)/' },
+      from: { path: '^src/[^/]+/(models|usecases|contracts|engine|ports|resolution|composition)/' },
       to: {
         dependencyTypes: [
           'npm',
@@ -89,7 +86,7 @@ module.exports = {
   ],
   options: {
     doNotFollow: { path: 'node_modules' },
-    // The test graph is not the production graph. A co-located suite imports
+    // SAFETY: the test graph is not the production graph. A co-located suite imports
     // vitest — a devDependency — from inside engine/, composition/ or
     // usecases/, which `domain-has-no-vendor-sdk` forbids, and rightly so for
     // the code that ships. These rules describe what dist/cli.js is allowed to depend on, so

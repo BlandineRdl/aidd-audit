@@ -284,6 +284,13 @@ async function readFirstParentWalk(
   return commits
 }
 
+// INVARIANT: one `git` invocation for every delivered change, not one per change. `--no-walk` names
+// the merges instead of traversing to them, and `--diff-merges=first-parent` gives each the same
+// diff `git diff M^1 M` gives — the batch is a change of cost, never of reading. The chunk bound is
+// argv, not git: a repository with thousands of merges in the window would otherwise build a command
+// line the kernel refuses, and a refusal here is a whole axis lost.
+const MERGES_PER_DIFF_INVOCATION = 500
+
 async function readSizeBucket(
   path: string,
   deliveredChanges: readonly DeliveredChange[],
@@ -291,12 +298,31 @@ async function readSizeBucket(
 ): Promise<SizeBucket | null> {
   if (deliveredChanges.length < MINIMUM_DELIVERED_CHANGES) return null
 
+  const diffstats = new Map<string, Diffstat>()
+  for (let from = 0; from < deliveredChanges.length; from += MERGES_PER_DIFF_INVOCATION) {
+    const chunk = deliveredChanges.slice(from, from + MERGES_PER_DIFF_INVOCATION)
+    const stdout = await runGit(
+      path,
+      [
+        'log',
+        '--no-walk',
+        '--diff-merges=first-parent',
+        '--no-ext-diff',
+        '--no-textconv',
+        '--numstat',
+        `--format=${RECORD}%H`,
+        ...chunk.map((merge) => merge.hash),
+      ],
+      signal,
+    )
+    for (const [hash, diffstat] of readDiffstatsByCommit(stdout)) diffstats.set(hash, diffstat)
+  }
+
   const changedLines: number[] = []
   const changedFiles: number[] = []
   for (const merge of deliveredChanges) {
-    const diffstat = readDiffstat(
-      await runGit(path, ['diff', '--numstat', merge.parents[0], merge.hash], signal),
-    )
+    // A merge git reported nothing for changed nothing, which is a delivered change of zero lines.
+    const diffstat = diffstats.get(merge.hash) ?? { lines: 0, files: 0 }
     changedLines.push(diffstat.lines)
     changedFiles.push(diffstat.files)
   }
@@ -304,11 +330,33 @@ async function readSizeBucket(
   return lowerBucket(bucketForLines(median(changedLines)), bucketForFiles(median(changedFiles)))
 }
 
+// Opens each commit's record. Never occurs in a hash, a numstat row or a path.
+const RECORD = '\x1e'
+
+interface Diffstat {
+  readonly lines: number
+  readonly files: number
+}
+
+function readDiffstatsByCommit(stdout: string): ReadonlyMap<string, Diffstat> {
+  const byCommit = new Map<string, Diffstat>()
+
+  for (const record of stdout.split(RECORD)) {
+    const [header, ...rows] = record.split('\n')
+    if (header === undefined) continue
+    const hash = header.trim()
+    if (hash === '') continue
+    byCommit.set(hash, readDiffstat(rows.join('\n')))
+  }
+
+  return byCommit
+}
+
 // `added \t deleted \t path`. A binary file shows `-` for both: a changed file, zero lines.
 const NUMSTAT_ROW = /^(\d+|-)\t(\d+|-)\t/
 
 // Lines changed is additions *and* deletions: a change that removes 300 lines is not empty.
-function readDiffstat(stdout: string): { lines: number; files: number } {
+function readDiffstat(stdout: string): Diffstat {
   let lines = 0
   let files = 0
   for (const row of stdout.split('\n')) {
@@ -447,19 +495,51 @@ async function readParallelism(
     record('mainline', commit.authorDate)
   }
 
-  for (const merge of merges) {
-    for (const [index, side] of mergeSideRevisions(merge).entries()) {
-      const stdout = await runGit(path, ['log', '--format=%aI', ...side], signal)
-      const branch = `${merge.hash}:${index + 1}`
-      for (const line of stdout.split('\n')) {
-        if (line.trim() === '') continue
-        record(branch, line.trim())
-      }
+  // INVARIANT: Each side is its own revision range and cannot be batched into one invocation without
+  // losing which side a commit came from, so the cost is bounded by running them a few at a time
+  // rather than one at a time. The results are recorded in the order the sides were listed, never
+  // the order they returned, so a report cannot depend on which spawn finished first. Which
+  // revisions make a side is `mergeSideRevisions`, shared with the autonomy reading so the octopus
+  // rule has one home.
+  const sides = merges.flatMap((merge) =>
+    mergeSideRevisions(merge).map((revisions, index) => ({
+      branch: `${merge.hash}:${index + 1}`,
+      revisions,
+    })),
+  )
+
+  for (const dates of await inBoundedParallel(sides, (side) =>
+    runGit(path, ['log', '--format=%aI', ...side.revisions], signal).then((stdout) => ({
+      branch: side.branch,
+      lines: stdout.split('\n'),
+    })),
+  )) {
+    for (const line of dates.lines) {
+      if (line.trim() === '') continue
+      record(dates.branch, line.trim())
     }
   }
 
   if (branchesByDay.size < MINIMUM_ACTIVE_DAYS) return null
   return median([...branchesByDay.values()].map((branches) => branches.size))
+}
+
+// SAFETY: Enough spawns in flight to hide each one's startup cost, few enough that a repository with
+// a thousand merge sides does not try to run a thousand `git` processes at once. Order is preserved,
+// so the caller reads the same sequence it passed whatever order the work completed in.
+const SPAWNS_IN_FLIGHT = 8
+
+async function inBoundedParallel<Input, Output>(
+  inputs: readonly Input[],
+  run: (input: Input) => Promise<Output>,
+): Promise<readonly Output[]> {
+  const outputs: Output[] = []
+
+  for (let from = 0; from < inputs.length; from += SPAWNS_IN_FLIGHT) {
+    outputs.push(...(await Promise.all(inputs.slice(from, from + SPAWNS_IN_FLIGHT).map(run))))
+  }
+
+  return outputs
 }
 
 // INVARIANT: The author's own day, read from the `%aI` text rather than recomputed in the reader's
@@ -469,11 +549,16 @@ function calendarDay(authorDate: string): string | null {
   return match?.[1] ?? null
 }
 
-// Callers guarantee a non-empty sample; an even count yields a half-integer median.
+// SAFETY: callers guarantee a non-empty sample, and an even count yields a half-integer median.
+// A default of zero would publish the smallest bucket from a sample nobody took — a practice gap
+// invented out of an empty list, which is the one outcome this project forbids outright.
 function median(values: readonly number[]): number {
   const sorted = [...values].sort((left, right) => left - right)
   const middle = Math.floor(sorted.length / 2)
-  const upper = sorted[middle] ?? 0
-  if (sorted.length % 2 === 1) return upper
-  return ((sorted[middle - 1] ?? 0) + upper) / 2
+  const upper = sorted[middle]
+  const lower = sorted.length % 2 === 1 ? upper : sorted[middle - 1]
+  if (upper === undefined || lower === undefined) {
+    throw new RangeError('A median needs a non-empty sample.')
+  }
+  return (lower + upper) / 2
 }

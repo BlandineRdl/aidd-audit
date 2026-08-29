@@ -18,6 +18,7 @@ How this project is tested: TDD boundaries, doubles, and validation.
   * `tests/assessment/vocabulary-conformance.test.ts` — the one place allowed to import all three contexts;
   * `tests/cli/reference-profiles.test.ts` — the four reference profiles assessed through `runAssess`, the whole chain and no single unit.
 * **Co-location is not mirroring.** `resolve-evidence.test.ts` exists because resolution is a behavior, not because `resolve-evidence.ts` is a file. `scale-comparison.ts` is owed nothing.
+* **`shell-tokens.ts` and `shell-loop.ts` are the exception the rule allows for, and a mutation sweep is what earned it.** They looked like helpers under `harness-scan.test.ts` and were not: 1588 lines of suite reached them only by walking a whole repository, and the first sweep found 178 survivors and 73 mutants no test touched at all across the two. Driving them on a source string took `shell-tokens` from 58.66% to 81.01% and `shell-loop` from 70.99% to 79.15%, and cut what nothing reached from 73 to 16. **A file gets its own suite when something other than taste says the boundary above it is too coarse** — here, a measurement.
 * Four suffixes mark what never ships: `*.test.ts`, `*.test-adapter.ts`, `*.test-fixture.ts`, `*.test-setup.ts`. `test` opens the suffix of everything outside the production graph, so a new kind of non-shipping file takes a `test-` prefix rather than a word of its own. `dependency-cruiser` excludes the first three because only those occur under `src/`; `*.test-setup.ts` exists once, in `tests/`, which the cruise does not reach.
 
 ## Behaviors under test, and what each one fakes
@@ -31,12 +32,14 @@ How this project is tested: TDD boundaries, doubles, and validation.
 | `compose-assessment-report` | projection into the public contract, coverage derivation | none — real evidence, real `checkMaturity` |
 | `collect-evidence.usecase` | collector execution, degradation, provenance, resolution | `FakeInMemoryEvidenceCollector`, `FailingEvidenceCollector`; real resolver |
 | `assess-maturity.usecase` | orchestration and assessment result; coverage is `compose-assessment-report`'s to prove | real domain collaborators, fakes at external ports only |
-| `assess.command` (`runAssess`) | argv parsing, the exit-code taxonomy, stdout/stderr, wired against the real pipeline | none — real `loadMaturityModel`, real `assessMaturity`; only `CommandIo` is an in-memory double, and it fakes no domain collaborator |
+| `assess.command` (`runAssess`) | argv parsing, the exit-code taxonomy including `1`, stdout/stderr, wired against the real pipeline | `CommandIo`, and — for `1` alone — `OffVocabularyEvidenceCollector`, passed through `AssessOptions.collectors`. Both are boundary doubles: everything downstream of the collector is the real pipeline |
 | `tests/cli/process-contract.test.ts` | that `main.ts` and the built `dist/cli.js` deliver that taxonomy to a real shell, and that the wired collector reaches the pipeline through it | none — the process is spawned, nothing is faked |
 | `tests/cli/self-assessment.test.ts` | AIDD assessed by its own shipped binary: that the verdict follows from evidence, that prose and `--json` agree, that no path spelling changes it | none — the process is spawned against this repository |
 | `live-repository.adapter` and its modules | what a local repository can prove: the first-parent walk, the zero-touch share behind `intervention`, the delivery-record share that withholds the branch-derived axes, cancellation | none — real temporary Git repositories and the real filesystem |
 | `fixture-bundle.adapter` and its modules | what a recorded bundle can prove: the delivery record, the recorded tree, cancellation | none — real temporary directories and the real filesystem |
 | `harness/harness-scan` | the harness set both adapters read: the name tables, the `loops` recogniser, what makes a member undecidable | none — a real tree behind the `HarnessTree` seam |
+| `harness/shell-tokens` | what the shell hides (comments, quotes, expansions, continuations) and where a word may be a command | none — a source string in, tokens and marks out |
+| `harness/shell-loop` | the three answers about a loop: retry proven, decidably iterating, undecidable | none — a source string in, a `MemberScan` out |
 | `fixture-bundle/bundle-tree` | the recorded tree: what `repo-context/` rebases to, that no mode is recorded, cancellation | none — real temporary directories |
 
 The first three are not use cases: each takes domain values and returns one, so it is tested directly.
@@ -54,6 +57,31 @@ It was a `beforeAll` inside `process-contract.test.ts` while that was the only s
 The division across three suites: `process-contract.test.ts` owns the exit codes, the streams and the collector wiring — which collectors the composition root built, and that each answers for its own subject; `live-repository.adapter.test.ts` owns which subjects the collector answers for, including a directory that merely sits inside a work tree; this one owns the self-assessment. `tests/cli/spawn-cli.test-fixture.ts` is the spawn helper the two CLI suites share, so they cannot drift on how the process is invoked.
 
 `src/cli/assess.command.test.ts` sits beside `assess.command.ts`, per **Where a test lives** above, and drives `runAssess(argv, io)` with a capturing `CommandIo` — two in-memory string arrays, no spawn and no build. It asserts stdout, stderr and the exit code only, never which function ran. `main.ts` is never imported by any suite; it is reached only by spawning the built binary, which both suites in `tests/cli/` now do.
+
+**The suite is Unix-only, and that is the suite's constraint, not the product's.** `live-repository.adapter.test.ts` writes `#!/bin/sh` shims onto `PATH`, reads `command -v git` and `chmod`s to `0755`; `git-process.test.ts` installs a git alias running `sh -c 'sleep …'`. None of it has a Windows equivalent, and none of it constrains `dist/cli.js`, which is why no `os` field appears in `package.json` — declaring one there would refuse the install on a platform the tool itself runs on.
+
+## Mutation testing is a command, not a habit
+
+`pnpm mutation` runs Stryker over the decision logic: `maturity/loading/`, `maturity/engine/`, `maturity/models/`, `evidence/adapters/harness/` and `evidence/resolution/`. It is deliberately outside `pnpm check` — a sweep is minutes, a gate is seconds — and deliberately reproducible, which is the whole point: every finding this technique has produced here came from a sweep nobody could re-run.
+
+Three things in the configuration are load-bearing:
+
+* **`plugins` names `@stryker-mutator/vitest-runner` explicitly.** pnpm isolates `node_modules`, so Stryker's core cannot discover the runner beside itself and reports `no TestRunner plugins were loaded`. Without the entry the run dies at startup — the exact failure mode that once read as every mutant killed.
+* **`vitest.mutation.config.ts` is the sweep's own view of the suite.** It drops `tests/`, whose suites spawn the built binary, and the `globalSetup` that builds it: rebuilding `dist/` once per mutant would measure tsup, not the tests.
+* **`thresholds.break` is null.** A surviving mutant is a question, and a gate that answers it by failing would get the config loosened rather than the test strengthened. Thirteen minutes is a report to read, not a gate to pass.
+
+**The first baseline, 2026-08-29: 1692 mutants, 77.13% total, 82.85% of covered code — 1277 killed, 273 survived, 118 uncovered, 0 errors.** It relocated this project's known weak spot. The loader, which shipped a live guard nothing held three times, scored 88.00 with `load-maturity-model.ts` at 100; `engine/` 96.06, `resolution/` 94.34. **83% of every survivor was in `evidence/adapters/harness/`** (69.58) — `shell-tokens.ts` at 58.66 and `shell-loop.ts` at 70.99 — while `harness-scan.ts` above them was 97.30. 1588 lines of suite, and almost none of it reaching the tokeniser directly.
+
+**After acting on it, same day: 83.51% total, 86.60% of covered code — 1381 killed, 221 survived, 61 uncovered.** Two suites at the layer's own boundary did it, and the gain is where the sweep pointed:
+
+| | before | after |
+| --- | --- | --- |
+| `shell-tokens.ts` | 58.66 | **81.01** |
+| `shell-loop.ts` | 70.99 | **79.15** |
+| `harness/` overall | 69.58 | 79.51 |
+| mutants nothing reached | 118 | 61 |
+
+**The second pass is the more useful lesson.** A further 25 tests, aimed at survivors named one by one from the report, bought 0.7 points. `readShellLoops` answers in two booleans, so a great many internal distinctions are simply not observable from outside it, and chasing them would mean exporting internals to test them — which buys a number and loses the rule. **Stop when the curve flattens.** What remains worth doing sits elsewhere: `agent-invocation.ts` (66.28, 29 uncovered) and `model-consistency.ts` (78.90, 9 uncovered).
 
 ## Doubles
 

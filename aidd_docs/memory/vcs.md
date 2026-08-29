@@ -35,3 +35,11 @@ AI should auto commit: `never`.
 - An agent reaching the end of the pipeline reports what it built and stops. It never commits in anticipation of approval.
 - `/aidd-orchestrator:01-sdlc` ending in "a draft pull request" does not override this rule.
 - Push and pull request follow the same gate. `origin` is a backup and a sharing point, so anything that reaches it has been seen by a human first.
+
+## Merge Strategy
+
+Merge commit by default. Squash only when the branch's commits are not worth reading.
+
+- **The criterion is the reader, never the tool.** The commit rule above makes the body the only place a future reader learns which reading was forced; squashing eleven such bodies into one summary destroys eleven distinct answers to *why*. A branch of `wip`, `fix typo`, `re-fix` carries none of that, and there one clean commit beats it. Ask whether the individual commits would be read, not which button is tidier.
+- On GitHub that means **Create a merge commit**, never *Squash and merge* or *Rebase and merge*.
+- The merge subject is `Merge pull request #N: <what landed, lowercase>`, with a body, on the same footing as any other commit.

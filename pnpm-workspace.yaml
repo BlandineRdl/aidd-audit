@@ -1,3 +1,14 @@
+# GHSA-g7r4-m6w7-qqqr: esbuild below 0.28.1 lets a page read arbitrary files through its
+# development server on Windows. Nothing here starts that server, but tsup and vitest both pin
+# ranges that stop short of the fix, so the floor is raised for every transitive copy at once.
+overrides:
+  esbuild: '>=0.28.1'
+  # GHSA-q8mj-m7cp-5q26: qs below 6.15.2 crashes on a crafted comma-format array. It arrives under
+  # Stryker's `typed-rest-client`, which only its dashboard reporter uses and this project never
+  # does — raised rather than tolerated, because a lockfile whose one finding everybody skips past
+  # is a lockfile nobody reads.
+  qs: '>=6.15.2'
+
 allowBuilds:
   esbuild: true
   lefthook: true

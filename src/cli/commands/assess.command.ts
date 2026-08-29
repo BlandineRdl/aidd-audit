@@ -22,13 +22,6 @@ export interface CommandIo {
   stderr(text: string): void
 }
 
-// LIMITATION: The budget for one collection. **Chosen, not measured.** It exists because a forge
-// collector makes a network round trip, and a hanging HTTP call is the one failure a local `git`
-// cannot produce. Too short cuts a legitimate query on a large repository and reports TIMED_OUT
-// where evidence was available; too long makes an unreachable forge look like a hung tool. Every
-// collector honours the signal, so this bounds the whole run and never one source.
-const COLLECTION_BUDGET_MS = 120_000
-
 // SAFETY: Only a work-tree root gets a forge. `git remote get-url` run inside a checkout answers for
 // the enclosing repository, so a bundle tracked in one would be handed that repository's pull
 // requests as its own evidence — the fault the live collector's own root check exists to prevent.
@@ -60,9 +53,27 @@ function collectorsFor(forge: RepositorySlug | null): readonly EvidenceCollector
   ]
 }
 
-export async function runAssess(argv: readonly string[], io: CommandIo): Promise<number> {
+// INVARIANT: the wired set is the default, never the only one. A suite that needs a collector this
+// composition root would not build — one emitting a value off the loaded scale, which is the only
+// route to exit code 1 — passes its own, and nothing about the production wiring moves.
+export interface AssessOptions {
+  readonly collectors?: readonly EvidenceCollector[]
+}
+
+export async function runAssess(
+  argv: readonly string[],
+  io: CommandIo,
+  options: AssessOptions = {},
+): Promise<number> {
+  // SAFETY: the controller is held, not discarded. Aborting in `finally` is what makes the seam
+  // real: an in-flight `git` or `gh` child is cancelled when the command returns.
+  //
+  // LIMITATION: no budget is set on it. Honouring one is a collector's own duty, and no number here
+  // has been measured — least of all for the forge, whose round trip is the one failure a local
+  // `git` cannot produce and the reason a budget is now owed rather than merely absent. Measuring it
+  // means timing real queries against real repositories, which this project has not done. The day it
+  // does, it is a timer on this controller rather than a restructuring.
   const budget = new AbortController()
-  const spend = setTimeout(() => budget.abort(), COLLECTION_BUDGET_MS)
 
   try {
     const args = parseAssessArguments(argv)
@@ -73,7 +84,8 @@ export async function runAssess(argv: readonly string[], io: CommandIo): Promise
     const report = await assessMaturity({
       subjectPath: args.subjectPath,
       model,
-      collectors: collectorsFor(await forgeFor(args.subjectPath, budget.signal)),
+      collectors:
+        options.collectors ?? collectorsFor(await forgeFor(args.subjectPath, budget.signal)),
       signal: budget.signal,
     })
 
@@ -84,7 +96,6 @@ export async function runAssess(argv: readonly string[], io: CommandIo): Promise
     io.stderr(`${messageOf(error)}\n`)
     return error instanceof UsageError || error instanceof InvalidMaturityModelError ? 2 : 1
   } finally {
-    clearTimeout(spend)
     budget.abort()
   }
 }

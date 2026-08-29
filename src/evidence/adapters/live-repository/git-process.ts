@@ -7,12 +7,15 @@ import { GitCommandFailedError } from './git-command-failed.error.js'
 // Part of `runGit`'s contract: catching it reads "the source refused", not "it said no".
 export { GitCommandFailedError }
 
-// SAFETY: Git takes the repository from the environment, and those variables win over the working
-// directory. A hook sets them — run `pnpm check` from `pre-commit` and every `git` below would
-// ignore its `cwd` and build fixtures in the repository being committed to. The subject is the
-// working directory, always. The list is closed and location-scoped: it strips what points `git` at
-// a repository and leaves credentials and identity alone.
-const GIT_LOCATION_VARIABLES = [
+// SAFETY: `process.env` is inherited, and three families of Git variable in it redirect this
+// process's work. **Location**: they win over the working directory — a hook sets them, so running
+// `pnpm check` from `pre-commit` would make every `git` below ignore its `cwd` and build fixtures in
+// the repository being committed to. **Configuration**: `GIT_CONFIG_COUNT` and its pairs inject
+// arbitrary config, which subsumes the first family and reaches the command keys below.
+// **Command**: each one names a program `git` will execute. The list is closed, and it deliberately
+// leaves author and committer identity alone — nothing here writes, and stripping identity would
+// change whose name a future write carries. The subject is the working directory, always.
+const REDIRECTING_GIT_VARIABLES = [
   'GIT_DIR',
   'GIT_WORK_TREE',
   'GIT_COMMON_DIR',
@@ -21,14 +24,41 @@ const GIT_LOCATION_VARIABLES = [
   'GIT_ALTERNATE_OBJECT_DIRECTORIES',
   'GIT_NAMESPACE',
   'GIT_PREFIX',
+  'GIT_CEILING_DIRECTORIES',
+  'GIT_DISCOVERY_ACROSS_FILESYSTEM',
+  'GIT_CONFIG',
+  'GIT_CONFIG_COUNT',
+  'GIT_CONFIG_GLOBAL',
+  'GIT_CONFIG_SYSTEM',
+  'GIT_EXTERNAL_DIFF',
+  'GIT_SSH',
+  'GIT_SSH_COMMAND',
+  'GIT_ASKPASS',
+  'GIT_PAGER',
+  'GIT_EDITOR',
+  'GIT_SEQUENCE_EDITOR',
 ] as const
 
-// `process.env` with every inherited pointer to another repository removed.
+// `process.env` with every inherited redirection removed.
 export function gitEnvironment(additions: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
   const environment = { ...process.env, ...additions }
-  for (const name of GIT_LOCATION_VARIABLES) delete environment[name]
+  for (const name of REDIRECTING_GIT_VARIABLES) delete environment[name]
   return environment
 }
+
+// SAFETY: The subject repository's own `.git/config` is in force for every command below, and it is
+// not this project's config: several standard keys name a program `git` then runs — `core.fsmonitor`
+// on any command that reads the index, `core.hooksPath` for hooks. A config does not survive a
+// clone, so the exposure is a repository received as a directory: a tarball, a shared mount, a
+// recorded bundle. Assessing one must never run what its author chose. Pinned here rather than at
+// each call site so a new command cannot forget it. The `diff` family is disarmed on the invocation
+// that produces a diff, since `--no-ext-diff` and `--no-textconv` have no config counterpart.
+const HARDENED_CONFIGURATION = [
+  '-c',
+  'core.fsmonitor=false',
+  '-c',
+  'core.hooksPath=/dev/null',
+] as const
 
 // SAFETY: `signal` reaches the child, so an exceeded budget kills it rather than leaving it running
 // behind a resolved promise — never a silent hang, never an empty successful run. Overflowing
@@ -43,7 +73,7 @@ export function runGit(cwd: string, args: readonly string[], signal: AbortSignal
 
     execFile(
       'git',
-      [...args],
+      [...HARDENED_CONFIGURATION, ...args],
       {
         cwd,
         signal,

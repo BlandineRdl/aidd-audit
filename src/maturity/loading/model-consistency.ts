@@ -7,24 +7,13 @@ import {
   type MaturityModel,
   type Scale,
 } from '../models/maturity.model.js'
+import { scaleNamedBy } from '../models/scale-for-axis.js'
 import { requireThresholdOnScale } from '../models/threshold-on-scale.js'
 
 // INVARIANT: call order is load-bearing — cumulativity compares two levels' thresholds, so it needs
 // coverage to have proven both levels exist and vocabulary to have proven they are comparable.
 export function requireVocabulary(model: MaturityModel): void {
-  const scaleByAxis = new Map<AxisId, Scale>()
-  for (const axis of model.axes) {
-    // SAFETY: `Object.hasOwn`, not a bare index — `model.scales` is user-supplied keys, and a plain
-    // lookup would resolve an inherited `Object.prototype` member (`toString`, `constructor`, …) as
-    // if it were a declared scale.
-    const scale = Object.hasOwn(model.scales, axis.scale) ? model.scales[axis.scale] : undefined
-    if (scale === undefined) {
-      throw new InvalidMaturityModelError(
-        `Axis '${axis.id}' names a scale the model does not declare: '${axis.scale}'.`,
-      )
-    }
-    scaleByAxis.set(axis.id, scale)
-  }
+  const scaleByAxis = scalesByAxis(model)
 
   for (const level of model.levels) {
     for (const requirement of level.requirements) {
@@ -55,9 +44,7 @@ export function requireCoverage(model: MaturityModel): void {
     for (const axisId of declaredAxes) {
       const count = counts.get(axisId) ?? 0
       if (count === 0) {
-        throw new InvalidMaturityModelError(
-          `Level '${level.id}' declares no requirement for axis '${axisId}'.`,
-        )
+        throw noRequirementFor(level.id, axisId)
       }
       if (count > 1) {
         throw new InvalidMaturityModelError(
@@ -79,45 +66,48 @@ function requireDistinctRanks(levels: readonly Level[]): void {
 }
 
 export function requireCumulativity(model: MaturityModel): void {
-  const scaleByAxis = new Map<AxisId, Scale>()
-  for (const axis of model.axes) {
-    const scale = Object.hasOwn(model.scales, axis.scale) ? model.scales[axis.scale] : undefined
-    if (scale !== undefined) scaleByAxis.set(axis.id, scale)
-  }
-
+  const scaleByAxis = scalesByAxis(model)
   const sorted = [...model.levels].sort((a, b) => a.rank - b.rank)
 
-  for (let index = 1; index < sorted.length; index += 1) {
-    const lower = sorted[index - 1]
-    const higher = sorted[index]
-    if (lower === undefined || higher === undefined) continue
-    requireNoDip(model, lower, higher, scaleByAxis)
+  // Pairwise over the sorted ranks: `lower` is undefined only on the first level, which is real.
+  let lower: Level | undefined
+  for (const higher of sorted) {
+    if (lower !== undefined) requireNoDip(lower, higher, scaleByAxis)
+    lower = higher
   }
 }
 
-function requireNoDip(
-  model: MaturityModel,
-  lower: Level,
-  higher: Level,
-  scaleByAxis: ReadonlyMap<AxisId, Scale>,
-): void {
-  for (const axis of model.axes) {
-    const scale = scaleByAxis.get(axis.id)
-    if (scale === undefined) continue
-
-    const lowerRequirement = lower.requirements.find((requirement) => requirement.axis === axis.id)
-    const higherRequirement = higher.requirements.find(
-      (requirement) => requirement.axis === axis.id,
-    )
-    if (lowerRequirement === undefined || higherRequirement === undefined) continue
+function requireNoDip(lower: Level, higher: Level, scaleByAxis: ReadonlyMap<AxisId, Scale>): void {
+  for (const [axisId, scale] of scaleByAxis) {
+    const lowerRequirement = requirementOn(lower, axisId)
+    const higherRequirement = requirementOn(higher, axisId)
 
     if (!reachesOrExceeds(scale, lowerRequirement, higherRequirement)) {
       throw new InvalidMaturityModelError(
-        `Level '${higher.id}' asks less than '${lower.id}' on axis '${axis.id}': ` +
+        `Level '${higher.id}' asks less than '${lower.id}' on axis '${axisId}': ` +
           `a higher rank must never ask less than the rank below it.`,
       )
     }
   }
+}
+
+// INVARIANT: throws rather than skipping. `requireCoverage` has already proven exactly one
+// requirement per declared axis per level, so an absence here is a defect in this file's call
+// order, and a silent `continue` would report a model cumulative that was never compared.
+function requirementOn(level: Level, axisId: AxisId): LevelRequirement {
+  const requirement = level.requirements.find((candidate) => candidate.axis === axisId)
+  if (requirement === undefined) throw noRequirementFor(level.id, axisId)
+  return requirement
+}
+
+function scalesByAxis(model: MaturityModel): ReadonlyMap<AxisId, Scale> {
+  return new Map(model.axes.map((axis) => [axis.id, scaleNamedBy(model, axis)]))
+}
+
+function noRequirementFor(levelId: string, axisId: AxisId): InvalidMaturityModelError {
+  return new InvalidMaturityModelError(
+    `Level '${levelId}' declares no requirement for axis '${axisId}'.`,
+  )
 }
 
 // SAFETY: the `never` in `default` is what forces a new `Scale` kind to get a comparison here —
