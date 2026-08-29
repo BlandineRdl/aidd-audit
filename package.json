@@ -9,6 +9,7 @@
     "test": "vitest run",
     "architecture": "depcruise src && node scripts/prove-boundary-rules.mjs",
     "comments": "node scripts/check-comment-tags.mjs",
+    "mutation": "stryker run",
     "check": "pnpm typecheck && pnpm test && pnpm architecture && pnpm comments",
     "build": "tsup",
     "prepare": "lefthook install"
@@ -30,9 +31,12 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.11",
+    "@stryker-mutator/core": "^10.0.0",
+    "@stryker-mutator/vitest-runner": "^10.0.0",
     "@types/node": "^26.4.0",
+    "@vitest/coverage-v8": "^4.1.11",
     "dependency-cruiser": "^18.2.0",
-    "lefthook": "^2.1.10",
+    "lefthook": "^2.1.12",
     "tsup": "^8.5.1",
     "typescript": "^5.9.3",
     "vitest": "^4.1.11"
