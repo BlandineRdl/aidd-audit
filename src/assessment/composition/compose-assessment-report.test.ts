@@ -38,19 +38,30 @@ function evidenceOf(overrides: Partial<Record<AxisId, Reading | 'absent'>> = {})
       reading.status === 'CONFIRMED'
         ? {
             axis,
+            reading: 'SUSTAINED' as const,
             status: reading.status,
             value: reading.value,
+            demonstration: null,
             observations: [
               {
                 axis,
+                reading: 'SUSTAINED' as const,
                 value: reading.value,
-                kind: 'OBSERVED',
+                kind: 'OBSERVED' as const,
                 collector: 'fixture-collector',
                 basis: 'fixture',
+                demonstration: null,
               },
             ],
           }
-        : { axis, status: reading.status, value: null, observations: [] },
+        : {
+            axis,
+            reading: 'SUSTAINED' as const,
+            status: reading.status,
+            value: null,
+            demonstration: null,
+            observations: [],
+          },
     )
 }
 
@@ -205,11 +216,15 @@ describe('coverage is derived from the axes requested and the evidence returned'
       ...evidenceOf({ size: 'absent' }),
       {
         axis: 'size',
+        reading: 'SUSTAINED',
         status: 'CLAIMED',
         value: null,
+        demonstration: null,
         observations: [
           {
             axis: 'size',
+            reading: 'SUSTAINED',
+            demonstration: null,
             value: 'M',
             kind: 'DECLARED',
             collector: 'docs-collector',
@@ -271,7 +286,14 @@ describe('evidence the model cannot rank is rejected, never dropped', () => {
   it('refuses evidence for an axis the model does not declare, naming that axis', () => {
     const offAxis: Evidence[] = [
       ...evidenceOf(),
-      { axis: 'telepathy', status: 'CONFIRMED', value: 'L', observations: [] },
+      {
+        axis: 'telepathy',
+        reading: 'SUSTAINED',
+        status: 'CONFIRMED',
+        value: 'L',
+        demonstration: null,
+        observations: [],
+      },
     ]
     expect(() => compose(offAxis)).toThrow(UndeclaredAxisError)
     expect(() => compose(offAxis)).toThrow(/telepathy/)

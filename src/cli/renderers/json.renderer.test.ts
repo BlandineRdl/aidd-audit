@@ -190,6 +190,7 @@ describe('6. rendering is deterministic', () => {
       coverage: { ...reportA.coverage },
       blocking: [blockerB],
       levels: [levelB],
+      demonstrated: null,
       next: null,
       proven: levelB,
       subject: { path: reportA.subject.path },

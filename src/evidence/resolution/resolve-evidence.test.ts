@@ -4,16 +4,21 @@ import type { Observation } from '../models/observation.model.js'
 
 function observation(overrides: Partial<Observation> & Pick<Observation, 'axis'>): Observation {
   return {
+    reading: 'SUSTAINED',
     value: 'L',
     kind: 'OBSERVED',
     collector: 'fixture-collector',
     basis: 'fixture',
+    demonstration: null,
     ...overrides,
   }
 }
 
 const evidenceFor = (axis: string, observations: readonly Observation[]) =>
-  resolveEvidence(observations, [axis])[0]!
+  resolveEvidence(observations, [axis]).find((evidence) => evidence.reading === 'SUSTAINED')!
+
+const demonstratedFor = (axis: string, observations: readonly Observation[]) =>
+  resolveEvidence(observations, [axis]).find((evidence) => evidence.reading === 'DEMONSTRATED')!
 
 describe('resolveEvidence', () => {
   it('confirms an axis when its OBSERVED observations agree on the same value', () => {
@@ -55,7 +60,14 @@ describe('resolveEvidence', () => {
   it('reports UNKNOWN for an axis with no observation at all', () => {
     const evidence = evidenceFor('size', [])
 
-    expect(evidence).toEqual({ axis: 'size', status: 'UNKNOWN', value: null, observations: [] })
+    expect(evidence).toEqual({
+      axis: 'size',
+      reading: 'SUSTAINED',
+      status: 'UNKNOWN',
+      value: null,
+      demonstration: null,
+      observations: [],
+    })
   })
 
   it('confirms the OBSERVED value even when a DECLARED observation disagrees, because a fact never conflicts with a claim', () => {
@@ -149,12 +161,57 @@ describe('resolveEvidence', () => {
     expect(evidence.status).toBe('CONFLICTING')
   })
 
-  it('resolves one Evidence per requested axis, including axes absent from the observations', () => {
+  it('resolves one Evidence per requested axis and reading, absent axes included', () => {
     const observations = [observation({ axis: 'size', value: 'L', kind: 'OBSERVED' })]
 
     const evidences = resolveEvidence(observations, ['size', 'harness'])
 
-    expect(evidences.map((e) => e.axis)).toEqual(['size', 'harness'])
-    expect(evidences.find((e) => e.axis === 'harness')?.status).toBe('UNKNOWN')
+    expect(evidences.map((e) => `${e.axis}:${e.reading}`)).toEqual([
+      'size:SUSTAINED',
+      'size:DEMONSTRATED',
+      'harness:SUSTAINED',
+      'harness:DEMONSTRATED',
+    ])
+    expect(demonstratedFor('harness', observations).status).toBe('UNKNOWN')
+    expect(demonstratedFor('size', observations).status).toBe('UNKNOWN')
+  })
+
+  it('keeps a disagreement inside the reading it happened in', () => {
+    const observations = [
+      observation({ axis: 'size', reading: 'SUSTAINED', value: 'M' }),
+      observation({ axis: 'size', reading: 'SUSTAINED', value: 'L' }),
+      observation({
+        axis: 'size',
+        reading: 'DEMONSTRATED',
+        value: 'XL',
+        demonstration: { share: 0.4, unit: 'DELIVERIES' },
+      }),
+    ]
+
+    // INVARIANT: CONFLICTING must keep meaning "two collectors saw the same thing differently". A
+    // habitual value and a demonstrated one differ by design, so comparing across the two would
+    // call every subject that answers both a conflict and cost it the whole axis.
+    expect(evidenceFor('size', observations).status).toBe('CONFLICTING')
+    expect(demonstratedFor('size', observations)).toMatchObject({
+      status: 'CONFIRMED',
+      value: 'XL',
+      demonstration: { share: 0.4, unit: 'DELIVERIES' },
+    })
+  })
+
+  it('carries the demonstration of the observation that agreed, and none on a habitual value', () => {
+    expect(
+      demonstratedFor('size', [
+        observation({
+          axis: 'size',
+          reading: 'DEMONSTRATED',
+          value: 'L',
+          demonstration: { share: 0.35, unit: 'ACTIVE_DAYS' },
+        }),
+      ]).demonstration,
+    ).toEqual({ share: 0.35, unit: 'ACTIVE_DAYS' })
+    expect(
+      evidenceFor('size', [observation({ axis: 'size', value: 'L' })]).demonstration,
+    ).toBeNull()
   })
 })

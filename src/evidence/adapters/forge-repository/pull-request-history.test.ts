@@ -1,0 +1,410 @@
+import { chmod, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterEach, describe, expect, it } from 'vitest'
+import { readForgeDerivedMetrics } from './pull-request-history.js'
+
+// SAFETY: Integration against a stub `gh` on PATH, so the forge is the boundary under test and the
+// suite never reaches it. The payloads are shaped like the GraphQL answer and copied from no real
+// repository: a fixture carrying one would put a private repository's pull requests in this tree,
+// and would drift the day the schema does without anything saying so.
+
+const NEVER_ABORTED = new AbortController().signal
+const A_LONG_TIME = 60_000
+const SLUG = { owner: 'an-owner', name: 'a-repository' }
+
+const workspaces: string[] = []
+let restorePath: string | undefined
+
+afterEach(async () => {
+  if (restorePath !== undefined) process.env.PATH = restorePath
+  restorePath = undefined
+  await Promise.all(workspaces.splice(0).map((path) => rm(path, { recursive: true, force: true })))
+})
+
+interface RecordedPullRequest {
+  readonly createdAt: string
+  readonly mergedAt: string
+  readonly additions: number
+  readonly deletions: number
+  readonly changedFiles: number
+  readonly commitDates: readonly string[]
+  readonly authorType?: 'User' | 'Bot' | null
+}
+
+function page(nodes: readonly RecordedPullRequest[], endCursor: string | null): string {
+  return JSON.stringify({
+    data: {
+      repository: {
+        pullRequests: {
+          pageInfo: { hasNextPage: endCursor !== null, endCursor },
+          nodes: nodes.map((node) => ({
+            createdAt: node.createdAt,
+            mergedAt: node.mergedAt,
+            additions: node.additions,
+            deletions: node.deletions,
+            changedFiles: node.changedFiles,
+            author:
+              node.authorType === null
+                ? null
+                : { __typename: node.authorType ?? 'User', login: 'someone' },
+            commits: {
+              nodes: node.commitDates.map((committedDate) => ({ commit: { committedDate } })),
+            },
+          })),
+        },
+      },
+    },
+  })
+}
+
+// INVARIANT: A `gh` that answers the nth invocation with the nth payload, and records each argument
+// list in its own file. Invocations are counted by bytes in a tally file and never by lines in a
+// shared log: the query itself spans eighteen lines, so a line count reads one call as eighteen.
+async function ghAnswering(
+  payloads: readonly string[],
+): Promise<{ calls: () => Promise<string[]> }> {
+  const directory = await mkdtemp(join(await realpath(tmpdir()), 'aidd-gh-stub-'))
+  workspaces.push(directory)
+
+  const tally = join(directory, 'tally')
+  for (const [index, payload] of payloads.entries()) {
+    await writeFile(join(directory, `payload-${index}`), payload)
+  }
+
+  const script = [
+    '#!/bin/sh',
+    `printf 'x' >> "${tally}"`,
+    `n=$(wc -c < "${tally}" | tr -d " ")`,
+    `printf '%s' "$*" > "${directory}/call-$n"`,
+    `file="${directory}/payload-$((n - 1))"`,
+    'if [ -f "$file" ]; then cat "$file"; else echo "no payload" >&2; exit 1; fi',
+    '',
+  ].join('\n')
+
+  await writeFile(join(directory, 'gh'), script)
+  await chmod(join(directory, 'gh'), 0o755)
+
+  restorePath = process.env.PATH
+  process.env.PATH = `${directory}:${process.env.PATH ?? ''}`
+
+  return {
+    async calls(): Promise<string[]> {
+      const recorded: string[] = []
+      for (let call = 1; ; call += 1) {
+        try {
+          recorded.push(await readFile(join(directory, `call-${call}`), 'utf8'))
+        } catch {
+          return recorded
+        }
+      }
+    },
+  }
+}
+
+function delivered(
+  mergedAt: string,
+  lines: number,
+  files: number,
+  commitDates: readonly string[] = [mergedAt],
+): RecordedPullRequest {
+  return {
+    createdAt: mergedAt,
+    mergedAt,
+    additions: lines,
+    deletions: 0,
+    changedFiles: files,
+    commitDates,
+  }
+}
+
+const DAY = (day: number): string => `2026-06-${String(day).padStart(2, '0')}T12:00:00Z`
+
+describe('readForgeDerivedMetrics', () => {
+  it(
+    'reads a median size over every merged pull request in the window',
+    async () => {
+      await ghAnswering([
+        page(
+          [1, 2, 3, 4, 5].map((day) => delivered(DAY(day), 500, 12)),
+          null,
+        ),
+      ])
+
+      await expect(readForgeDerivedMetrics(SLUG, null, NEVER_ABORTED)).resolves.toMatchObject({
+        sizeBucket: 'L',
+      })
+    },
+    A_LONG_TIME,
+  )
+
+  it(
+    'follows the cursor rather than reading the first page alone',
+    async () => {
+      const stub = await ghAnswering([
+        page(
+          [1, 2, 3].map((day) => delivered(DAY(day), 50, 2)),
+          'CURSOR',
+        ),
+        page(
+          [4, 5, 6].map((day) => delivered(DAY(day), 50, 2)),
+          null,
+        ),
+      ])
+
+      // INVARIANT: six deliveries clear the sample floor, three do not. A collector that stopped at
+      // page one would report nothing here, which is exactly how a cursor bug hides.
+      await expect(readForgeDerivedMetrics(SLUG, null, NEVER_ABORTED)).resolves.toMatchObject({
+        sizeBucket: 'S',
+      })
+      const calls = await stub.calls()
+      expect(calls).toHaveLength(2)
+      expect(calls[1]).toContain('after=CURSOR')
+    },
+    A_LONG_TIME,
+  )
+
+  it(
+    'reports nothing at all from a window holding fewer deliveries than the floor',
+    async () => {
+      await ghAnswering([
+        page(
+          [1, 2, 3, 4].map((day) => delivered(DAY(day), 500, 12)),
+          null,
+        ),
+      ])
+
+      await expect(readForgeDerivedMetrics(SLUG, null, NEVER_ABORTED)).resolves.toEqual({
+        sizeBucket: null,
+        demonstratedSize: null,
+        intervention: null,
+        parallelism: null,
+        demonstratedParallelism: null,
+      })
+    },
+    A_LONG_TIME,
+  )
+
+  it(
+    'leaves a delivery merged before the window out of every median',
+    async () => {
+      await ghAnswering([
+        page(
+          [
+            ...[1, 2, 3, 4, 5].map((day) => delivered(DAY(day), 50, 2)),
+            delivered('2024-01-01T12:00:00Z', 40_000, 900),
+          ],
+          null,
+        ),
+      ])
+
+      // The ancient delivery would carry the median to XL if the window were not applied.
+      await expect(readForgeDerivedMetrics(SLUG, null, NEVER_ABORTED)).resolves.toMatchObject({
+        sizeBucket: 'S',
+      })
+    },
+    A_LONG_TIME,
+  )
+
+  it(
+    'ends the window at the subject last commit, not at its own last merge',
+    async () => {
+      const payload = page(
+        [
+          ...[1, 2, 3, 4, 5].map((day) => delivered(DAY(day), 50, 2)),
+          // Six enormous deliveries four months earlier: a majority, so they carry the median.
+          ...[1, 2, 3, 4, 5, 6].map((day) => delivered(`2026-02-0${day}T12:00:00Z`, 40_000, 900)),
+        ],
+        null,
+      )
+      await ghAnswering([payload, payload])
+
+      // INVARIANT: with no subject activity to go on, the window ends at the newest merge, June 5,
+      // and reaches back past February — the six old deliveries count and own the median.
+      await expect(readForgeDerivedMetrics(SLUG, null, NEVER_ABORTED)).resolves.toMatchObject({
+        sizeBucket: 'XL',
+      })
+
+      // INVARIANT: told the subject was still committing in late November, the same 180 days end
+      // there and start in late May, so only the recent five remain. A stretch of direct commits
+      // after the last merge must not drag the window backwards and change the level.
+      await expect(
+        readForgeDerivedMetrics(SLUG, Date.parse('2026-11-20T12:00:00Z'), NEVER_ABORTED),
+      ).resolves.toMatchObject({ sizeBucket: 'S' })
+    },
+    A_LONG_TIME,
+  )
+
+  it(
+    'leaves out a pull request merged after the subject stopped committing',
+    async () => {
+      await ghAnswering([
+        page(
+          [
+            ...[1, 2, 3, 4, 5].map((day) => delivered(DAY(day), 50, 2)),
+            delivered('2026-06-28T12:00:00Z', 40_000, 900),
+          ],
+          null,
+        ),
+      ])
+
+      // INVARIANT: merged into another branch after the subject's last commit, so it sits outside
+      // the period rather than being the newest thing in it.
+      await expect(
+        readForgeDerivedMetrics(SLUG, Date.parse('2026-06-10T12:00:00Z'), NEVER_ABORTED),
+      ).resolves.toMatchObject({ sizeBucket: 'S' })
+    },
+    A_LONG_TIME,
+  )
+
+  it(
+    'leaves a delivery a bot opened out of every median',
+    async () => {
+      await ghAnswering([
+        page(
+          [
+            ...[1, 2, 3, 4, 5].map((day) => delivered(DAY(day), 900, 20)),
+            // Six tiny dependency bumps: a majority, so they own the median if they are counted.
+            ...[6, 7, 8, 9, 10, 11].map((day) => ({
+              ...delivered(DAY(day), 4, 1),
+              authorType: 'Bot' as const,
+            })),
+          ],
+          null,
+        ),
+      ])
+
+      // INVARIANT: the axis measures features delivered with an agent, and a scheduled bump is
+      // neither. Counting them here would report S where the subject's own work is L.
+      await expect(readForgeDerivedMetrics(SLUG, null, NEVER_ABORTED)).resolves.toMatchObject({
+        sizeBucket: 'L',
+      })
+    },
+    A_LONG_TIME,
+  )
+
+  it(
+    'keeps a delivery whose author the forge could not type',
+    async () => {
+      await ghAnswering([
+        page(
+          [1, 2, 3, 4, 5].map((day) => ({
+            ...delivered(DAY(day), 900, 20),
+            authorType: null,
+          })),
+          null,
+        ),
+      ])
+
+      // INVARIANT: a deleted account leaves no author at all. Absence of proof that it is a bot is
+      // not proof that it is one, and dropping a person's work is the worse mistake.
+      await expect(readForgeDerivedMetrics(SLUG, null, NEVER_ABORTED)).resolves.toMatchObject({
+        sizeBucket: 'L',
+      })
+    },
+    A_LONG_TIME,
+  )
+
+  it(
+    'places intervention from the median of the commits that followed the opening',
+    async () => {
+      await ghAnswering([
+        page(
+          [1, 2, 3, 4, 5].map((day) => ({
+            ...delivered(DAY(day), 50, 2),
+            createdAt: DAY(day),
+            commitDates: [DAY(day), DAY(day + 10), DAY(day + 11)],
+          })),
+          null,
+        ),
+      ])
+
+      // Two commits after opening on every delivery: past `after-the-fact-some`, short of `most`.
+      await expect(readForgeDerivedMetrics(SLUG, null, NEVER_ABORTED)).resolves.toMatchObject({
+        intervention: 'after-the-fact-some',
+      })
+    },
+    A_LONG_TIME,
+  )
+
+  it(
+    'grants autonomy when almost no delivery took a commit after it was opened',
+    async () => {
+      await ghAnswering([
+        page(
+          [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((day) => delivered(DAY(day), 50, 2)),
+          null,
+        ),
+      ])
+
+      await expect(readForgeDerivedMetrics(SLUG, null, NEVER_ABORTED)).resolves.toMatchObject({
+        intervention: 'never-once-framed',
+      })
+    },
+    A_LONG_TIME,
+  )
+
+  it(
+    'counts distinct pull requests touched on a day, not the busiest day',
+    async () => {
+      await ghAnswering([
+        page(
+          [
+            delivered(DAY(20), 50, 2, [DAY(1), DAY(2), DAY(3), DAY(4), DAY(5)]),
+            delivered(DAY(21), 50, 2, [DAY(1), DAY(2), DAY(3), DAY(4), DAY(5)]),
+            delivered(DAY(22), 50, 2, [DAY(1)]),
+            delivered(DAY(23), 50, 2, [DAY(1)]),
+            delivered(DAY(24), 50, 2, [DAY(1)]),
+          ],
+          null,
+        ),
+      ])
+
+      // Five requests touched on day 1, two on days 2 to 5: the median of the five active days is 2.
+      await expect(readForgeDerivedMetrics(SLUG, null, NEVER_ABORTED)).resolves.toMatchObject({
+        parallelism: 2,
+      })
+    },
+    A_LONG_TIME,
+  )
+
+  it(
+    'reports nothing at all when the forge refuses',
+    async () => {
+      await ghAnswering([])
+
+      await expect(readForgeDerivedMetrics(SLUG, null, NEVER_ABORTED)).rejects.toThrow(
+        /gh api graphql/,
+      )
+    },
+    A_LONG_TIME,
+  )
+
+  it(
+    'reports nothing at all when the forge answers something it cannot read',
+    async () => {
+      await ghAnswering(['{"data":{"repository":null},"errors":[{"type":"NOT_FOUND"}]}'])
+
+      await expect(readForgeDerivedMetrics(SLUG, null, NEVER_ABORTED)).resolves.toEqual({
+        sizeBucket: null,
+        demonstratedSize: null,
+        intervention: null,
+        parallelism: null,
+        demonstratedParallelism: null,
+      })
+    },
+    A_LONG_TIME,
+  )
+
+  it(
+    'rejects rather than resolving when the signal is already aborted',
+    async () => {
+      await ghAnswering([page([], null)])
+
+      await expect(readForgeDerivedMetrics(SLUG, null, AbortSignal.abort())).rejects.toThrow(
+        /abort/i,
+      )
+    },
+    A_LONG_TIME,
+  )
+})

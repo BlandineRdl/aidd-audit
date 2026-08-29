@@ -77,6 +77,34 @@ export interface CoverageReport {
   readonly axesConfirmed: number
 }
 
+// INVARIANT: What a share counts. Size counts delivered changes and parallelism counts active days,
+// so a rendering that said "40% of occasions" for both would erase a difference the reader needs.
+// Stated in full rather than by reference since this contract is self-contained on purpose;
+// `evidence/models/observation.model.ts` carries the same names and the two must not drift.
+export type DemonstrationUnit = 'DELIVERIES' | 'ACTIVE_DAYS'
+
+// INVARIANT: One axis the subject repeatedly reached, and how often it did. `share` is a fraction of
+// occasions between 0 and 1, not a percentage — the recorded bundle format already states every
+// ratio that way, and a bare `40` would read as a count. It is not optional: a demonstrated value
+// without the frequency that earned it is a maximum wearing a habit's clothes, and must never be
+// published or rendered alone.
+export interface DemonstratedAxis {
+  readonly axis: string
+  readonly observed: ObservedValue
+  readonly share: number
+  readonly unit: DemonstrationUnit
+}
+
+// INVARIANT: What the subject has shown it can reach, as opposed to what it sustains. `level` is
+// never below `proven`: a demonstrated reading that lands under the habitual one says the
+// distribution leans low, and the habitual figure is then already the honest answer. `axes` carries
+// only the axes a demonstrated reading was actually observed for, so it may be shorter than the
+// model's axis list and is empty on none of them.
+export interface DemonstratedReport {
+  readonly level: LevelReport | null
+  readonly axes: readonly DemonstratedAxis[]
+}
+
 export interface AssessmentReport {
   readonly schemaVersion: typeof ASSESSMENT_REPORT_SCHEMA_VERSION
 
@@ -95,6 +123,12 @@ export interface AssessmentReport {
 
   // Level immediately above proven, or null once the highest level is proven.
   readonly next: LevelReport | null
+
+  // INVARIANT: null when no collector observed a demonstrated reading on any axis, which is the
+  // whole output of every source that records a median without the distribution behind it. The
+  // field is additive: a consumer reading `proven` alone sees what it saw before this field
+  // existed, which is why the schema version does not move.
+  readonly demonstrated: DemonstratedReport | null
 
   // Full model evaluation ordered by rank.
   readonly levels: readonly LevelReport[]

@@ -8,16 +8,17 @@ import { assessMaturity } from './assess-maturity.usecase.js'
 const subjectPath = '/fixtures/subject'
 
 function observationsFrom(collector: string): readonly Observation[] {
+  const sustained = {
+    reading: 'SUSTAINED',
+    kind: 'OBSERVED',
+    collector,
+    basis: 'test',
+    demonstration: null,
+  } as const
   return [
-    { axis: 'size', value: 'L', kind: 'OBSERVED', collector, basis: 'test' },
-    {
-      axis: 'harness',
-      value: ['prompts', 'context-engineering'],
-      kind: 'OBSERVED',
-      collector,
-      basis: 'test',
-    },
-    { axis: 'parallelism', value: 3, kind: 'OBSERVED', collector, basis: 'test' },
+    { axis: 'size', value: 'L', ...sustained },
+    { axis: 'harness', value: ['prompts', 'context-engineering'], ...sustained },
+    { axis: 'parallelism', value: 3, ...sustained },
   ]
 }
 

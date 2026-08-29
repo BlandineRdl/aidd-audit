@@ -31,6 +31,19 @@ const FULL_VOCABULARY: readonly AxisVocabulary[] = [
   { axis: 'parallelism', kind: 'numeric' },
 ]
 
+const AGENT_TRAILER = 'Co-Authored-By: Claude <noreply@anthropic.com>'
+
+// The same model, with an intervention scale reaching the value autonomy proves.
+const AUTONOMY_VOCABULARY: readonly AxisVocabulary[] = FULL_VOCABULARY.map((scale) =>
+  scale.axis === 'intervention'
+    ? {
+        axis: 'intervention',
+        kind: 'ordinal',
+        values: ['not-applicable', 'after-the-fact-most', 'key-steps', 'never-once-framed'],
+      }
+    : scale,
+)
+
 // Only the harness axis: the Git-derived source returns before it spawns anything.
 const HARNESS_ONLY: readonly AxisVocabulary[] = [
   {
@@ -96,10 +109,12 @@ function day(index: number): string {
 }
 
 // INVARIANT: past the minimum sample on both Git-derived axes, so a null from either is the
-// adapter's doing and not the history's.
+// adapter's doing and not the history's. `trailer`, when given, is carried by every commit each
+// change absorbs, which is what makes the change one an agent authored alone.
 async function repositoryDeliveringSixChanges(
   files: Readonly<Record<string, string>> = {},
   executable: readonly string[] = [],
+  trailer: string | null = null,
 ): Promise<string> {
   const repository = await initRepository()
   await write(repository, { 'README.md': 'a project\n', ...files }, executable)
@@ -110,7 +125,12 @@ async function repositoryDeliveringSixChanges(
     await git(repository, ['checkout', '-q', '-b', `feat-${change}`])
     await write(repository, { [`src/feature-${change}.ts`]: `export const feature = ${change}\n` })
     await git(repository, ['add', '-A'])
-    await git(repository, ['commit', '-q', '-m', `feat: change ${change}`], day(change))
+    const subject = `feat: change ${change}`
+    await git(
+      repository,
+      ['commit', '-q', '-m', trailer === null ? subject : `${subject}\n\n${trailer}`],
+      day(change),
+    )
     await git(repository, ['checkout', '-q', 'main'])
     await git(
       repository,
@@ -253,17 +273,48 @@ describe('the live repository evidence collector', () => {
     expect(observations).toEqual([])
   })
 
-  it('never emits an intervention value, though it declares the axis', async () => {
+  it('emits no intervention value for a history no agent is attributed any work in', async () => {
     const collector = new LiveRepositoryEvidenceCollector()
     const repository = await repositoryDeliveringSixChanges({ 'CLAUDE.md': 'project memory\n' })
 
     const observations = await collector.collect(contextFor(repository))
 
     // INVARIANT: supportedAxes is what a collector may attempt, never what it delivered. Provenance
-    // says who was asked, evidence says who answered.
+    // says who was asked, evidence says who answered. Here nothing carries an agent trailer, and
+    // that absence is an evidence gap: a low intervention value would be a practice gap nobody saw.
     expect(collector.supportedAxes).toContain('intervention')
     expect(observations.map((observation) => observation.axis)).not.toContain('intervention')
     expect(observations.length).toBeGreaterThan(0)
+  })
+
+  it('observes autonomy when every delivered change is attributed to an agent alone', async () => {
+    const repository = await repositoryDeliveringSixChanges({}, [], AGENT_TRAILER)
+
+    const observations = await new LiveRepositoryEvidenceCollector().collect(
+      contextFor(repository, AUTONOMY_VOCABULARY),
+    )
+
+    expect(observations).toContainEqual(
+      expect.objectContaining({ axis: 'intervention', value: 'never-once-framed' }),
+    )
+  })
+
+  it('drops an intervention value the loaded model has no name for', async () => {
+    const repository = await repositoryDeliveringSixChanges({}, [], AGENT_TRAILER)
+
+    const observations = await new LiveRepositoryEvidenceCollector().collect(
+      contextFor(repository, FULL_VOCABULARY),
+    )
+
+    // INVARIANT: FULL_VOCABULARY's intervention scale stops below the value this history proves. A
+    // collector ranks on the loaded model's own scale or stays silent; it never invents a member.
+    expect(FULL_VOCABULARY).toContainEqual(
+      expect.objectContaining({
+        axis: 'intervention',
+        values: expect.not.arrayContaining(['never-once-framed']),
+      }),
+    )
+    expect(observations.map((observation) => observation.axis)).not.toContain('intervention')
   })
 
   it('publishes every observation as its own, and as observed rather than declared', async () => {

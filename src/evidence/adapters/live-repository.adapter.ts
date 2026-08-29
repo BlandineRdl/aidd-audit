@@ -9,15 +9,27 @@ import { trackedTree } from './live-repository/tracked-tree.js'
 
 const COLLECTOR_ID = 'live-repository'
 
-// INVARIANT: Evidence read from a local working copy, entirely offline. It declares `intervention`
-// and never emits it: `supportedAxes` is what a collector may attempt, never what it delivered. No
-// local history recovers that axis, merge histories included, because a merge records that a branch
-// landed and never what followed review. Every observation is `OBSERVED`. There is no `DECLARED`
-// source by construction — the only declarative artifact in reach is prose, and prose is never
-// parsed.
+// INVARIANT: Evidence read from a local working copy, entirely offline. Every observation is
+// `OBSERVED`. There is no `DECLARED` source by construction — the only declarative artifact in
+// reach is prose, and prose is never parsed.
+//
+// LIMITATION: `intervention` is emitted upward only, and most histories will see nothing at all on
+// it. No local object records *when* a human intervened relative to review, so every rank that
+// turns on that stays out of reach here and belongs to a forge collector. What a local history does
+// settle is whether a human intervened at all, and that only where an agent is attributed the work.
+const EVERY_AXIS_IT_CAN_READ: readonly AxisId[] = ['size', 'harness', 'intervention', 'parallelism']
+
 export class LiveRepositoryEvidenceCollector implements EvidenceCollector {
   readonly id = COLLECTOR_ID
-  readonly supportedAxes: readonly AxisId[] = ['size', 'harness', 'intervention', 'parallelism']
+  readonly supportedAxes: readonly AxisId[]
+
+  // INVARIANT: The axes this collector was *built* to answer, which the composition root narrows
+  // when a better source owns them. Narrowing here rather than dropping observations later is what
+  // keeps `provenance` honest: it records what a collector was asked for, and a collector asked only
+  // about the harness must not report having been asked about the rest.
+  constructor(supportedAxes: readonly AxisId[] = EVERY_AXIS_IT_CAN_READ) {
+    this.supportedAxes = supportedAxes
+  }
 
   async collect(context: CollectorContext): Promise<readonly Observation[]> {
     context.signal.throwIfAborted()
@@ -30,8 +42,15 @@ export class LiveRepositoryEvidenceCollector implements EvidenceCollector {
     // evidence gap, and never an observation that the subject lacks a practice.
     if (!(await isRepositoryRoot(context.path, context.signal))) return []
 
+    // INVARIANT: narrowing the vocabulary is the whole of the narrowing, because both sources
+    // already return before they spawn anything when the scales they need are absent.
+    const asked: CollectorContext = {
+      ...context,
+      vocabulary: context.vocabulary.filter((scale) => this.supportedAxes.includes(scale.axis)),
+    }
+
     // The two sources fail independently, and one unreadable source must not cost the other.
-    const [harness, git] = await Promise.all([collectHarness(context), collectGitDerived(context)])
+    const [harness, git] = await Promise.all([collectHarness(asked), collectGitDerived(asked)])
 
     return [...harness, ...git]
   }
@@ -64,8 +83,15 @@ async function collectHarness(context: CollectorContext): Promise<readonly Obser
 
 async function collectGitDerived(context: CollectorContext): Promise<readonly Observation[]> {
   const sizeScale = scaleFor(context.vocabulary, 'size')
+  const interventionScale = scaleFor(context.vocabulary, 'intervention')
   const parallelismScale = scaleFor(context.vocabulary, 'parallelism')
-  if (sizeScale === undefined && parallelismScale === undefined) return []
+  if (
+    sizeScale === undefined &&
+    interventionScale === undefined &&
+    parallelismScale === undefined
+  ) {
+    return []
+  }
 
   try {
     const metrics = await readGitDerivedMetrics(context.path, context.signal)
@@ -81,6 +107,20 @@ async function collectGitDerived(context: CollectorContext): Promise<readonly Ob
           'size',
           metrics.sizeBucket,
           'median delivered change on the first-parent walk, lower of the lines and files buckets',
+        ),
+      )
+    }
+
+    if (
+      metrics.intervention !== null &&
+      interventionScale?.kind === 'ordinal' &&
+      interventionScale.values.includes(metrics.intervention)
+    ) {
+      observations.push(
+        observation(
+          'intervention',
+          metrics.intervention,
+          'delivered changes on the first-parent walk whose every commit is attributed to an agent',
         ),
       )
     }
@@ -107,5 +147,15 @@ function scaleFor(vocabulary: readonly AxisVocabulary[], axis: AxisId): AxisVoca
 }
 
 function observation(axis: AxisId, value: ObservedValue, basis: string): Observation {
-  return { axis, value, kind: 'OBSERVED', collector: COLLECTOR_ID, basis }
+  // LIMITATION: a work tree carries no distribution. The first-parent walk gives one median per axis
+  // and no record of how often the subject reached more, so only a forge answers that question.
+  return {
+    axis,
+    reading: 'SUSTAINED',
+    value,
+    kind: 'OBSERVED',
+    collector: COLLECTOR_ID,
+    basis,
+    demonstration: null,
+  }
 }

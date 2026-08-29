@@ -33,7 +33,8 @@
   },
   "parallelism": {
     "max_concurrent_branches": 2,
-    "median_concurrent_branches": 1
+    "median_concurrent_branches": 1,
+    "days_at_concurrency": { "1": 14, "2": 4 }
   },
   "ci": {
     "failure_rate": 0.34,

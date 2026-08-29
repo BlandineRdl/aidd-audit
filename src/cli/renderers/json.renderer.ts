@@ -3,6 +3,7 @@ import type {
   AxisReport,
   BlockingRequirement,
   CoverageReport,
+  DemonstratedReport,
   LevelReport,
   ProvenanceEntry,
   RequirementReport,
@@ -42,10 +43,26 @@ function projectReport(report: AssessmentReport): AssessmentReport {
     subject: { path: report.subject.path },
     proven: report.proven === null ? null : projectLevel(report.proven),
     next: report.next === null ? null : projectLevel(report.next),
+    demonstrated: report.demonstrated === null ? null : projectDemonstrated(report.demonstrated),
     levels: report.levels.map(projectLevel),
     blocking: report.blocking.map(projectBlockingRequirement),
     coverage: projectCoverage(report.coverage),
     provenance: report.provenance.map(projectProvenanceEntry),
+  }
+}
+
+// INVARIANT: the share travels with its value here as everywhere else. `assertEveryNumberFinite`
+// walks the projected document, so a share that arrived as NaN makes the renderer refuse rather than
+// publish `null`, which this contract reads as an absence nobody reported.
+function projectDemonstrated(demonstrated: DemonstratedReport): DemonstratedReport {
+  return {
+    level: demonstrated.level === null ? null : projectLevel(demonstrated.level),
+    axes: demonstrated.axes.map((axis) => ({
+      axis: axis.axis,
+      observed: axis.observed,
+      share: axis.share,
+      unit: axis.unit,
+    })),
   }
 }
 

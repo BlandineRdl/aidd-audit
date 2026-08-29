@@ -19,6 +19,7 @@ import {
   type AxisReport,
   type BlockingRequirement,
   type CoverageReport,
+  type DemonstratedReport,
   type LevelReport,
   type ProvenanceEntry,
   type RequirementReport,
@@ -39,24 +40,86 @@ export function composeAssessmentReport(input: AssessmentComposition): Assessmen
 
   requireDeclaredAxes(model, evidence)
 
-  const check = checkMaturity(model, evidence.map(toObservation))
+  const sustained = evidence.filter((entry) => entry.reading === 'SUSTAINED')
+  const demonstrated = evidence.filter((entry) => entry.reading === 'DEMONSTRATED')
+
+  const check = checkMaturity(model, sustained.map(toObservation))
   const context: ProjectionContext = {
-    evidenceByAxis: new Map(evidence.map((entry) => [entry.axis, entry])),
+    evidenceByAxis: new Map(sustained.map((entry) => [entry.axis, entry])),
     labelsByAxis: new Map(model.axes.map((axis) => [axis.id, axis.label])),
   }
   const next = check.next === null ? null : reportLevel(check.next, context)
+  const proven = check.proven === null ? null : reportLevel(check.proven, context)
 
   return {
     schemaVersion: ASSESSMENT_REPORT_SCHEMA_VERSION,
     model: { id: model.id, schemaVersion: model.schemaVersion },
     subject: { path: subjectPath },
-    proven: check.proven === null ? null : reportLevel(check.proven, context),
+    proven,
     next,
+    demonstrated: reportDemonstrated(model, sustained, demonstrated, check.proven, context),
     levels: check.levels.map((level) => reportLevel(level, context)),
     blocking: blockersOf(next),
-    coverage: deriveCoverage(model, evidence),
+    coverage: deriveCoverage(model, sustained),
     provenance: provenance.map(toProvenanceEntry),
   }
+}
+
+// INVARIANT: The engine is asked a second time, and is not modified to answer it. Two readings are
+// two observation arrays, so the decision semantics stay one implementation with one set of tests.
+//
+// INVARIANT: An axis carrying no confirmed demonstrated reading falls back to its sustained value.
+// Without that, harness and intervention — which have one reading by nature and by decision — would
+// be UNKNOWN in this run and no level would ever be demonstrated on any subject.
+function reportDemonstrated(
+  model: MaturityModel,
+  sustained: readonly Evidence[],
+  demonstrated: readonly Evidence[],
+  proven: LevelResult | null,
+  context: ProjectionContext,
+): DemonstratedReport | null {
+  const observed = demonstrated.filter((entry) => entry.status === 'CONFIRMED')
+  if (observed.length === 0) return null
+
+  const projection = model.axes.map((axis) => {
+    const reached = observed.find((entry) => entry.axis === axis.id)
+    return reached ?? sustained.find((entry) => entry.axis === axis.id)
+  })
+
+  const check = checkMaturity(
+    model,
+    projection.filter((entry) => entry !== undefined).map(toObservation),
+  )
+
+  // SAFETY: never below the habitual level. A share reading under the median says the distribution
+  // leans low, and the habitual figure is then the honest answer already; publishing less than it
+  // would read as a capability the subject lost.
+  const level = highestOf(check.proven, proven)
+
+  return {
+    level: level === null ? null : reportLevel(level, context),
+    // INVARIANT: a confirmed demonstrated reading always carries its demonstration. Anything without
+    // one is dropped rather than published at a fabricated share, because a demonstrated value the
+    // reader cannot weigh is the maximum this whole reading exists to avoid.
+    axes: observed.flatMap((entry) =>
+      entry.demonstration === null
+        ? []
+        : [
+            {
+              axis: entry.axis,
+              observed: entry.value,
+              share: entry.demonstration.share,
+              unit: entry.demonstration.unit,
+            },
+          ],
+    ),
+  }
+}
+
+function highestOf(left: LevelResult | null, right: LevelResult | null): LevelResult | null {
+  if (left === null) return right
+  if (right === null) return left
+  return left.level.rank >= right.level.rank ? left : right
 }
 
 // INVARIANT: axesRequested counts the model's axes, not evidence.length — an axis missing from

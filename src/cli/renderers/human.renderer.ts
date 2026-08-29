@@ -2,6 +2,7 @@ import type {
   AssessmentOutcome,
   AssessmentReport,
   AxisReport,
+  DemonstratedAxis,
   BlockingRequirement,
   EvidenceStatus,
   LevelReport,
@@ -15,6 +16,7 @@ export function renderHumanReport(report: AssessmentReport): string {
   const sections = [
     renderHeader(report),
     renderProvenSection(report),
+    renderDemonstratedSection(report),
     renderCoverageSection(report),
     renderNoCollectorsSection(report),
     renderCollectorsSection(report),
@@ -40,6 +42,51 @@ function renderProvenSection(report: AssessmentReport): string {
     return "Proven level: could not be established. No level's requirements were fully proven."
   }
   return [`Proven level: ${proven.label} (rank ${proven.rank})`, renderLevelAxes(proven)].join('\n')
+}
+
+// INVARIANT: This section always sits *below* the proven one and never replaces it. The habitual
+// level is what the subject holds; this is what it has reached often enough to count, which is a
+// different and weaker claim. Printed first, or printed alone, it would be quoted as the level.
+//
+// INVARIANT: It is omitted entirely when it names nothing above the proven level, so the ordinary
+// subject — every bundle, every source that records a median without the distribution behind it —
+// reads exactly as it did before this section existed.
+function renderDemonstratedSection(report: AssessmentReport): string {
+  const { demonstrated, proven } = report
+  if (demonstrated === null || demonstrated.level === null) return ''
+  if (proven !== null && demonstrated.level.rank <= proven.rank) return ''
+
+  return [
+    `Demonstrated: ${demonstrated.level.label} (rank ${demonstrated.level.rank})`,
+    ...demonstrated.axes.map((axis) => `  ${renderDemonstratedAxis(axis, report)}`),
+  ].join('\n')
+}
+
+// SAFETY: the value and its frequency are one sentence, never two. A demonstrated value read without
+// the share that earned it is a maximum wearing a habit's clothes, which is the one thing this
+// reading must not become.
+function renderDemonstratedAxis(axis: DemonstratedAxis, report: AssessmentReport): string {
+  const label = labelFor(axis.axis, report) ?? axis.axis
+  const percent = Math.round(axis.share * 100)
+  return `${label}: ${formatSet(axis.observed)} · reached on ${percent}% of ${occasionsOf(axis.unit)}`
+}
+
+function occasionsOf(unit: DemonstratedAxis['unit']): string {
+  switch (unit) {
+    case 'DELIVERIES':
+      return 'delivered changes'
+    case 'ACTIVE_DAYS':
+      return 'active days'
+  }
+}
+
+// The model's own label for an axis, taken from any level that reports it.
+function labelFor(axis: string, report: AssessmentReport): string | undefined {
+  for (const level of report.levels) {
+    const found = level.axes.find((candidate) => candidate.axis === axis)
+    if (found !== undefined) return found.label
+  }
+  return undefined
 }
 
 // Null-proven only: MET implies every axis CONFIRMED, so the counts are then full.

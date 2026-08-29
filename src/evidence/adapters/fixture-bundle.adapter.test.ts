@@ -182,6 +182,70 @@ describe('the recorded delivery answers three axes', () => {
     expect(valueFor(await collectFrom(path), 'parallelism')).toBe(2)
   })
 
+  it('answers the habitual question alone when the record carries no distribution', async () => {
+    const path = bundleHolding({
+      ...MANIFEST,
+      'git-activity.json': activity(
+        { total: 40 },
+        { parallelism: { max_concurrent_branches: 9, median_concurrent_branches: 2 } },
+      ),
+    })
+
+    // INVARIANT: a bundle written before the field existed must not gain a reading it never
+    // recorded. `max_concurrent_branches` is not a distribution and never stands in for one.
+    const observations = await collectFrom(path)
+    expect(observations.filter((entry) => entry.reading === 'DEMONSTRATED')).toEqual([])
+  })
+
+  it('reads the recorded days to say what the subject reached, and how often', async () => {
+    const path = bundleHolding({
+      ...MANIFEST,
+      'git-activity.json': activity(
+        { total: 40 },
+        {
+          parallelism: {
+            max_concurrent_branches: 4,
+            median_concurrent_branches: 1,
+            days_at_concurrency: { '1': 10, '3': 5, '4': 3 },
+          },
+        },
+      ),
+    })
+
+    const observations = await collectFrom(path)
+    const demonstrated = observations.find((entry) => entry.reading === 'DEMONSTRATED')
+
+    // Eight of eighteen days carried three branches or more, past a third; only three carried four.
+    expect(demonstrated).toMatchObject({
+      axis: 'parallelism',
+      value: 3,
+      demonstration: { unit: 'ACTIVE_DAYS' },
+    })
+    expect(valueFor(observations, 'parallelism')).toBe(1)
+  })
+
+  it('refuses a distribution that cannot support the median recorded beside it', async () => {
+    const path = bundleHolding({
+      ...MANIFEST,
+      'git-activity.json': activity(
+        { total: 40 },
+        {
+          parallelism: {
+            max_concurrent_branches: 4,
+            median_concurrent_branches: 4,
+            days_at_concurrency: { '1': 10, '3': 5, '4': 3 },
+          },
+        },
+      ),
+    })
+
+    // INVARIANT: a bundle is a recording, and an inconsistent recording is not evidence. Averaging
+    // the two halves would publish a number neither of them states.
+    const observations = await collectFrom(path)
+    expect(observations.filter((entry) => entry.reading === 'DEMONSTRATED')).toEqual([])
+    expect(valueFor(observations, 'parallelism')).toBe(4)
+  })
+
   it('reports a period that delivered nothing as such, not as a gap', async () => {
     const path = bundleHolding({ ...MANIFEST, 'git-activity.json': activity({ total: 0 }) })
 

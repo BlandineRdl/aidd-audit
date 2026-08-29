@@ -34,7 +34,7 @@ How this project is tested: TDD boundaries, doubles, and validation.
 | `assess.command` (`runAssess`) | argv parsing, the exit-code taxonomy, stdout/stderr, wired against the real pipeline | none — real `loadMaturityModel`, real `assessMaturity`; only `CommandIo` is an in-memory double, and it fakes no domain collaborator |
 | `tests/cli/process-contract.test.ts` | that `main.ts` and the built `dist/cli.js` deliver that taxonomy to a real shell, and that the wired collector reaches the pipeline through it | none — the process is spawned, nothing is faked |
 | `tests/cli/self-assessment.test.ts` | AIDD assessed by its own shipped binary: that the verdict follows from evidence, that prose and `--json` agree, that no path spelling changes it | none — the process is spawned against this repository |
-| `live-repository.adapter` and its modules | what a local repository can prove: the first-parent walk, cancellation | none — real temporary Git repositories and the real filesystem |
+| `live-repository.adapter` and its modules | what a local repository can prove: the first-parent walk, the zero-touch share behind `intervention`, the delivery-record share that withholds the branch-derived axes, cancellation | none — real temporary Git repositories and the real filesystem |
 | `fixture-bundle.adapter` and its modules | what a recorded bundle can prove: the delivery record, the recorded tree, cancellation | none — real temporary directories and the real filesystem |
 | `harness/harness-scan` | the harness set both adapters read: the name tables, the `loops` recogniser, what makes a member undecidable | none — a real tree behind the `HarnessTree` seam |
 | `fixture-bundle/bundle-tree` | the recorded tree: what `repo-context/` rebases to, that no mode is recorded, cancellation | none — real temporary directories |
@@ -98,12 +98,18 @@ Gap: `NOT_MET` is a practice gap, `UNPROVEN` an evidence gap — see **The conse
 * Profiles are acceptance fixtures, not domain identities. Production code holds no profile-specific knowledge.
 * Missing input yields `UNKNOWN`, never fabricated negative evidence.
 
-| Profile    | Expected | Deliberate hole    |
-| ---------- | -------- | ------------------ |
-| `perceval` | Red      | no `repo-context/` |
-| `bohort`   | Blue     | none               |
-| `leodagan` | Green    | no `session.md`    |
-| `arthur`   | Copper   | no `declaratif.md` |
+| Profile    | Sustained | Demonstrated | Deliberate hole    |
+| ---------- | --------- | ------------ | ------------------ |
+| `perceval` | Red       | Red          | no `repo-context/` |
+| `bohort`   | Blue      | Blue         | none               |
+| `leodagan` | Green     | **Copper**   | no `session.md`    |
+| `arthur`   | Copper    | Copper       | no `declaratif.md` |
+
+**`leodagan` is the only profile whose two readings differ, and that is his second job.** His recorded
+days carry three branches often enough to reach Copper on the axis his median leaves at one, so he is
+the fixture that exercises the demonstrated reading from a bundle through to the published contract.
+Without him that path would ship unproven, and the temptation would be to write a unit test for it
+instead — which would prove the arithmetic and not the wiring.
 
 * **The table is an assertion.** `tests/cli/reference-profiles.test.ts` drives `runAssess(['assess', 'profiles/<name>', '--json'])` and pins each level, plus `coverage.axesConfirmed === 4` — a level named on partial evidence would be an accident. It runs in process rather than through `dist/cli.js`, which `process-contract.test.ts` builds with `clean: true` and reads alone.
 * The same suite greps `src/` for each profile's name and for `profiles/`: production code holds no profile knowledge, and nothing but a test may name one.

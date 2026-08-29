@@ -195,11 +195,23 @@ describe('8. the wired collectors reach the pipeline through the binary', () => 
     // would have had anyway — `main.ts` built a collector set, the use case ran it, and the
     // entries survived composition into the published contract. `axes` is what each collector
     // was asked to attempt, never what it answered.
-    expect(reportFor('assess', '.').provenance).toEqual([
+    // INVARIANT: one axis, one source. This repository has a GitHub origin, so the forge owns
+    // size, intervention and parallelism and the live collector is asked about the harness alone.
+    // Two collectors asked about one axis would resolve to CONFLICTING and cost both.
+    const provenance = reportFor('assess', '.').provenance
+
+    expect(
+      provenance.map((entry) => ({
+        collector: entry.collector,
+        status: entry.status,
+        axes: entry.axes,
+      })),
+    ).toEqual([
+      { collector: 'live-repository', status: 'COMPLETED', axes: ['harness'] },
       {
-        collector: 'live-repository',
-        status: 'COMPLETED',
-        axes: ['size', 'harness', 'intervention', 'parallelism'],
+        collector: 'forge-repository',
+        status: 'FAILED',
+        axes: ['size', 'intervention', 'parallelism'],
       },
       {
         collector: 'fixture-bundle',
@@ -207,6 +219,20 @@ describe('8. the wired collectors reach the pipeline through the binary', () => 
         axes: ['size', 'harness', 'intervention', 'parallelism'],
       },
     ])
+  })
+
+  it('publishes a report and exits 0 when the forge refuses', () => {
+    // INVARIANT: a source that could not answer is an evidence gap, never the tool breaking. The
+    // spawn fixture puts a refusing `gh` ahead of any real one, so this is the ordinary path on a
+    // machine with no credentials.
+    const run = runCli('assess', '.', '--json')
+
+    expect(run.status).toBe(0)
+    const forge = (JSON.parse(run.stdout) as AssessmentReport).provenance.find(
+      (entry) => entry.collector === 'forge-repository',
+    )
+    expect(forge?.status).toBe('FAILED')
+    expect(forge && 'reason' in forge ? forge.reason : '').toContain('gh')
   })
 
   it('carries something it observed on disk into the rendered report', () => {
