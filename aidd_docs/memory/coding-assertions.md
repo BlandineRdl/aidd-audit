@@ -9,13 +9,13 @@ One assertion, one command, one verdict. An agent reading `pnpm architecture fai
 | Command | Checks |
 | ------- | ------ |
 | `pnpm typecheck` | TypeScript, `strict` |
-| `pnpm test` | Vitest, behavior only |
+| `pnpm test` | Vitest, behavior only — and tsup, which `tests/cli/process-contract.test.ts` runs to build the binary it spawns |
 | `pnpm architecture` | dependency-cruiser boundary rules, then the proof that those rules bite |
 | `pnpm check` | the three above, in that order, fail-fast |
 | `pnpm format` | Biome, rewrites files in place |
 | `pnpm format:check` | Biome, reports without rewriting |
 
-Formatting is deliberately outside `check`, for the same reason as `build`: a mis-indented file blocks nothing about correctness. Biome is a formatter here and nothing else — its linter is off, `typecheck` and `architecture` already own those verdicts.
+Formatting is deliberately outside `check`: a mis-indented file blocks nothing about correctness. That reason once covered `build` too; it no longer does — see **Before push**. Biome is a formatter here and nothing else — its linter is off, `typecheck` and `architecture` already own those verdicts.
 
 `pnpm check` is the single source of truth. A human, an agent, a worktree or a future CI run the same gate without depending on anything being installed.
 
@@ -27,7 +27,9 @@ Lefthook runs `biome format --write` on the staged files, restages what it rewro
 
 ## Before push
 
-`pnpm check`, then `pnpm build` — tsup must produce `dist/cli.js`. Build is deliberately outside `check`: a broken bundle blocks distribution, not correctness. The entry is `src/cli/main.ts`, and both it and the command it wraps, `assess.command.ts`, now exist — `pnpm build` is green.
+`pnpm check`, then `pnpm build` — tsup must produce `dist/cli.js`. The entry is `src/cli/main.ts`, and both it and the command it wraps, `assess.command.ts`, exist — `pnpm build` is green.
+
+Build used to sit outside `check` on the ground that a broken bundle blocks distribution, not correctness. **That is no longer true.** `tests/cli/process-contract.test.ts` spawns `dist/cli.js` to observe the exit codes a caller sees, and builds it in `beforeAll` so it can never test a stale artefact — so a bundle that will not build now fails `pnpm test`, and with it `pnpm check`. The explicit `pnpm build` here still earns its place: it is the one that proves the *published* entry point, and it reports a bundling fault as a bundling fault instead of as a failed hook.
 
 ## The boundary rules
 
