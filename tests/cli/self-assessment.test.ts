@@ -52,19 +52,10 @@ describe('1. the shipped CLI assesses the repository it ships from', () => {
   })
 })
 
-describe('2. the live repository collector is what produced it', () => {
-  it('assesses through the collectors the composition root wired', () => {
-    // INVARIANT: the bundle carries no double by construction — a double is a
-    // `.test-adapter.ts`, which never reaches `dist/cli.js`. What this adds is that the live
-    // collector was asked.
-    expect(report.provenance.map((entry) => entry.collector)).toContain('live-repository')
-  })
-})
-
 // INVARIANT: three of these four are guards, not observations — the contract's union makes
 // NOT_MET-without-CONFIRMED unrepresentable and this checkout emits no practice gap. Kept because a
 // producer abandoning the conservative rule would surface here first.
-describe('3. the verdict follows from evidence, never from its absence', () => {
+describe('2. the verdict follows from evidence, never from its absence', () => {
   it('never calls a practice deficient on evidence it did not confirm', () => {
     const inferred = everyRequirement(report).filter(
       (requirement) => requirement.outcome === 'NOT_MET' && requirement.evidence !== 'CONFIRMED',
@@ -104,7 +95,7 @@ describe('3. the verdict follows from evidence, never from its absence', () => {
   })
 })
 
-describe('4. prose and JSON describe the same assessment', () => {
+describe('3. prose and JSON describe the same assessment', () => {
   it('states the proven verdict the contract carries', () => {
     if (report.proven === null) {
       expect(prose).toContain('could not be established')
@@ -157,7 +148,7 @@ describe('4. prose and JSON describe the same assessment', () => {
   })
 })
 
-describe('5. nothing about this repository is special-cased', () => {
+describe('4. nothing about this repository is special-cased', () => {
   it('assesses the same repository identically however the path is spelled', () => {
     // A shortcut keyed on the path or the package name shows up here.
     const absolute = reportFor('assess', REPO_ROOT)

@@ -176,7 +176,7 @@ describe('7. the assessment result never reaches the exit code', () => {
 // INVARIANT: The two wired collectors keeping subjects apart is a fact about the composition root,
 // and only visible with both of them running. `self-assessment.test.ts` owns the assessment itself;
 // the exit codes and the streams are this suite's.
-describe('8. the wired collectors answer for their own subject, never the neighbour', () => {
+describe('8. the wired collectors reach the pipeline through the binary', () => {
   function reportFor(...args: readonly string[]): AssessmentReport {
     const run = runCli(...args, '--json')
     expect(run.status).toBe(0)
@@ -190,6 +190,34 @@ describe('8. the wired collectors answer for their own subject, never the neighb
     return requirement?.observed
   }
 
+  it('runs the collectors the composition root wired, on the repository itself', () => {
+    // INVARIANT: provenance is the proof the wiring is real rather than a shape the report
+    // would have had anyway — `main.ts` built a collector set, the use case ran it, and the
+    // entries survived composition into the published contract. `axes` is what each collector
+    // was asked to attempt, never what it answered.
+    expect(reportFor('assess', '.').provenance).toEqual([
+      {
+        collector: 'live-repository',
+        status: 'COMPLETED',
+        axes: ['size', 'harness', 'intervention', 'parallelism'],
+      },
+      {
+        collector: 'fixture-bundle',
+        status: 'COMPLETED',
+        axes: ['size', 'harness', 'intervention', 'parallelism'],
+      },
+    ])
+  })
+
+  it('carries something it observed on disk into the rendered report', () => {
+    // INVARIANT: an observation survived collection, resolution and composition. Never that it
+    // amounts to a level — coupled to this repository having a harness at all, which it does.
+    const report = reportFor('assess', '.')
+
+    expect(report.coverage.axesRequested).toBe(4)
+    expect(report.coverage.axesObserved).toBeGreaterThan(0)
+  })
+
   it('answers for the bundle out of the bundle, never out of the checkout holding it', () => {
     // SAFETY: `profiles/` is tracked inside this repository, so without the live collector's
     // repository-root gate that collector would resolve to this checkout and publish AIDD's own
@@ -200,5 +228,16 @@ describe('8. the wired collectors answer for their own subject, never the neighb
 
     expect(observedFor(bundle, 'red', 'harness')).toEqual(['prompts'])
     expect(observedFor(checkout, 'red', 'harness')).not.toEqual(['prompts'])
+  })
+
+  it('reports no proven level for a repository, and says so in the human rendering', () => {
+    // LIMITATION: `intervention` is unobservable on any local history and every level declares
+    // it, so `proven: null` is this command's normal output. Asserted as the ceiling it is, not
+    // as a level — a forge collector lifting it is what should turn this red.
+    expect(reportFor('assess', '.').proven).toBeNull()
+
+    const human = runCli('assess', '.')
+    expect(human.status).toBe(0)
+    expect(human.stdout).toContain('could not be established')
   })
 })
