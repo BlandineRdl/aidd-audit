@@ -1,7 +1,7 @@
 import { defineConfig } from 'tsup'
 
 export default defineConfig({
-  entry: { cli: 'src/cli/assess.command.ts' },
+  entry: { cli: 'src/cli/main.ts' },
   format: ['esm'],
   target: 'node24',
   platform: 'node',

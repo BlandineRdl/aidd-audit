@@ -173,6 +173,33 @@ const SENTINELS = [
     },
   },
   {
+    // src/assessment/usecases/ is about to hold real code, and the three
+    // domain rules reach it under the same shared regex as composition/ —
+    // one rule's sentinel there proves nothing about this folder.
+    rule: 'domain-has-no-filesystem',
+    from: 'src/assessment/usecases/__boundary-sentinel__fs.ts',
+    files: {
+      'src/assessment/usecases/__boundary-sentinel__fs.ts':
+        "import { readFileSync } from 'node:fs'\nexport const breach = readFileSync\n",
+    },
+  },
+  {
+    rule: 'domain-has-no-processes',
+    from: 'src/assessment/usecases/__boundary-sentinel__proc.ts',
+    files: {
+      'src/assessment/usecases/__boundary-sentinel__proc.ts':
+        "import { execSync } from 'node:child_process'\nexport const breach = execSync\n",
+    },
+  },
+  {
+    rule: 'domain-has-no-vendor-sdk',
+    from: 'src/assessment/usecases/__boundary-sentinel__vendor.ts',
+    files: {
+      'src/assessment/usecases/__boundary-sentinel__vendor.ts':
+        "import { parse } from 'yaml'\nexport const breach = parse\n",
+    },
+  },
+  {
     rule: 'no-circular',
     from: 'src/maturity/models/__boundary-sentinel__a.ts',
     files: {

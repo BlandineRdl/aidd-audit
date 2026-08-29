@@ -27,7 +27,7 @@ Lefthook runs `biome format --write` on the staged files, restages what it rewro
 
 ## Before push
 
-`pnpm check`, then `pnpm build` — tsup must produce `dist/cli.js`. Build is deliberately outside `check`: a broken bundle blocks distribution, not correctness. It stays red until `src/cli/assess.command.ts` lands, since tsup has no entry point before that.
+`pnpm check`, then `pnpm build` — tsup must produce `dist/cli.js`. Build is deliberately outside `check`: a broken bundle blocks distribution, not correctness. The entry is `src/cli/main.ts`, and both it and the command it wraps, `assess.command.ts`, now exist — `pnpm build` is green.
 
 ## The boundary rules
 

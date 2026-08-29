@@ -288,6 +288,42 @@ describe('8. a blocker naming an id the report no longer carries still renders',
   })
 })
 
+describe('10. no collector ran at all', () => {
+  const noCollectorsParagraph = (output: string) =>
+    output.split('\n\n').find((paragraph) => paragraph.startsWith('No collector ran'))
+
+  it('says plainly that nothing was observed, distinct from the practice and evidence gaps', () => {
+    const blue = levelReport()
+    const report = assessmentReport({
+      proven: null,
+      next: blue,
+      levels: [blue],
+      coverage: { axesRequested: 4, axesObserved: 0, axesConfirmed: 0 },
+      provenance: [],
+    })
+    const output = renderHumanReport(report)
+    expect(noCollectorsParagraph(output)).toContain('No collector ran')
+    expect(noCollectorsParagraph(output)).toContain('did not look')
+  })
+
+  it('is silent once at least one collector ran, even if none completed', () => {
+    const blue = levelReport()
+    const report = assessmentReport({
+      proven: null,
+      next: blue,
+      levels: [blue],
+      provenance: [failedProvenance('live-repository', ['harness'], 'git not found')],
+    })
+    const output = renderHumanReport(report)
+    expect(noCollectorsParagraph(output)).toBeUndefined()
+  })
+
+  it('is silent when a collector ran and completed', () => {
+    const output = renderHumanReport(assessmentReport())
+    expect(noCollectorsParagraph(output)).toBeUndefined()
+  })
+})
+
 describe('9. the axis outcomes are glossed', () => {
   // Rendered as `next`: the engine never proves a level carrying a NOT_MET axis.
   const blue = levelReport({

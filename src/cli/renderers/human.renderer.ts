@@ -16,6 +16,7 @@ export function renderHumanReport(report: AssessmentReport): string {
     renderHeader(report),
     renderProvenSection(report),
     renderCoverageSection(report),
+    renderNoCollectorsSection(report),
     renderIncompleteCollectorsSection(report),
     renderNextSection(report),
     renderBlockingSection(report),
@@ -47,6 +48,15 @@ function renderCoverageSection(report: AssessmentReport): string {
   }
   const { axesRequested, axesObserved, axesConfirmed } = report.coverage
   return `Evidence coverage: ${axesConfirmed} of ${axesRequested} axes confirmed (${axesObserved} observed).`
+}
+
+// A third state above both gaps: nothing was looked at. The section below
+// names only collectors that ran, so it stays silent on an empty list.
+function renderNoCollectorsSection(report: AssessmentReport): string {
+  if (report.provenance.length > 0) {
+    return ''
+  }
+  return 'No collector ran: nothing about this subject was observed. The axes below are unproven because AIDD did not look, not because it looked and found nothing.'
 }
 
 type IncompleteCollector = Exclude<ProvenanceEntry, { status: 'COMPLETED' }>
