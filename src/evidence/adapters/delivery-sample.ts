@@ -50,6 +50,21 @@ export const DEMONSTRATED_SHARE = 1 / 3
 // `aidd_docs/tasks/2026_08/2026_08_29_dual-reading-and-forge-collector/size-transcription.md`.
 export const MINIMUM_DEMONSTRATED_SAMPLE = 10
 
+// SAFETY: callers guarantee a non-empty sample, and an even count yields a half-integer median. A
+// default of zero would publish the smallest bucket from a sample nobody took — a practice gap
+// invented out of an empty list, which is the one outcome this project forbids outright. Shared so
+// that a collector cannot reach for a weaker copy: two were written and both defaulted to zero.
+export function median(values: readonly number[]): number {
+  const sorted = [...values].sort((left, right) => left - right)
+  const middle = Math.floor(sorted.length / 2)
+  const upper = sorted[middle]
+  const lower = sorted.length % 2 === 1 ? upper : sorted[middle - 1]
+  if (upper === undefined || lower === undefined) {
+    throw new RangeError('A median needs a non-empty sample.')
+  }
+  return (lower + upper) / 2
+}
+
 export interface DemonstratedValue<T> {
   readonly value: T
   readonly share: number
@@ -71,4 +86,24 @@ export function demonstratedFrom<T>(
     if (share >= DEMONSTRATED_SHARE) return { value: candidate, share }
   }
   return null
+}
+
+// INVARIANT: The demonstrated reading of a count per occasion — branches carried on a day, and
+// nothing else so far. Shared so the two collectors that answer it cannot drift, which a copy in
+// each of them could and a comment claiming otherwise would not prevent.
+//
+// SAFETY: takes the occurrence counts rather than one entry per occasion. A bundle records
+// `{"3": 1000000000}` as easily as `{"3": 4}`, and expanding that into an array is a billion
+// elements allocated from a file the tool did not write.
+export function demonstratedCountFrom(
+  occurrencesByCount: ReadonlyMap<number, number>,
+): DemonstratedValue<number> | null {
+  const sampleSize = [...occurrencesByCount.values()].reduce((total, count) => total + count, 0)
+  const seen = [...occurrencesByCount.keys()].sort((left, right) => left - right)
+
+  return demonstratedFrom(sampleSize, seen, (candidate) =>
+    [...occurrencesByCount.entries()]
+      .filter(([count]) => count >= candidate)
+      .reduce((total, [, occurrences]) => total + occurrences, 0),
+  )
 }

@@ -110,12 +110,21 @@ are not interchangeable, which the collector port promises they should be.
 
 Intervention and parallelism are unmoved by the choice: `key-steps` and `2` under both windows.
 
-## Verification still owed
+## Verification closed on 2026-08-30
 
-The parallelism figure counts only PRs merged inside the window. A branch abandoned, or merged after
-2026-08-27, contributes nothing, so 2 and 3 are floors rather than measurements. The all-states query
-written to check this looped on its first page and returned 50 distinct PRs instead of the full set;
-it must be rerun with a correctly threaded cursor before phase 3 fixes N.
+The parallelism figure counts only pull requests merged inside the window, so a branch abandoned or
+merged later contributes nothing. The all-states query first written to check this looped on its own
+page — `gh` threads a cursor only for a variable literally named `endCursor` — and was rerun:
+
+```
+186 pull requests   145 merged · 33 closed unmerged · 8 open
+merged only    49 active days   median 2   at or above 3  40.8%   4  26.5%
+every state    54 active days   median 2   at or above 3  44.4%   4  35.2%
+```
+
+The median is unmoved. The demonstrated reading would be 4 rather than 3 if abandoned and open
+branches counted, and they do not, so **3 is a floor and not a measurement** wherever it appears
+above.
 
 ## Whose work is being measured, and the bots that are not anyone's
 

@@ -101,5 +101,5 @@ journey
 | ---- | -------------------------------- |
 | 1 | The parallelism distribution is recomputed over every pull request, and the document states whether the subject's figures moved. |
 | 2 | At least two control repositories are named, with their expected level written down before their measurement. |
-| 3 | `share-threshold.md` holds one chosen N, an argument stated in the model's terms, the table it was checked against, and an explicit note that the subject's two shares sit just above one third. |
+| 3 | `size-transcription.md` holds one chosen N, an argument stated in the model's terms, the table it was checked against, and an explicit note that the subject's two shares sit just above one third. |
 | 4 | A run where no candidate N survives ends the plan in writing rather than picking the most convenient value. |

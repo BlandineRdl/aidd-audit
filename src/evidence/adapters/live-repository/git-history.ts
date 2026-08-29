@@ -3,6 +3,7 @@ import { AUTONOMOUS_INTERVENTION, ZERO_TOUCH_SHARE_FOR_AUTONOMY } from '../auton
 import {
   MINIMUM_ACTIVE_DAYS,
   MINIMUM_DELIVERED_CHANGES,
+  median,
   windowStartFrom,
 } from '../delivery-sample.js'
 import { bucketForFiles, bucketForLines, lowerBucket, type SizeBucket } from '../size-buckets.js'
@@ -547,18 +548,4 @@ async function inBoundedParallel<Input, Output>(
 function calendarDay(authorDate: string): string | null {
   const match = /^(\d{4}-\d{2}-\d{2})/.exec(authorDate.trim())
   return match?.[1] ?? null
-}
-
-// SAFETY: callers guarantee a non-empty sample, and an even count yields a half-integer median.
-// A default of zero would publish the smallest bucket from a sample nobody took — a practice gap
-// invented out of an empty list, which is the one outcome this project forbids outright.
-function median(values: readonly number[]): number {
-  const sorted = [...values].sort((left, right) => left - right)
-  const middle = Math.floor(sorted.length / 2)
-  const upper = sorted[middle]
-  const lower = sorted.length % 2 === 1 ? upper : sorted[middle - 1]
-  if (upper === undefined || lower === undefined) {
-    throw new RangeError('A median needs a non-empty sample.')
-  }
-  return (lower + upper) / 2
 }

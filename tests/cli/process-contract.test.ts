@@ -195,30 +195,43 @@ describe('8. the wired collectors reach the pipeline through the binary', () => 
     // would have had anyway — `main.ts` built a collector set, the use case ran it, and the
     // entries survived composition into the published contract. `axes` is what each collector
     // was asked to attempt, never what it answered.
-    // INVARIANT: one axis, one source. This repository has a GitHub origin, so the forge owns
-    // size, intervention and parallelism and the live collector is asked about the harness alone.
-    // Two collectors asked about one axis would resolve to CONFLICTING and cost both.
+    // INVARIANT: one axis, one source. Asserted as a shape rather than a fixed list, because the
+    // set depends on whether this checkout's `origin` names a GitHub repository, and `vcs.md` says
+    // no part of the gate may depend on the remote — the suite must pass from a clone with none.
     const provenance = reportFor('assess', '.').provenance
+    const collectors = provenance.map((entry) => entry.collector)
 
-    expect(
-      provenance.map((entry) => ({
-        collector: entry.collector,
-        status: entry.status,
-        axes: entry.axes,
-      })),
-    ).toEqual([
-      { collector: 'live-repository', status: 'COMPLETED', axes: ['harness'] },
-      {
-        collector: 'forge-repository',
-        status: 'FAILED',
-        axes: ['size', 'intervention', 'parallelism'],
-      },
-      {
-        collector: 'fixture-bundle',
-        status: 'COMPLETED',
-        axes: ['size', 'harness', 'intervention', 'parallelism'],
-      },
-    ])
+    expect(collectors).toContain('live-repository')
+    expect(collectors).toContain('fixture-bundle')
+
+    // INVARIANT: every axis of the loaded model is asked of someone. `axes` is what a collector was
+    // asked to attempt, never what it answered, so an axis may legitimately appear twice — the
+    // bundle collector declares all four on every subject and stays silent on a repository.
+    const asked = provenance.flatMap((entry) => entry.axes)
+    expect([...new Set(asked)].sort()).toEqual(['harness', 'intervention', 'parallelism', 'size'])
+
+    // INVARIANT: what must never happen is two collectors *answering* one axis differently, which
+    // resolves to CONFLICTING and costs the axis entirely. Asserted at the published surface, where
+    // it would show, rather than on the wiring that is supposed to prevent it.
+    const report = reportFor('assess', '.')
+    const statuses = report.levels.flatMap((level) =>
+      level.axes.flatMap((axis) => axis.requirements.map((requirement) => requirement.evidence)),
+    )
+    expect(statuses).not.toContain('CONFLICTING')
+
+    // INVARIANT: the forge is the one collector whose presence turns on the remote. Where it is
+    // built it owns the three axes a pull request records, and the live collector keeps the harness
+    // alone — which is the wiring that keeps the assertion above true.
+    if (collectors.includes('forge-repository')) {
+      expect(provenance.find((entry) => entry.collector === 'live-repository')?.axes).toEqual([
+        'harness',
+      ])
+      expect(provenance.find((entry) => entry.collector === 'forge-repository')?.axes).toEqual([
+        'size',
+        'intervention',
+        'parallelism',
+      ])
+    }
   })
 
   it('publishes a report and exits 0 when the forge refuses', () => {
@@ -231,8 +244,13 @@ describe('8. the wired collectors reach the pipeline through the binary', () => 
     const forge = (JSON.parse(run.stdout) as AssessmentReport).provenance.find(
       (entry) => entry.collector === 'forge-repository',
     )
-    expect(forge?.status).toBe('FAILED')
-    expect(forge && 'reason' in forge ? forge.reason : '').toContain('gh')
+
+    // INVARIANT: a checkout with no GitHub origin builds no forge at all, which is the other half
+    // of the same rule — a source that is not there is not a failure either.
+    if (forge === undefined) return
+
+    expect(forge.status).toBe('FAILED')
+    expect('reason' in forge ? forge.reason : '').toContain('gh')
   })
 
   it('carries something it observed on disk into the rendered report', () => {

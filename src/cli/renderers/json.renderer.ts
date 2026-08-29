@@ -3,6 +3,7 @@ import type {
   AxisReport,
   BlockingRequirement,
   CoverageReport,
+  DemonstratedLevel,
   DemonstratedReport,
   LevelReport,
   ProvenanceEntry,
@@ -56,7 +57,7 @@ function projectReport(report: AssessmentReport): AssessmentReport {
 // publish `null`, which this contract reads as an absence nobody reported.
 function projectDemonstrated(demonstrated: DemonstratedReport): DemonstratedReport {
   return {
-    level: demonstrated.level === null ? null : projectLevel(demonstrated.level),
+    level: demonstrated.level === null ? null : projectDemonstratedLevel(demonstrated.level),
     axes: demonstrated.axes.map((axis) => ({
       axis: axis.axis,
       observed: axis.observed,
@@ -64,6 +65,11 @@ function projectDemonstrated(demonstrated: DemonstratedReport): DemonstratedRepo
       unit: axis.unit,
     })),
   }
+}
+
+// The level and nothing beneath it; the contract narrows this shape on purpose.
+function projectDemonstratedLevel(level: DemonstratedLevel): DemonstratedLevel {
+  return { id: level.id, rank: level.rank, label: level.label, outcome: level.outcome }
 }
 
 function projectLevel(level: LevelReport): LevelReport {

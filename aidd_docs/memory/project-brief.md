@@ -40,7 +40,7 @@ What this project is, the problem it solves, and its domain language. The non-de
 - Deterministic decision chain: raw observations → normalised evidence → evidence resolution → axis satisfaction → level satisfaction → highest proven level.
 - Two evidence sources behind one port: fixture bundles and a live local repository (filesystem + Git).
 - Two renderers: a human explanation and a versioned JSON contract.
-- Runs fully offline. Installation may need the network; execution never does.
+- **Offline is a floor, no longer a guarantee.** A bundle, and a repository with no GitHub origin, are assessed with no network at all: everything the local sources answer, they answer offline. A repository hosted on GitHub is assessed through its forge as well, because three of the four axes are unobservable or artefact-prone on a squash-merged history, and the merge graph is not the delivery record there. The forge collector stays silent without credentials, so the offline path never breaks — it just yields less. What was promised before this, and is no longer true, is that *execution never touches the network*.
 
 ## The conservative rule
 

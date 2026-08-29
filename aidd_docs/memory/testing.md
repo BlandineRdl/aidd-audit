@@ -34,7 +34,7 @@ How this project is tested: TDD boundaries, doubles, and validation.
 | `assess-maturity.usecase` | orchestration and assessment result; coverage is `compose-assessment-report`'s to prove | real domain collaborators, fakes at external ports only |
 | `assess.command` (`runAssess`) | argv parsing, the exit-code taxonomy including `1`, stdout/stderr, wired against the real pipeline | `CommandIo`, and — for `1` alone — `OffVocabularyEvidenceCollector`, passed through `AssessOptions.collectors`. Both are boundary doubles: everything downstream of the collector is the real pipeline |
 | `tests/cli/process-contract.test.ts` | that `main.ts` and the built `dist/cli.js` deliver that taxonomy to a real shell, and that the wired collector reaches the pipeline through it | none — the process is spawned, nothing is faked |
-| `tests/cli/self-assessment.test.ts` | AIDD assessed by its own shipped binary: that the verdict follows from evidence, that prose and `--json` agree, that no path spelling changes it | none — the process is spawned against this repository |
+| `tests/cli/self-assessment.test.ts` | AIDD assessed by its own shipped binary: that the verdict follows from evidence, that prose and `--json` agree, that no path spelling changes it | **one**, and only one: a refusing `gh` on the child's PATH, so the gate never reaches the network. Nothing is faked *for* AIDD's benefit — a source is withheld, which can only cost it axes — but the forge is consequently never exercised here |
 | `live-repository.adapter` and its modules | what a local repository can prove: the first-parent walk, the zero-touch share behind `intervention`, the delivery-record share that withholds the branch-derived axes, cancellation | none — real temporary Git repositories and the real filesystem |
 | `fixture-bundle.adapter` and its modules | what a recorded bundle can prove: the delivery record, the recorded tree, cancellation | none — real temporary directories and the real filesystem |
 | `harness/harness-scan` | the harness set both adapters read: the name tables, the `loops` recogniser, what makes a member undecidable | none — a real tree behind the `HarnessTree` seam |
@@ -167,9 +167,11 @@ instead — which would prove the arithmetic and not the wiring.
 ## Tools
 
 * Vitest only; dependency-cruiser runs with the test command.
-* Verify the offline constraint with the network disabled, on a repository and on a fixture bundle, in both renderings:
+* Verify the offline floor with the network disabled, on a bundle and on a repository, in both renderings. A bundle answers identically either way; a GitHub repository answers with *less*, its forge recorded `FAILED`, and that difference is the point of the check rather than a failure of it:
 
 ```bash
-aidd-audit assess ./profiles/arthur   # and --json
-aidd-audit assess .                   # and --json
+aidd-audit assess ./profiles/arthur   # and --json — identical with or without the network
+aidd-audit assess .                   # and --json — forge FAILED offline, exit 0, fewer axes
 ```
+
+* **The gate never reaches the network.** `tests/cli/spawn-cli.test-fixture.ts` puts a refusing `gh` ahead of any real one on the child's PATH, so `pnpm check` is green on a machine with no credentials and exercises the refusal path rather than the live forge. That the forge can *answer* is proven where its payloads can be fixed, in `pull-request-history.test.ts`.

@@ -95,13 +95,25 @@ export interface DemonstratedAxis {
   readonly unit: DemonstrationUnit
 }
 
+// INVARIANT: The level alone, without the per-axis requirement reports a `LevelReport` carries. Those
+// pair a threshold with an observed value, and the observed value that earned a demonstrated level is
+// not the one the sustained reading published: a `LevelReport` here would state `threshold: 3,
+// observed: 1, outcome: MET` on the same line. What was demonstrated per axis is `axes` below, in a
+// shape that carries the share as well, so nothing is lost by narrowing this.
+export interface DemonstratedLevel {
+  readonly id: string
+  readonly rank: number
+  readonly label: string
+  readonly outcome: AssessmentOutcome
+}
+
 // INVARIANT: What the subject has shown it can reach, as opposed to what it sustains. `level` is
 // never below `proven`: a demonstrated reading that lands under the habitual one says the
 // distribution leans low, and the habitual figure is then already the honest answer. `axes` carries
 // only the axes a demonstrated reading was actually observed for, so it may be shorter than the
 // model's axis list and is empty on none of them.
 export interface DemonstratedReport {
-  readonly level: LevelReport | null
+  readonly level: DemonstratedLevel | null
   readonly axes: readonly DemonstratedAxis[]
 }
 

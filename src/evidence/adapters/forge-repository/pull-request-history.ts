@@ -2,9 +2,11 @@ import { runGh } from './gh-process.js'
 import type { RepositorySlug } from './repository-slug.js'
 import {
   type DemonstratedValue,
+  demonstratedCountFrom,
   demonstratedFrom,
   MINIMUM_ACTIVE_DAYS,
   MINIMUM_DELIVERED_CHANGES,
+  median,
   windowStartFrom,
 } from '../delivery-sample.js'
 import { interventionFor } from '../intervention-scale.js'
@@ -304,12 +306,11 @@ function readParallelism(perActiveDay: readonly number[]): number | null {
 function readDemonstratedParallelism(
   perActiveDay: readonly number[],
 ): DemonstratedValue<number> | null {
-  const seen = [...new Set(perActiveDay)].sort((left, right) => left - right)
-  return demonstratedFrom(
-    perActiveDay.length,
-    seen,
-    (candidate) => perActiveDay.filter((count) => count >= candidate).length,
-  )
+  const daysAtConcurrency = new Map<number, number>()
+  for (const count of perActiveDay) {
+    daysAtConcurrency.set(count, (daysAtConcurrency.get(count) ?? 0) + 1)
+  }
+  return demonstratedCountFrom(daysAtConcurrency)
 }
 
 function objectAt(document: unknown, key: string): unknown {
@@ -325,13 +326,4 @@ function numberAt(document: unknown, key: string): number | null {
 function stringAt(document: unknown, key: string): string | null {
   const value = objectAt(document, key)
   return typeof value === 'string' && value !== '' ? value : null
-}
-
-// Callers guarantee a non-empty sample; an even count yields a half-integer median.
-function median(values: readonly number[]): number {
-  const sorted = [...values].sort((left, right) => left - right)
-  const middle = Math.floor(sorted.length / 2)
-  const upper = sorted[middle] ?? 0
-  if (sorted.length % 2 === 1) return upper
-  return ((sorted[middle - 1] ?? 0) + upper) / 2
 }

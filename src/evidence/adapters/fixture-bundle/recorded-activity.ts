@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { type DemonstratedValue, demonstratedFrom } from '../delivery-sample.js'
+import { type DemonstratedValue, demonstratedCountFrom } from '../delivery-sample.js'
 import { interventionFor } from '../intervention-scale.js'
 import { bucketForFiles, bucketForLines, lowerBucket } from '../size-buckets.js'
 
@@ -78,34 +78,39 @@ function readDemonstratedParallelism(parallelism: unknown): DemonstratedValue<nu
   const days = objectAt(parallelism, 'days_at_concurrency')
   if (typeof days !== 'object' || days === null || Array.isArray(days)) return null
 
-  const perActiveDay: number[] = []
+  const daysAtConcurrency = new Map<number, number>()
   for (const [concurrency, activeDays] of Object.entries(days as Record<string, unknown>)) {
     const branches = Number(concurrency)
     if (!Number.isInteger(branches) || branches < 0) return null
     if (typeof activeDays !== 'number' || !Number.isInteger(activeDays) || activeDays < 0) {
       return null
     }
-    for (let day = 0; day < activeDays; day += 1) perActiveDay.push(branches)
+    if (activeDays > 0) daysAtConcurrency.set(branches, activeDays)
   }
-  if (perActiveDay.length === 0) return null
+  if (daysAtConcurrency.size === 0) return null
 
   const recorded = numberAt(parallelism, 'median_concurrent_branches')
-  if (recorded !== null && medianOf(perActiveDay) !== recorded) return null
+  if (recorded !== null && medianOfCounts(daysAtConcurrency) !== recorded) return null
 
-  const seen = [...new Set(perActiveDay)].sort((left, right) => left - right)
-  return demonstratedFrom(
-    perActiveDay.length,
-    seen,
-    (candidate) => perActiveDay.filter((count) => count >= candidate).length,
-  )
+  return demonstratedCountFrom(daysAtConcurrency)
 }
 
-function medianOf(values: readonly number[]): number {
-  const sorted = [...values].sort((left, right) => left - right)
-  const middle = Math.floor(sorted.length / 2)
-  const upper = sorted[middle] ?? 0
-  if (sorted.length % 2 === 1) return upper
-  return ((sorted[middle - 1] ?? 0) + upper) / 2
+// The median of a distribution held as counts, without expanding it into one entry per occasion.
+function medianOfCounts(occurrencesByCount: ReadonlyMap<number, number>): number {
+  const ordered = [...occurrencesByCount.entries()].sort(([left], [right]) => left - right)
+  const total = ordered.reduce((sum, [, occurrences]) => sum + occurrences, 0)
+
+  const at = (rank: number): number => {
+    let seen = 0
+    for (const [count, occurrences] of ordered) {
+      seen += occurrences
+      if (seen > rank) return count
+    }
+    return ordered[ordered.length - 1]?.[0] ?? 0
+  }
+
+  const middle = Math.floor(total / 2)
+  return total % 2 === 1 ? at(middle) : (at(middle - 1) + at(middle)) / 2
 }
 
 // `null` is a record that did not carry the count, never a share of zero.

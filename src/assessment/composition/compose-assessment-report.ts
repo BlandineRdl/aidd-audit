@@ -19,6 +19,7 @@ import {
   type AxisReport,
   type BlockingRequirement,
   type CoverageReport,
+  type DemonstratedLevel,
   type DemonstratedReport,
   type LevelReport,
   type ProvenanceEntry,
@@ -97,7 +98,7 @@ function reportDemonstrated(
   const level = highestOf(check.proven, proven)
 
   return {
-    level: level === null ? null : reportLevel(level, context),
+    level: level === null ? null : namedLevel(level),
     // INVARIANT: a confirmed demonstrated reading always carries its demonstration. Anything without
     // one is dropped rather than published at a fabricated share, because a demonstrated value the
     // reader cannot weigh is the maximum this whole reading exists to avoid.
@@ -113,6 +114,20 @@ function reportDemonstrated(
             },
           ],
     ),
+  }
+}
+
+// SAFETY: the level and nothing beneath it. A requirement report pairs a threshold with the observed
+// value the *sustained* reading resolved, so projecting one here would publish `threshold: 3,
+// observed: 1, outcome: MET` on the same line — a document contradicting itself. Projecting it from
+// the demonstrated evidence instead would be no better whenever the clamp above returned the
+// sustained level, because then the outcomes and the observations come from different runs again.
+function namedLevel(result: LevelResult): DemonstratedLevel {
+  return {
+    id: result.level.id,
+    rank: result.level.rank,
+    label: result.level.label,
+    outcome: result.outcome,
   }
 }
 
