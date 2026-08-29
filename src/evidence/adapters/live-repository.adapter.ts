@@ -4,7 +4,7 @@ import type { CollectorContext, EvidenceCollector } from '../ports/evidence-coll
 import { readGitDerivedMetrics, hasAiAttributionTrailer } from './live-repository/git-history.js'
 import { decidedCapabilities } from './harness/decided-capabilities.js'
 import { scanHarness } from './harness/harness-scan.js'
-import { isRepositoryRoot } from './live-repository/git-process.js'
+import { GitCommandFailedError, isRepositoryRoot } from './live-repository/git-process.js'
 import { trackedTree } from './live-repository/tracked-tree.js'
 
 const COLLECTOR_ID = 'live-repository'
@@ -57,8 +57,7 @@ async function collectHarness(context: CollectorContext): Promise<readonly Obser
       ),
     ]
   } catch (error) {
-    if (context.signal.aborted) throw error
-    return []
+    return unobservedUnlessOurs(error, context)
   }
 }
 
@@ -97,9 +96,19 @@ async function collectGitDerived(context: CollectorContext): Promise<readonly Ob
 
     return observations
   } catch (error) {
-    if (context.signal.aborted) throw error
-    return []
+    return unobservedUnlessOurs(error, context)
   }
+}
+
+// SAFETY: Three outcomes, not two. A spent budget rethrows, so the run is `TIMED_OUT`. A source that
+// refused — `git` asked and said no — is an evidence gap: the axis goes unobserved. Anything else is
+// a defect in this code, and returning `[]` for it would publish that defect as an absence nobody
+// observed, on a run still reported `COMPLETED` with no reason. Rethrowing hands it to
+// `runCollector`, which reports `FAILED` and carries the message.
+function unobservedUnlessOurs(error: unknown, context: CollectorContext): readonly Observation[] {
+  if (context.signal.aborted) throw error
+  if (error instanceof GitCommandFailedError) return []
+  throw error
 }
 
 function scaleFor(vocabulary: readonly AxisVocabulary[], axis: AxisId): AxisVocabulary | undefined {

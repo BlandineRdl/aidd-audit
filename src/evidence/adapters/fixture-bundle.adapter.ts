@@ -62,8 +62,17 @@ async function collectHarness(
     ]
   } catch (error) {
     if (context.signal.aborted) throw error
-    return []
+    if (isFilesystemRefusal(error)) return []
+    throw error
   }
+}
+
+// SAFETY: A directory or file the filesystem refused to hand over is an evidence gap, and Node
+// reports one with an `errno` code. Anything without one is a defect in this code; returning `[]`
+// for it would publish that defect as an absence nobody observed, on a run still reported
+// `COMPLETED` with no reason. Rethrowing hands it to `runCollector`, which reports `FAILED`.
+function isFilesystemRefusal(error: unknown): boolean {
+  return error instanceof Error && typeof (error as NodeJS.ErrnoException).code === 'string'
 }
 
 function collectRecorded(
