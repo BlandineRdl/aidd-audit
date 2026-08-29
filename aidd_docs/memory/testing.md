@@ -118,6 +118,7 @@ Gap: `NOT_MET` is a practice gap, `UNPROVEN` an evidence gap — see **The conse
 * The model loader shipped **three times** with a live guard nothing held, green suite each round. The pattern never varies: the test names the rule and asserts something weaker.
 * One honest mutation sweep over that loader ran 61 mutations; **22 survived**.
 * An earlier sweep reported every mutant killed — an invalid reporter name was making every run die at startup, which reads exactly like success.
+* **A cancellation test can be satisfied by the wrong checkpoint.** Honouring `context.signal` is a duty the collector port freezes, so every collector is owed one; but a collector checks the signal several times, and a test aiming at the deep check is satisfied by the shallow one. A test written for an abort *during* the tree walk passed with the walk's guard deleted — it was proving the adapter's pre-flight `throwIfAborted`. Only the mutation sweep said so. Drive the guarded unit directly when a checkpoint upstream can answer for it.
 * What to do about it is a rule: `.claude/rules/03-testing/3-tests.md`, loaded when a suite is edited.
 
 ## Tools

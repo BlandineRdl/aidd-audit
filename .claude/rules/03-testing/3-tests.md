@@ -34,6 +34,10 @@ A suite proves observable behavior, and is itself only as good as what it would 
 - Delete the throw, run, watch it go red, restore.
 - A mutation sweep where nothing survives is a suspect harness.
 - Run an unmutated control first and confirm it is green.
+- A threshold is pinned only by rows on both sides of it.
+- An interior point leaves the constant free across a range.
+- `>= 2.5` asserted at 2 and 4 admits anything in `(2, 4]`.
+- Assert the last value below and the first value at or above.
 
 ## Fixtures
 
