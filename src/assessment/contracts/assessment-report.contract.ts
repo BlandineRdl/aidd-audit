@@ -60,6 +60,16 @@ export type BlockingRequirement =
       readonly gap: 'EVIDENCE'
     }
 
+/**
+ * Which axes a collector was **asked to attempt**, fixed before it ran and never revised by
+ * what it answered. A COMPLETED entry lists every such axis whether the collector emitted an
+ * observation for each, for one, or for none — so an entry here is not a claim that anything
+ * was observed. `coverage` and the axis reports say what was.
+ *
+ * Stated in full rather than by reference: this contract is self-contained on purpose, and
+ * `evidence/models/collector-provenance.model.ts` carries the same definition for the same
+ * reason. The two must not drift.
+ */
 export type ProvenanceEntry =
   | {
       readonly collector: string
