@@ -15,7 +15,7 @@
   },
   "keywords": [],
   "author": "Black Sun",
-  "license": "ISC",
+  "license": "MIT",
   "type": "module",
   "private": true,
   "engines": {
