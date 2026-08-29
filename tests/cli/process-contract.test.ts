@@ -1,53 +1,14 @@
-import { execFileSync, spawnSync } from 'node:child_process'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { fileURLToPath } from 'node:url'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import type { AssessmentReport } from '../../src/assessment/contracts/assessment-report.contract.js'
+import { afterAll, describe, expect, it } from 'vitest'
+import { runCli } from './spawn-cli.test-fixture.js'
 
-/**
- * The exit-code and stream contract, observed the way a caller observes it: by
- * running the process.
- *
- * `src/cli/commands/assess.command.test.ts` drives `runAssess` in memory and
- * proves what it *returns*. Nothing proved that `main.ts` turns that into a
- * real `process.exitCode`, or that the bundled `dist/cli.js` behaves like the
- * source it was built from. That gap is this suite's whole subject.
- *
- * The codes classify responsibility, not error sub-type: `0` ran, `2` the
- * caller's fault, `1` ours.
- */
-
-const REPO_ROOT = fileURLToPath(new URL('../..', import.meta.url))
-const BUNDLE = join(REPO_ROOT, 'dist', 'cli.js')
-
-interface CliRun {
-  readonly status: number
-  readonly stdout: string
-  readonly stderr: string
-}
-
-function runCli(...args: readonly string[]): CliRun {
-  const result = spawnSync(process.execPath, [BUNDLE, ...args], {
-    cwd: REPO_ROOT,
-    encoding: 'utf8',
-  })
-  if (result.error !== undefined) throw result.error
-  // A signalled process reports status null; the contract has no such outcome.
-  if (result.status === null) {
-    throw new Error(`aidd-audit was killed by ${result.signal ?? 'an unknown signal'}.`)
-  }
-  return { status: result.status, stdout: result.stdout, stderr: result.stderr }
-}
+// INVARIANT: the exit code classifies responsibility, not error sub-type — `0` ran,
+// `2` the caller's fault, `1` ours. Observed by running the process, because what
+// `runAssess` returns is `assess.command.test.ts`'s subject, not this one's.
 
 let tempDir: string | undefined
-
-beforeAll(() => {
-  // Building here is what makes "the real binary" true: the bundle under test
-  // is this working tree's, never a stale artefact from an earlier branch.
-  execFileSync('pnpm', ['run', 'build'], { cwd: REPO_ROOT, stdio: 'pipe' })
-}, 120_000)
 
 afterAll(() => {
   if (tempDir !== undefined) rmSync(tempDir, { recursive: true, force: true })
@@ -211,7 +172,10 @@ describe('7. the assessment result never reaches the exit code', () => {
   })
 })
 
-describe('8. the wired collectors reach the pipeline through the binary', () => {
+// The two wired collectors keeping subjects apart is a fact about the composition root, and
+// only visible with both of them running. `self-assessment.test.ts` owns the assessment
+// itself; the exit codes and the streams are this suite's.
+describe('8. the wired collectors answer for their own subject, never the neighbour', () => {
   function reportFor(...args: readonly string[]): AssessmentReport {
     const run = runCli(...args, '--json')
     expect(run.status).toBe(0)
@@ -225,37 +189,8 @@ describe('8. the wired collectors reach the pipeline through the binary', () => 
     return requirement?.observed
   }
 
-  it('runs the collectors the composition root wired, on the repository itself', () => {
-    // Provenance is the proof the wiring is real rather than a shape the report would
-    // have had anyway: `main.ts` built a collector set, the use case ran it, and the
-    // entries survived composition into the published contract. `axes` is what each
-    // collector was asked to attempt, never what it answered.
-    expect(reportFor('assess', '.').provenance).toEqual([
-      {
-        collector: 'live-repository',
-        status: 'COMPLETED',
-        axes: ['size', 'harness', 'intervention', 'parallelism'],
-      },
-      {
-        collector: 'fixture-bundle',
-        status: 'COMPLETED',
-        axes: ['size', 'harness', 'intervention', 'parallelism'],
-      },
-    ])
-  })
-
-  it('carries something it observed on disk into the rendered report', () => {
-    // Coupled to this repository having a harness at all, which it does — it is an AIDD
-    // project with tracked instruction files. What is asserted is that an observation
-    // survived collection, resolution and composition, never that it amounts to a level.
-    const report = reportFor('assess', '.')
-
-    expect(report.coverage.axesRequested).toBe(4)
-    expect(report.coverage.axesObserved).toBeGreaterThan(0)
-  })
-
   it('answers for the bundle out of the bundle, never out of the checkout holding it', () => {
-    // `profiles/` is tracked inside this repository, so without the live collector's
+    // SAFETY: `profiles/` is tracked inside this repository, so without the live collector's
     // repository-root gate that collector would resolve to this checkout and publish AIDD's
     // own harness as the bundle's evidence. The two harness sets are what tell the sources
     // apart: this project has instruction files and rules, that subject has neither.
@@ -264,15 +199,5 @@ describe('8. the wired collectors reach the pipeline through the binary', () => 
 
     expect(observedFor(bundle, 'red', 'harness')).toEqual(['prompts'])
     expect(observedFor(checkout, 'red', 'harness')).not.toEqual(['prompts'])
-  })
-
-  it('reports no proven level for a repository, and says so in the human rendering', () => {
-    // `intervention` is unobservable on any local history, so `proven: null` is this
-    // command's normal output. Asserted as the ceiling it is, not as a level.
-    expect(reportFor('assess', '.').proven).toBeNull()
-
-    const human = runCli('assess', '.')
-    expect(human.status).toBe(0)
-    expect(human.stdout).toContain('could not be established')
   })
 })

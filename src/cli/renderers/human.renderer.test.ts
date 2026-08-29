@@ -6,6 +6,7 @@ import {
   evidenceBlocker,
   failedProvenance,
   levelReport,
+  metRequirement,
   notMetRequirement,
   practiceBlocker,
   unprovenRequirement,
@@ -135,7 +136,7 @@ describe('4. an evidence gap blocks progression', () => {
   }
 
   it.each([
-    ['UNKNOWN', 'no observable evidence was established'],
+    ['UNKNOWN', 'and no value was observed'],
     ['CLAIMED', 'the claim could not be independently confirmed'],
     ['CONFLICTING', 'observed evidence disagrees'],
   ] as const)('explains a %s evidence gap in its own terms', (evidence, explanation) => {
@@ -154,7 +155,7 @@ describe('4. an evidence gap blocks progression', () => {
     'never recommends changing the practice for a %s gap, and never says it falls short',
     (evidence) => {
       const line = blockerLine(renderHumanReport(buildReport(evidence)), 'evidence')
-      expect(line).not.toMatch(/improve|fix|change|does not reach|falls short|below/i)
+      expect(line).not.toMatch(/\b(improve|fix|change|below)\b|does not reach|falls short/i)
     },
   )
 })
@@ -399,5 +400,166 @@ describe('a collector that did not complete is always reported, proven level or 
 
   it('never renders the trivially-full coverage counts for a proven level', () => {
     expect(coverageParagraph(output)).toBeUndefined()
+  })
+})
+
+describe('11. every axis names what was observed against what its level required', () => {
+  const axisDetail = (output: string, label: string) => {
+    const lines = output.split('\n')
+    const start = lines.findIndex((line) => line.trimStart().startsWith(`${label}:`))
+    const detail: string[] = []
+    for (const line of lines.slice(start + 1)) {
+      if (!line.startsWith('    ')) break
+      detail.push(line)
+    }
+    return detail.join('\n')
+  }
+
+  const blue = levelReport({
+    axes: [
+      axisReport({
+        axis: 'harness',
+        label: 'Harness',
+        outcome: 'MET',
+        requirements: [metRequirement('harness', ['prompts'], ['prompts', 'behavior'])],
+      }),
+      axisReport({
+        axis: 'size',
+        label: 'Taille',
+        outcome: 'UNPROVEN',
+        requirements: [unprovenRequirement('size', 'L', 'UNKNOWN')],
+      }),
+    ],
+  })
+  const output = renderHumanReport(assessmentReport({ proven: null, next: blue, levels: [blue] }))
+
+  it('names the observed value, so a reader learns what AIDD saw and not only its verdict', () => {
+    expect(axisDetail(output, 'Harness')).toContain('prompts, behavior')
+  })
+
+  it('names what the level required, next to it', () => {
+    expect(axisDetail(output, 'Harness')).toContain('required: prompts')
+  })
+
+  it('carries the evidence status, so a claim is never read as a confirmed observation', () => {
+    const claimed = renderHumanReport(
+      assessmentReport({
+        proven: null,
+        next: levelReport({
+          axes: [
+            axisReport({
+              axis: 'size',
+              label: 'Taille',
+              outcome: 'UNPROVEN',
+              requirements: [unprovenRequirement('size', 'L', 'CLAIMED', 'M')],
+            }),
+          ],
+        }),
+        levels: [],
+      }),
+    )
+    expect(axisDetail(claimed, 'Taille')).toContain('observed: M')
+    expect(axisDetail(claimed, 'Taille')).toContain('(CLAIMED)')
+  })
+
+  it('never renders an unobserved axis the same way as one observed to hold nothing', () => {
+    const unobserved = axisDetail(output, 'Taille')
+    const empty = renderHumanReport(
+      assessmentReport({
+        proven: null,
+        next: levelReport({
+          axes: [
+            axisReport({
+              axis: 'harness',
+              label: 'Harness',
+              outcome: 'NOT_MET',
+              requirements: [notMetRequirement('harness', ['prompts'], [])],
+            }),
+          ],
+        }),
+        levels: [],
+      }),
+    )
+    expect(unobserved).toContain('no observation was made')
+    expect(unobserved).not.toContain('observed:')
+    expect(axisDetail(empty, 'Harness')).toContain('observed: an empty set')
+  })
+
+  it('renders an empty requirement as the empty set, not as a blank', () => {
+    const white = renderHumanReport(
+      assessmentReport({
+        proven: null,
+        next: levelReport({
+          id: 'white',
+          rank: 0,
+          label: 'White',
+          axes: [
+            axisReport({
+              axis: 'harness',
+              label: 'Harness',
+              outcome: 'MET',
+              requirements: [metRequirement('harness', [], ['prompts'])],
+            }),
+          ],
+        }),
+        levels: [],
+      }),
+    )
+    expect(axisDetail(white, 'Harness')).toContain('required: an empty set')
+    expect(axisDetail(white, 'Harness')).not.toMatch(/required: *·/)
+  })
+
+  it('details every requirement when an axis carries more than one', () => {
+    const twofold = renderHumanReport(
+      assessmentReport({
+        proven: null,
+        next: levelReport({
+          axes: [
+            axisReport({
+              axis: 'size',
+              label: 'Taille',
+              outcome: 'NOT_MET',
+              requirements: [
+                notMetRequirement('size', 'M', 'S'),
+                notMetRequirement('size', 'L', 'S'),
+              ],
+            }),
+          ],
+        }),
+        levels: [],
+      }),
+    )
+    expect(axisDetail(twofold, 'Taille')).toContain('required: M')
+    expect(axisDetail(twofold, 'Taille')).toContain('required: L')
+  })
+
+  it('carries CONFIRMED into prose too, so the happy path is not the unlabelled one', () => {
+    expect(axisDetail(output, 'Harness')).toContain('(CONFIRMED)')
+  })
+
+  it('never states a threshold for a requirement no observation was compared against', () => {
+    const detail = axisDetail(output, 'Taille')
+    expect(detail).not.toContain('required:')
+    expect(detail).toContain('never tested')
+  })
+
+  it('details the proven level too, not only the next one', () => {
+    const green = levelReport({
+      id: 'green',
+      rank: 3,
+      label: 'Green',
+      axes: [
+        axisReport({
+          axis: 'harness',
+          label: 'Harness',
+          outcome: 'MET',
+          requirements: [metRequirement('harness', ['prompts'], ['prompts', 'loops'])],
+        }),
+      ],
+    })
+    const proven = renderHumanReport(
+      assessmentReport({ proven: green, next: null, levels: [green] }),
+    )
+    expect(axisDetail(proven, 'Harness')).toContain('prompts, loops')
   })
 })

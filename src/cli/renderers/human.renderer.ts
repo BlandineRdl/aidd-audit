@@ -17,6 +17,7 @@ export function renderHumanReport(report: AssessmentReport): string {
     renderProvenSection(report),
     renderCoverageSection(report),
     renderNoCollectorsSection(report),
+    renderCollectorsSection(report),
     renderIncompleteCollectorsSection(report),
     renderNextSection(report),
     renderBlockingSection(report),
@@ -33,7 +34,7 @@ function renderHeader(report: AssessmentReport): string {
 
 function renderProvenSection(report: AssessmentReport): string {
   const { proven } = report
-  // Never White, never any level: "no proven level" is a result, not a rank
+  // INVARIANT: "no proven level" is a result, never White and never a rank
   // below the floor. It names no cause either — the blockers know which.
   if (proven === null) {
     return "Proven level: could not be established. No level's requirements were fully proven."
@@ -50,8 +51,8 @@ function renderCoverageSection(report: AssessmentReport): string {
   return `Evidence coverage: ${axesConfirmed} of ${axesRequested} axes confirmed (${axesObserved} observed).`
 }
 
-// A third state above both gaps: nothing was looked at. The section below
-// names only collectors that ran, so it stays silent on an empty list.
+// INVARIANT: "nothing was looked at" is a third state above both gaps, and
+// must never read as either.
 function renderNoCollectorsSection(report: AssessmentReport): string {
   if (report.provenance.length > 0) {
     return ''
@@ -60,6 +61,15 @@ function renderNoCollectorsSection(report: AssessmentReport): string {
 }
 
 type IncompleteCollector = Exclude<ProvenanceEntry, { status: 'COMPLETED' }>
+
+function renderCollectorsSection(report: AssessmentReport): string {
+  const completed = report.provenance.filter((entry) => entry.status === 'COMPLETED')
+  if (completed.length === 0) {
+    return ''
+  }
+  const names = completed.map((entry) => entry.collector).join(', ')
+  return `Collectors that ran: ${names}.`
+}
 
 function renderIncompleteCollectorsSection(report: AssessmentReport): string {
   const incomplete = report.provenance.filter(
@@ -95,7 +105,25 @@ function renderNextSection(report: AssessmentReport): string {
 }
 
 function renderLevelAxes(level: LevelReport): string {
-  return level.axes.map((axis) => `  ${axis.label}: ${glossOutcome(axis.outcome)}`).join('\n')
+  return level.axes
+    .flatMap((axis) => [
+      `  ${axis.label}: ${glossOutcome(axis.outcome)}`,
+      ...axis.requirements.map(renderRequirementDetail),
+    ])
+    .join('\n')
+}
+
+function renderRequirementDetail(requirement: RequirementReport): string {
+  // No threshold where nothing was compared: naming one states a test that never ran.
+  if (requirement.observed === null) {
+    return `    no observation was made (${requirement.evidence}) — the requirement was never tested`
+  }
+  return `    required: ${formatSet(requirement.threshold)} · observed: ${formatSet(requirement.observed)} (${requirement.evidence})`
+}
+
+// Not `none`, which `aidd.yml` already ships as a `size` scale value.
+function formatSet(value: Threshold | ObservedValue): string {
+  return Array.isArray(value) && value.length === 0 ? 'an empty set' : formatValue(value)
 }
 
 function glossOutcome(outcome: AssessmentOutcome): string {
@@ -150,15 +178,15 @@ function renderPracticeGap(report: AssessmentReport, blocker: PracticeBlocker): 
   const { levelLabel, axisLabel, axis } = locateAxis(report, blocker)
   const requirement = findUniquePracticeRequirement(axis, blocker)
   if (requirement) {
-    return `  [practice gap] ${axisLabel} at ${levelLabel}: observed ${formatValue(requirement.observed)} does not reach the required ${formatValue(requirement.threshold)}.`
+    return `  [practice gap] ${axisLabel} at ${levelLabel}: observed ${formatSet(requirement.observed)} does not reach the required ${formatSet(requirement.threshold)}.`
   }
   return `  [practice gap] ${axisLabel} at ${levelLabel}: the observed practice does not meet the requirement. Improve ${axisLabel} to close the gap.`
 }
 
-// Contract debt: BlockingRequirement carries no requirement identity, so the
-// blocking requirement is re-derived from a key that is not unique. Ambiguous
-// means no threshold, never a guessed one. Fix belongs in the contract —
-// see aidd_docs/memory/architecture.md, "Frozen before the split".
+// LIMITATION: BlockingRequirement carries no requirement identity, so the
+// requirement is re-derived from a key that is not unique. Ambiguous means no
+// threshold, never a guessed one. Fix belongs in the contract — see
+// aidd_docs/memory/architecture.md, "Frozen before the split".
 function findUniquePracticeRequirement(
   axis: AxisReport | undefined,
   blocker: PracticeBlocker,
@@ -172,18 +200,30 @@ function findUniquePracticeRequirement(
 
 function renderEvidenceGap(report: AssessmentReport, blocker: EvidenceBlocker): string {
   const { levelLabel, axisLabel } = locateAxis(report, blocker)
-  return `  [evidence gap] ${axisLabel} at ${levelLabel}: ${explainEvidenceGap(blocker.evidence)}.`
+  return `  [evidence gap] ${axisLabel} at ${levelLabel}: ${explainEvidenceGap(report, blocker)}.`
 }
 
-function explainEvidenceGap(evidence: Exclude<EvidenceStatus, 'CONFIRMED'>): string {
-  switch (evidence) {
+function explainEvidenceGap(report: AssessmentReport, blocker: EvidenceBlocker): string {
+  switch (blocker.evidence) {
     case 'UNKNOWN':
-      return 'no observable evidence was established'
+      return whoWasAsked(report, blocker.axis)
     case 'CLAIMED':
       return 'the claim could not be independently confirmed'
     case 'CONFLICTING':
       return 'observed evidence disagrees'
   }
+}
+
+// LIMITATION: the contract records that a collector ran, never why it emitted
+// nothing for one axis, so the gap stays unexplained rather than invented. A
+// per-axis reason on ProvenanceEntry would lift it.
+function whoWasAsked(report: AssessmentReport, axis: string): string {
+  const asked = report.provenance.filter((entry) => entry.axes.includes(axis))
+  if (asked.length === 0) {
+    return 'no collector was asked for this axis'
+  }
+  const names = asked.map((entry) => entry.collector).join(', ')
+  return `asked ${names}, and no value was observed`
 }
 
 function formatValue(value: Threshold | ObservedValue): string {
