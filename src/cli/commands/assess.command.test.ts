@@ -46,7 +46,19 @@ describe('runAssess — happy path', () => {
     expect(report.schemaVersion).toBe(1)
     expect(report.proven).toBeNull()
     expect(report.coverage.axesRequested).toBe(4)
-    expect(report.provenance).toEqual([])
+
+    // The live collector is asked about every subject and answers only for a repository.
+    // A bundle is tracked inside this one, so the gate is what stands between "no evidence
+    // about perceval" and this repository's own harness published as perceval's. Provenance
+    // records that it was asked; the empty coverage records that it did not answer.
+    expect(report.provenance).toEqual([
+      {
+        collector: 'live-repository',
+        status: 'COMPLETED',
+        axes: ['size', 'harness', 'intervention', 'parallelism'],
+      },
+    ])
+    expect(report.coverage.axesObserved).toBe(0)
   })
 
   it('produces the same report through --model aidd.yml as through the packaged default', async () => {

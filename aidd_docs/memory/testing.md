@@ -32,7 +32,8 @@ How this project is tested: TDD boundaries, doubles, and validation.
 | `collect-evidence.usecase` | collector execution, degradation, provenance, resolution | `FakeInMemoryEvidenceCollector`, `FailingEvidenceCollector`; real resolver |
 | `assess-maturity.usecase` | orchestration and assessment result; coverage is `compose-assessment-report`'s to prove | real domain collaborators, fakes at external ports only |
 | `assess.command` (`runAssess`) | argv parsing, the exit-code taxonomy, stdout/stderr, wired against the real pipeline | none — real `loadMaturityModel`, real `assessMaturity`; only `CommandIo` is an in-memory double, and it fakes no domain collaborator |
-| `tests/cli/process-contract.test.ts` | that `main.ts` and the built `dist/cli.js` deliver that taxonomy to a real shell | none — the process is spawned, nothing is faked |
+| `tests/cli/process-contract.test.ts` | that `main.ts` and the built `dist/cli.js` deliver that taxonomy to a real shell, and that the wired collector reaches the pipeline through it | none — the process is spawned, nothing is faked |
+| `live-repository.adapter` and its modules | what a local repository can prove: the harness scan, the first-parent walk, cancellation | none — real temporary Git repositories and the real filesystem |
 
 The first three are not use cases: each takes domain values and returns one, so it is tested directly.
 
@@ -92,7 +93,7 @@ Gap: `NOT_MET` is a practice gap, `UNPROVEN` an evidence gap — see **The conse
 | `leodagan` | Green    | no `session.md`    |
 | `arthur`   | Copper   | no `declaratif.md` |
 
-* **None of the four profiles reaches its expected level yet.** `aidd-audit assess <profile>` runs today with an empty production collector set — see `cli.md` — so every axis resolves `UNKNOWN` and every profile reports `proven: null`, whatever this table says. The table records the target once collectors exist; it is not yet an assertion any suite makes.
+* **None of the four profiles reaches its expected level yet**, now because a bundle is not the live collector's subject rather than because no collector exists. `aidd-audit assess <profile>` runs the live collector, which declines a bundle — see `cli.md` — so every axis still resolves `UNKNOWN` and every profile still reports `proven: null`, whatever this table says. The table records the target once collectors exist; it is not yet an assertion any suite makes.
 * **`leodagan` is the trap the harness axis has to survive.** Expected Green, so `aidd.yml` requires `prompts` of him, yet `session.md` — the prompt-to-commit trace — is exactly what he lacks. A collector that confirms `prompts` only from a transcript file makes Green and above unreachable, and three fixtures out of four fail at once.
 * `profiles/` ship their own `*.test.ts`. They stay out through vitest's `include` and a second exclusion; drop either and `profiles/bohort/code/pricing.test.ts` fails on a `zod` it does not have while `profiles/arthur/code/usage-summary.test.ts` adds five green tests that prove nothing.
 

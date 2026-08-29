@@ -1,5 +1,6 @@
 import { type Stats, statSync } from 'node:fs'
 import { assessMaturity } from '../../assessment/usecases/assess-maturity.usecase.js'
+import { LiveRepositoryEvidenceCollector } from '../../evidence/adapters/live-repository.adapter.js'
 import type { EvidenceCollector } from '../../evidence/ports/evidence-collector.port.js'
 import { loadMaturityModel } from '../../maturity/loading/load-maturity-model.js'
 import { InvalidMaturityModelError } from '../../maturity/models/invalid-maturity-model.error.js'
@@ -14,7 +15,11 @@ export interface CommandIo {
   stderr(text: string): void
 }
 
-const collectors: readonly EvidenceCollector[] = []
+// The composition root: the CLI wires the concrete adapters the core only knows as ports.
+// The live collector answers a repository and stays silent on anything else, so a fixture
+// bundle is simply not its subject — until the bundle adapter lands, that subject has no
+// collector and the report says so with `proven: null` rather than guessing.
+const collectors: readonly EvidenceCollector[] = [new LiveRepositoryEvidenceCollector()]
 
 const neverAborts = new AbortController().signal
 
