@@ -2,7 +2,8 @@ import { chmod, mkdir, mkdtemp, readFile, realpath, rm, stat, writeFile } from '
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { runGit } from './git-process.js'
+import { runGit } from '../live-repository/git-process.js'
+import { trackedTree } from '../live-repository/tracked-tree.js'
 import { scanHarness } from './harness-scan.js'
 
 // Integration: real temporary Git repositories on the real filesystem. The tracked tree and
@@ -189,7 +190,9 @@ describe('scanHarness', () => {
   it('reports an empty capability set for a tracked tree holding none of the harness artifacts', async () => {
     const root = await repositoryWith([{ path: 'README.md' }, { path: 'src/index.ts' }])
 
-    await expect(scanHarness(root, NO_TRAILER, unbounded)).resolves.toEqual({
+    await expect(
+      scanHarness(await trackedTree(root, unbounded), NO_TRAILER, unbounded),
+    ).resolves.toEqual({
       capabilities: [],
       undecidable: [],
     })
@@ -204,7 +207,9 @@ describe('scanHarness', () => {
 
     // Bare `ls-files` under `packages/api` would miss the root `CLAUDE.md`, and the set would
     // publish without `context-engineering` — a practice gap on a repository that has it.
-    await expect(scanHarness(join(root, 'packages/api'), NO_TRAILER, unbounded)).resolves.toEqual({
+    await expect(
+      scanHarness(await trackedTree(join(root, 'packages/api'), unbounded), NO_TRAILER, unbounded),
+    ).resolves.toEqual({
       capabilities: ['context-engineering', 'behavior'],
       undecidable: [],
     })
@@ -213,7 +218,9 @@ describe('scanHarness', () => {
   it('proves context-engineering from a CLAUDE.md nested below the root, because a named file counts wherever it sits', async () => {
     const root = await repositoryWith([{ path: 'packages/api/CLAUDE.md' }])
 
-    await expect(scanHarness(root, NO_TRAILER, unbounded)).resolves.toEqual({
+    await expect(
+      scanHarness(await trackedTree(root, unbounded), NO_TRAILER, unbounded),
+    ).resolves.toEqual({
       capabilities: ['context-engineering'],
       undecidable: [],
     })
@@ -222,7 +229,9 @@ describe('scanHarness', () => {
   it('proves nothing from an untracked CLAUDE.md, because an unversioned file records no practice', async () => {
     const root = await repositoryWith([{ path: 'README.md' }], [{ path: 'CLAUDE.md' }])
 
-    await expect(scanHarness(root, NO_TRAILER, unbounded)).resolves.toEqual({
+    await expect(
+      scanHarness(await trackedTree(root, unbounded), NO_TRAILER, unbounded),
+    ).resolves.toEqual({
       capabilities: [],
       undecidable: [],
     })
@@ -231,7 +240,9 @@ describe('scanHarness', () => {
   it('proves nothing from prompt-toolkit-notes.md, because names are matched exactly and never as a pattern', async () => {
     const root = await repositoryWith([{ path: 'prompt-toolkit-notes.md' }])
 
-    await expect(scanHarness(root, NO_TRAILER, unbounded)).resolves.toEqual({
+    await expect(
+      scanHarness(await trackedTree(root, unbounded), NO_TRAILER, unbounded),
+    ).resolves.toEqual({
       capabilities: [],
       undecidable: [],
     })
@@ -240,7 +251,9 @@ describe('scanHarness', () => {
   it('proves prompts from a session.md nested deep in the tree, because a named file counts wherever it sits', async () => {
     const root = await repositoryWith([{ path: 'code/notes/2026/session.md' }])
 
-    await expect(scanHarness(root, NO_TRAILER, unbounded)).resolves.toEqual({
+    await expect(
+      scanHarness(await trackedTree(root, unbounded), NO_TRAILER, unbounded),
+    ).resolves.toEqual({
       capabilities: ['prompts'],
       undecidable: [],
     })
@@ -249,7 +262,9 @@ describe('scanHarness', () => {
   it('proves nothing from a .specstory directory found below the root, because a named directory counts at the root only', async () => {
     const root = await repositoryWith([{ path: 'docs/.specstory/2026-08-01.md' }])
 
-    await expect(scanHarness(root, NO_TRAILER, unbounded)).resolves.toEqual({
+    await expect(
+      scanHarness(await trackedTree(root, unbounded), NO_TRAILER, unbounded),
+    ).resolves.toEqual({
       capabilities: [],
       undecidable: [],
     })
@@ -258,7 +273,9 @@ describe('scanHarness', () => {
   it('proves prompts from an AI attribution trailer alone, with no transcript file in the tree', async () => {
     const root = await repositoryWith([{ path: 'README.md' }])
 
-    await expect(scanHarness(root, A_TRAILER, unbounded)).resolves.toEqual({
+    await expect(
+      scanHarness(await trackedTree(root, unbounded), A_TRAILER, unbounded),
+    ).resolves.toEqual({
       capabilities: ['prompts'],
       undecidable: [],
     })
@@ -273,7 +290,9 @@ describe('scanHarness', () => {
       async (transcript) => {
         const root = await repositoryWith([{ path: transcript }])
 
-        await expect(scanHarness(root, NO_TRAILER, unbounded)).resolves.toEqual({
+        await expect(
+          scanHarness(await trackedTree(root, unbounded), NO_TRAILER, unbounded),
+        ).resolves.toEqual({
           capabilities: ['prompts'],
           undecidable: [],
         })
@@ -285,7 +304,9 @@ describe('scanHarness', () => {
       async (directory) => {
         const root = await repositoryWith([{ path: `${directory}2026-08-01.md` }])
 
-        await expect(scanHarness(root, NO_TRAILER, unbounded)).resolves.toEqual({
+        await expect(
+          scanHarness(await trackedTree(root, unbounded), NO_TRAILER, unbounded),
+        ).resolves.toEqual({
           capabilities: ['prompts'],
           undecidable: [],
         })
@@ -297,7 +318,9 @@ describe('scanHarness', () => {
       async (context) => {
         const root = await repositoryWith([{ path: context }])
 
-        await expect(scanHarness(root, NO_TRAILER, unbounded)).resolves.toEqual({
+        await expect(
+          scanHarness(await trackedTree(root, unbounded), NO_TRAILER, unbounded),
+        ).resolves.toEqual({
           capabilities: ['context-engineering'],
           undecidable: [],
         })
@@ -309,7 +332,9 @@ describe('scanHarness', () => {
       async (directory) => {
         const root = await repositoryWith([{ path: `${directory}architecture.md` }])
 
-        await expect(scanHarness(root, NO_TRAILER, unbounded)).resolves.toEqual({
+        await expect(
+          scanHarness(await trackedTree(root, unbounded), NO_TRAILER, unbounded),
+        ).resolves.toEqual({
           capabilities: ['context-engineering'],
           undecidable: [],
         })
@@ -326,7 +351,9 @@ describe('scanHarness', () => {
     ])('proves behavior from a tracked file under a root %s', async (directory) => {
       const root = await repositoryWith([{ path: `${directory}style.md` }])
 
-      await expect(scanHarness(root, NO_TRAILER, unbounded)).resolves.toEqual({
+      await expect(
+        scanHarness(await trackedTree(root, unbounded), NO_TRAILER, unbounded),
+      ).resolves.toEqual({
         capabilities: ['behavior'],
         undecidable: [],
       })
@@ -337,7 +364,9 @@ describe('scanHarness', () => {
       async (rules) => {
         const root = await repositoryWith([{ path: rules }])
 
-        await expect(scanHarness(root, NO_TRAILER, unbounded)).resolves.toEqual({
+        await expect(
+          scanHarness(await trackedTree(root, unbounded), NO_TRAILER, unbounded),
+        ).resolves.toEqual({
           capabilities: ['behavior'],
           undecidable: [],
         })
@@ -354,7 +383,9 @@ describe('scanHarness', () => {
       async (settings, content) => {
         const root = await repositoryWith([{ path: settings, content }])
 
-        await expect(scanHarness(root, NO_TRAILER, unbounded)).resolves.toEqual({
+        await expect(
+          scanHarness(await trackedTree(root, unbounded), NO_TRAILER, unbounded),
+        ).resolves.toEqual({
           capabilities: ['behavior'],
           undecidable: [],
         })
@@ -369,7 +400,9 @@ describe('scanHarness', () => {
 
       const root = await repositoryWith([{ path: '.aider.conf.yml', content: aiderConfiguration }])
 
-      await expect(scanHarness(root, NO_TRAILER, unbounded)).resolves.toEqual({
+      await expect(
+        scanHarness(await trackedTree(root, unbounded), NO_TRAILER, unbounded),
+      ).resolves.toEqual({
         capabilities: [],
         undecidable: [],
       })
@@ -383,7 +416,9 @@ describe('scanHarness', () => {
         },
       ])
 
-      await expect(scanHarness(root, NO_TRAILER, unbounded)).resolves.toEqual({
+      await expect(
+        scanHarness(await trackedTree(root, unbounded), NO_TRAILER, unbounded),
+      ).resolves.toEqual({
         capabilities: ['behavior'],
         undecidable: [],
       })
@@ -400,7 +435,9 @@ describe('scanHarness', () => {
           },
         ])
 
-        await expect(scanHarness(root, NO_TRAILER, unbounded)).resolves.toEqual({
+        await expect(
+          scanHarness(await trackedTree(root, unbounded), NO_TRAILER, unbounded),
+        ).resolves.toEqual({
           capabilities: ['loops'],
           undecidable: [],
         })
@@ -418,7 +455,9 @@ describe('scanHarness', () => {
           },
         ])
 
-        await expect(scanHarness(root, NO_TRAILER, unbounded)).resolves.toEqual({
+        await expect(
+          scanHarness(await trackedTree(root, unbounded), NO_TRAILER, unbounded),
+        ).resolves.toEqual({
           capabilities: ['loops'],
           undecidable: [],
         })
@@ -435,7 +474,9 @@ describe('scanHarness', () => {
           { path: `scripts/retry${extension}`, content: withoutShebang, executable: true },
         ])
 
-        await expect(scanHarness(root, NO_TRAILER, unbounded)).resolves.toEqual({
+        await expect(
+          scanHarness(await trackedTree(root, unbounded), NO_TRAILER, unbounded),
+        ).resolves.toEqual({
           capabilities: ['loops'],
           undecidable: [],
         })
@@ -448,7 +489,9 @@ describe('scanHarness', () => {
       { path: 'scripts/retry.sh', content: AGENT_LOOP_BROKEN_ON_EXIT_STATUS, executable: true },
     ])
 
-    await expect(scanHarness(root, NO_TRAILER, unbounded)).resolves.toEqual({
+    await expect(
+      scanHarness(await trackedTree(root, unbounded), NO_TRAILER, unbounded),
+    ).resolves.toEqual({
       capabilities: ['loops'],
       undecidable: [],
     })
@@ -459,7 +502,9 @@ describe('scanHarness', () => {
       { path: 'scripts/retry.sh', content: AGENT_UNDER_A_TIMEOUT, executable: true },
     ])
 
-    await expect(scanHarness(root, NO_TRAILER, unbounded)).resolves.toEqual({
+    await expect(
+      scanHarness(await trackedTree(root, unbounded), NO_TRAILER, unbounded),
+    ).resolves.toEqual({
       capabilities: ['loops'],
       undecidable: [],
     })
@@ -470,7 +515,9 @@ describe('scanHarness', () => {
       { path: 'scripts/retry.sh', content: AGENT_UNDER_NICE, executable: true },
     ])
 
-    await expect(scanHarness(root, NO_TRAILER, unbounded)).resolves.toEqual({
+    await expect(
+      scanHarness(await trackedTree(root, unbounded), NO_TRAILER, unbounded),
+    ).resolves.toEqual({
       capabilities: ['loops'],
       undecidable: [],
     })
@@ -481,7 +528,9 @@ describe('scanHarness', () => {
       { path: 'scripts/retry.sh', content: AGENT_BEHIND_A_SHELL_FUNCTION, executable: true },
     ])
 
-    await expect(scanHarness(root, NO_TRAILER, unbounded)).resolves.toEqual({
+    await expect(
+      scanHarness(await trackedTree(root, unbounded), NO_TRAILER, unbounded),
+    ).resolves.toEqual({
       capabilities: ['loops'],
       undecidable: [],
     })
@@ -496,7 +545,9 @@ describe('scanHarness', () => {
       },
     ])
 
-    await expect(scanHarness(root, NO_TRAILER, unbounded)).resolves.toEqual({
+    await expect(
+      scanHarness(await trackedTree(root, unbounded), NO_TRAILER, unbounded),
+    ).resolves.toEqual({
       capabilities: ['loops'],
       undecidable: [],
     })
@@ -507,7 +558,9 @@ describe('scanHarness', () => {
       { path: 'scripts/retry.sh', content: AGENT_INVOKED_IN_THE_LOOP_HEADER, executable: true },
     ])
 
-    await expect(scanHarness(root, NO_TRAILER, unbounded)).resolves.toEqual({
+    await expect(
+      scanHarness(await trackedTree(root, unbounded), NO_TRAILER, unbounded),
+    ).resolves.toEqual({
       capabilities: ['loops'],
       undecidable: [],
     })
@@ -518,7 +571,9 @@ describe('scanHarness', () => {
       { path: 'scripts/generate.sh', content: AGENT_WITHOUT_A_LOOP, executable: true },
     ])
 
-    await expect(scanHarness(root, NO_TRAILER, unbounded)).resolves.toEqual({
+    await expect(
+      scanHarness(await trackedTree(root, unbounded), NO_TRAILER, unbounded),
+    ).resolves.toEqual({
       capabilities: [],
       undecidable: [],
     })
@@ -529,7 +584,9 @@ describe('scanHarness', () => {
       { path: 'scripts/retry.sh', content: AGENT_IN_A_COUNTED_LOOP, executable: true },
     ])
 
-    await expect(scanHarness(root, NO_TRAILER, unbounded)).resolves.toEqual({
+    await expect(
+      scanHarness(await trackedTree(root, unbounded), NO_TRAILER, unbounded),
+    ).resolves.toEqual({
       capabilities: [],
       undecidable: [],
     })
@@ -540,7 +597,9 @@ describe('scanHarness', () => {
       { path: 'scripts/retry.sh', content: AGENT_IN_AN_UNGUARDED_ENDLESS_LOOP, executable: true },
     ])
 
-    await expect(scanHarness(root, NO_TRAILER, unbounded)).resolves.toEqual({
+    await expect(
+      scanHarness(await trackedTree(root, unbounded), NO_TRAILER, unbounded),
+    ).resolves.toEqual({
       capabilities: [],
       undecidable: [],
     })
@@ -551,7 +610,9 @@ describe('scanHarness', () => {
       { path: 'scripts/retry.sh', content: AGENT_NAMED_ONLY_AS_AN_ARGUMENT, executable: true },
     ])
 
-    await expect(scanHarness(root, NO_TRAILER, unbounded)).resolves.toEqual({
+    await expect(
+      scanHarness(await trackedTree(root, unbounded), NO_TRAILER, unbounded),
+    ).resolves.toEqual({
       capabilities: [],
       undecidable: [],
     })
@@ -562,7 +623,9 @@ describe('scanHarness', () => {
       { path: 'scripts/retry.sh', content: AGENT_ONLY_MENTIONED, executable: true },
     ])
 
-    await expect(scanHarness(root, NO_TRAILER, unbounded)).resolves.toEqual({
+    await expect(
+      scanHarness(await trackedTree(root, unbounded), NO_TRAILER, unbounded),
+    ).resolves.toEqual({
       capabilities: [],
       undecidable: [],
     })
@@ -577,7 +640,9 @@ describe('scanHarness', () => {
       },
     ])
 
-    await expect(scanHarness(root, NO_TRAILER, unbounded)).resolves.toEqual({
+    await expect(
+      scanHarness(await trackedTree(root, unbounded), NO_TRAILER, unbounded),
+    ).resolves.toEqual({
       capabilities: [],
       undecidable: ['loops'],
     })
@@ -591,7 +656,9 @@ describe('scanHarness', () => {
       { path: 'scripts/retry.sh', content: withoutShebang, executable: false },
     ])
 
-    await expect(scanHarness(root, NO_TRAILER, unbounded)).resolves.toEqual({
+    await expect(
+      scanHarness(await trackedTree(root, unbounded), NO_TRAILER, unbounded),
+    ).resolves.toEqual({
       capabilities: [],
       undecidable: [],
     })
@@ -602,7 +669,9 @@ describe('scanHarness', () => {
       { path: 'scripts/retry.sh', content: AGENT_LOOP_ON_EXIT_STATUS, executable: false },
     ])
 
-    await expect(scanHarness(root, NO_TRAILER, unbounded)).resolves.toEqual({
+    await expect(
+      scanHarness(await trackedTree(root, unbounded), NO_TRAILER, unbounded),
+    ).resolves.toEqual({
       capabilities: ['loops'],
       undecidable: [],
     })
@@ -627,7 +696,9 @@ describe('scanHarness', () => {
     const onDisk = await stat(join(root, 'scripts/retry.sh'))
     expect(onDisk.mode & 0o111).toBe(0)
 
-    await expect(scanHarness(root, NO_TRAILER, unbounded)).resolves.toEqual({
+    await expect(
+      scanHarness(await trackedTree(root, unbounded), NO_TRAILER, unbounded),
+    ).resolves.toEqual({
       capabilities: ['loops'],
       undecidable: [],
     })
@@ -638,7 +709,9 @@ describe('scanHarness', () => {
       { path: 'scripts/retry.py', content: AGENT_IN_A_NON_SHELL_SCRIPT, executable: true },
     ])
 
-    await expect(scanHarness(root, NO_TRAILER, unbounded)).resolves.toEqual({
+    await expect(
+      scanHarness(await trackedTree(root, unbounded), NO_TRAILER, unbounded),
+    ).resolves.toEqual({
       capabilities: [],
       undecidable: ['loops'],
     })
@@ -655,7 +728,9 @@ describe('scanHarness', () => {
       },
     ])
 
-    await expect(scanHarness(root, NO_TRAILER, unbounded)).resolves.toEqual({
+    await expect(
+      scanHarness(await trackedTree(root, unbounded), NO_TRAILER, unbounded),
+    ).resolves.toEqual({
       capabilities: ['context-engineering', 'behavior'],
       undecidable: [],
     })
@@ -675,7 +750,9 @@ describe('scanHarness', () => {
     expect(listed.trim()).toBe('scripts/gone.sh')
     await expect(readFile(join(root, 'scripts/gone.sh'), 'utf8')).rejects.toThrow(/ENOENT/)
 
-    await expect(scanHarness(root, NO_TRAILER, unbounded)).resolves.toEqual({
+    await expect(
+      scanHarness(await trackedTree(root, unbounded), NO_TRAILER, unbounded),
+    ).resolves.toEqual({
       capabilities: [],
       undecidable: ['loops'],
     })
@@ -693,7 +770,9 @@ describe('scanHarness', () => {
 
     await expect(readFile(join(root, '.claude/settings.json'), 'utf8')).rejects.toThrow(/ENOENT/)
 
-    await expect(scanHarness(root, NO_TRAILER, unbounded)).resolves.toEqual({
+    await expect(
+      scanHarness(await trackedTree(root, unbounded), NO_TRAILER, unbounded),
+    ).resolves.toEqual({
       capabilities: ['loops'],
       undecidable: ['behavior'],
     })
@@ -705,7 +784,9 @@ describe('scanHarness', () => {
 
     const root = await repositoryWith([{ path: '.claude/settings.json', content: malformed }])
 
-    await expect(scanHarness(root, NO_TRAILER, unbounded)).resolves.toEqual({
+    await expect(
+      scanHarness(await trackedTree(root, unbounded), NO_TRAILER, unbounded),
+    ).resolves.toEqual({
       capabilities: [],
       undecidable: ['behavior'],
     })
@@ -719,7 +800,9 @@ describe('scanHarness', () => {
       },
     ])
 
-    await expect(scanHarness(root, NO_TRAILER, unbounded)).resolves.toEqual({
+    await expect(
+      scanHarness(await trackedTree(root, unbounded), NO_TRAILER, unbounded),
+    ).resolves.toEqual({
       capabilities: [],
       undecidable: [],
     })
@@ -728,7 +811,9 @@ describe('scanHarness', () => {
   it('cannot decide prompts when the commit history could not be read and the tree proves it by no other route', async () => {
     const root = await repositoryWith([{ path: 'README.md' }])
 
-    await expect(scanHarness(root, AN_UNREADABLE_HISTORY, unbounded)).resolves.toEqual({
+    await expect(
+      scanHarness(await trackedTree(root, unbounded), AN_UNREADABLE_HISTORY, unbounded),
+    ).resolves.toEqual({
       capabilities: [],
       undecidable: ['prompts'],
     })
@@ -737,7 +822,9 @@ describe('scanHarness', () => {
   it('decides prompts anyway when the commit history could not be read but a transcript file already proves it', async () => {
     const root = await repositoryWith([{ path: 'session.md' }])
 
-    await expect(scanHarness(root, AN_UNREADABLE_HISTORY, unbounded)).resolves.toEqual({
+    await expect(
+      scanHarness(await trackedTree(root, unbounded), AN_UNREADABLE_HISTORY, unbounded),
+    ).resolves.toEqual({
       capabilities: ['prompts'],
       undecidable: [],
     })
@@ -754,7 +841,9 @@ describe('scanHarness', () => {
 
     // The unreadable settings file was the only route to `behavior`, and it is also a tracked
     // file that could have held the loop; the history answered for neither.
-    await expect(scanHarness(root, AN_UNREADABLE_HISTORY, unbounded)).resolves.toEqual({
+    await expect(
+      scanHarness(await trackedTree(root, unbounded), AN_UNREADABLE_HISTORY, unbounded),
+    ).resolves.toEqual({
       capabilities: [],
       undecidable: ['prompts', 'behavior', 'loops'],
     })
@@ -768,7 +857,9 @@ describe('scanHarness', () => {
       { path: 'scripts/retry.sh', content: AGENT_LOOP_ON_EXIT_STATUS, executable: true },
     ])
 
-    await expect(scanHarness(root, NO_TRAILER, unbounded)).resolves.toEqual({
+    await expect(
+      scanHarness(await trackedTree(root, unbounded), NO_TRAILER, unbounded),
+    ).resolves.toEqual({
       capabilities: ['prompts', 'context-engineering', 'behavior', 'loops'],
       undecidable: [],
     })
@@ -780,7 +871,9 @@ describe('scanHarness', () => {
       { path: 'scripts/retry.sh', content: AGENT_LOOP_ON_EXIT_STATUS, executable: true },
     ])
 
-    await expect(scanHarness(root, NO_TRAILER, unbounded)).resolves.toEqual({
+    await expect(
+      scanHarness(await trackedTree(root, unbounded), NO_TRAILER, unbounded),
+    ).resolves.toEqual({
       capabilities: ['loops'],
       undecidable: [],
     })
@@ -794,7 +887,9 @@ describe('scanHarness', () => {
       { path: 'scripts/retry.sh', content: AGENT_LOOP_ON_EXIT_STATUS, executable: true },
     ])
 
-    await expect(scanHarness(root, NO_TRAILER, unbounded)).resolves.toEqual({
+    await expect(
+      scanHarness(await trackedTree(root, unbounded), NO_TRAILER, unbounded),
+    ).resolves.toEqual({
       capabilities: ['prompts', 'context-engineering', 'behavior', 'loops'],
       undecidable: [],
     })
@@ -827,7 +922,7 @@ describe('scanHarness', () => {
 
   const countChecks = async (root: string): Promise<number> => {
     const counted = signalExhaustedAt(Number.POSITIVE_INFINITY, new Error('never'))
-    await scanHarness(root, NO_TRAILER, counted.signal)
+    await scanHarness(await trackedTree(root, counted.signal), NO_TRAILER, counted.signal)
     return counted.checks()
   }
 
@@ -870,7 +965,11 @@ describe('scanHarness', () => {
       const root = await repositoryWith(A_TREE_WITH_A_SETTINGS_FILE)
       const exhausted = signalExhaustedAt(checkpoint, new Error('harness scan budget exhausted'))
 
-      const scan = scanHarness(root, NO_TRAILER, exhausted.signal)
+      const scan = scanHarness(
+        await trackedTree(root, exhausted.signal),
+        NO_TRAILER,
+        exhausted.signal,
+      )
 
       await expect(scan).rejects.toThrow(Error)
       await expect(scan).rejects.toThrow(/harness scan budget exhausted/)
@@ -882,7 +981,11 @@ describe('scanHarness', () => {
     const controller = new AbortController()
     controller.abort(new Error('harness scan budget exhausted'))
 
-    const scan = scanHarness(root, NO_TRAILER, controller.signal)
+    const scan = scanHarness(
+      await trackedTree(root, controller.signal),
+      NO_TRAILER,
+      controller.signal,
+    )
 
     await expect(scan).rejects.toThrow(Error)
     await expect(scan).rejects.toThrow(/harness scan budget exhausted/)
@@ -904,7 +1007,9 @@ describe('scanHarness', () => {
       { path: 'scripts/retry.sh', content: retryOn(condition), executable: true },
     ])
 
-    await expect(scanHarness(root, NO_TRAILER, unbounded)).resolves.toEqual({
+    await expect(
+      scanHarness(await trackedTree(root, unbounded), NO_TRAILER, unbounded),
+    ).resolves.toEqual({
       capabilities: ['loops'],
       undecidable: [],
     })
@@ -919,7 +1024,9 @@ describe('scanHarness', () => {
       },
     ])
 
-    await expect(scanHarness(root, NO_TRAILER, unbounded)).resolves.toEqual({
+    await expect(
+      scanHarness(await trackedTree(root, unbounded), NO_TRAILER, unbounded),
+    ).resolves.toEqual({
       capabilities: ['loops'],
       undecidable: [],
     })
@@ -935,11 +1042,15 @@ describe('scanHarness', () => {
 
     // The contrast is the assertion: `'$rc'` is three characters and `"$rc"` is a reference,
     // so one loop hangs on an exit status and the other hangs on a constant.
-    await expect(scanHarness(single, NO_TRAILER, unbounded)).resolves.toEqual({
+    await expect(
+      scanHarness(await trackedTree(single, unbounded), NO_TRAILER, unbounded),
+    ).resolves.toEqual({
       capabilities: [],
       undecidable: [],
     })
-    await expect(scanHarness(double, NO_TRAILER, unbounded)).resolves.toEqual({
+    await expect(
+      scanHarness(await trackedTree(double, unbounded), NO_TRAILER, unbounded),
+    ).resolves.toEqual({
       capabilities: ['loops'],
       undecidable: [],
     })
@@ -950,7 +1061,9 @@ describe('scanHarness', () => {
       { path: 'scripts/retry.sh', content: AGENT_ONLY_MENTIONED, executable: true },
     ])
 
-    await expect(scanHarness(root, NO_TRAILER, unbounded)).resolves.toEqual({
+    await expect(
+      scanHarness(await trackedTree(root, unbounded), NO_TRAILER, unbounded),
+    ).resolves.toEqual({
       capabilities: [],
       undecidable: [],
     })
@@ -968,7 +1081,9 @@ describe('scanHarness', () => {
 
     // `$( … )` is another command's exit status, not this loop's test of `rc`. Reading the
     // name through it would prove a retry on a coincidence of spelling.
-    await expect(scanHarness(root, NO_TRAILER, unbounded)).resolves.toEqual({
+    await expect(
+      scanHarness(await trackedTree(root, unbounded), NO_TRAILER, unbounded),
+    ).resolves.toEqual({
       capabilities: [],
       undecidable: ['loops'],
     })
@@ -983,7 +1098,9 @@ describe('scanHarness', () => {
       },
     ])
 
-    await expect(scanHarness(root, NO_TRAILER, unbounded)).resolves.toEqual({
+    await expect(
+      scanHarness(await trackedTree(root, unbounded), NO_TRAILER, unbounded),
+    ).resolves.toEqual({
       capabilities: ['loops'],
       undecidable: [],
     })
@@ -999,7 +1116,9 @@ describe('scanHarness', () => {
       },
     ])
 
-    await expect(scanHarness(root, NO_TRAILER, unbounded)).resolves.toEqual({
+    await expect(
+      scanHarness(await trackedTree(root, unbounded), NO_TRAILER, unbounded),
+    ).resolves.toEqual({
       capabilities: ['loops'],
       undecidable: [],
     })
@@ -1015,7 +1134,9 @@ describe('scanHarness', () => {
       },
     ])
 
-    await expect(scanHarness(root, NO_TRAILER, unbounded)).resolves.toEqual({
+    await expect(
+      scanHarness(await trackedTree(root, unbounded), NO_TRAILER, unbounded),
+    ).resolves.toEqual({
       capabilities: [],
       undecidable: [],
     })
@@ -1031,7 +1152,9 @@ describe('scanHarness', () => {
       },
     ])
 
-    await expect(scanHarness(root, NO_TRAILER, unbounded)).resolves.toEqual({
+    await expect(
+      scanHarness(await trackedTree(root, unbounded), NO_TRAILER, unbounded),
+    ).resolves.toEqual({
       capabilities: ['loops'],
       undecidable: [],
     })
@@ -1047,7 +1170,9 @@ describe('scanHarness', () => {
       },
     ])
 
-    await expect(scanHarness(root, NO_TRAILER, unbounded)).resolves.toEqual({
+    await expect(
+      scanHarness(await trackedTree(root, unbounded), NO_TRAILER, unbounded),
+    ).resolves.toEqual({
       capabilities: [],
       undecidable: [],
     })
@@ -1062,7 +1187,9 @@ describe('scanHarness', () => {
       },
     ])
 
-    await expect(scanHarness(root, NO_TRAILER, unbounded)).resolves.toEqual({
+    await expect(
+      scanHarness(await trackedTree(root, unbounded), NO_TRAILER, unbounded),
+    ).resolves.toEqual({
       capabilities: [],
       undecidable: [],
     })
@@ -1077,7 +1204,9 @@ describe('scanHarness', () => {
       },
     ])
 
-    await expect(scanHarness(root, NO_TRAILER, unbounded)).resolves.toEqual({
+    await expect(
+      scanHarness(await trackedTree(root, unbounded), NO_TRAILER, unbounded),
+    ).resolves.toEqual({
       capabilities: [],
       undecidable: [],
     })
@@ -1093,7 +1222,9 @@ describe('scanHarness', () => {
       },
     ])
 
-    await expect(scanHarness(root, NO_TRAILER, unbounded)).resolves.toEqual({
+    await expect(
+      scanHarness(await trackedTree(root, unbounded), NO_TRAILER, unbounded),
+    ).resolves.toEqual({
       capabilities: [],
       undecidable: [],
     })
@@ -1111,7 +1242,9 @@ describe('scanHarness', () => {
 
     // Known-not-status is decidable; unknown origin is not. `compute_start` may well return
     // the exit code this loop is retrying on, and nothing here says otherwise.
-    await expect(scanHarness(root, NO_TRAILER, unbounded)).resolves.toEqual({
+    await expect(
+      scanHarness(await trackedTree(root, unbounded), NO_TRAILER, unbounded),
+    ).resolves.toEqual({
       capabilities: [],
       undecidable: ['loops'],
     })
@@ -1129,7 +1262,9 @@ describe('scanHarness', () => {
 
     // The header references `line`, and `read` is where `line` came from: a line of input is
     // not an exit status, so the continuation is positively recognised as iteration.
-    await expect(scanHarness(root, NO_TRAILER, unbounded)).resolves.toEqual({
+    await expect(
+      scanHarness(await trackedTree(root, unbounded), NO_TRAILER, unbounded),
+    ).resolves.toEqual({
       capabilities: [],
       undecidable: [],
     })
@@ -1144,7 +1279,9 @@ describe('scanHarness', () => {
       },
     ])
 
-    await expect(scanHarness(root, NO_TRAILER, unbounded)).resolves.toEqual({
+    await expect(
+      scanHarness(await trackedTree(root, unbounded), NO_TRAILER, unbounded),
+    ).resolves.toEqual({
       capabilities: [],
       undecidable: [],
     })
@@ -1163,7 +1300,9 @@ describe('scanHarness', () => {
 
       // An early stop is where a retry can hide: the loop runs the agent again unless
       // something ends it, and what ends it here was not read.
-      await expect(scanHarness(root, NO_TRAILER, unbounded)).resolves.toEqual({
+      await expect(
+        scanHarness(await trackedTree(root, unbounded), NO_TRAILER, unbounded),
+      ).resolves.toEqual({
         capabilities: [],
         undecidable: ['loops'],
       })
@@ -1182,7 +1321,9 @@ describe('scanHarness', () => {
       },
     ])
 
-    await expect(scanHarness(root, NO_TRAILER, unbounded)).resolves.toEqual({
+    await expect(
+      scanHarness(await trackedTree(root, unbounded), NO_TRAILER, unbounded),
+    ).resolves.toEqual({
       capabilities: ['context-engineering', 'behavior'],
       undecidable: [],
     })
@@ -1198,7 +1339,9 @@ describe('scanHarness', () => {
       },
     ])
 
-    await expect(scanHarness(root, NO_TRAILER, unbounded)).resolves.toEqual({
+    await expect(
+      scanHarness(await trackedTree(root, unbounded), NO_TRAILER, unbounded),
+    ).resolves.toEqual({
       capabilities: [],
       undecidable: [],
     })
@@ -1213,7 +1356,9 @@ describe('scanHarness', () => {
       },
     ])
 
-    await expect(scanHarness(root, NO_TRAILER, unbounded)).resolves.toEqual({
+    await expect(
+      scanHarness(await trackedTree(root, unbounded), NO_TRAILER, unbounded),
+    ).resolves.toEqual({
       capabilities: [],
       undecidable: ['loops'],
     })
@@ -1228,7 +1373,9 @@ describe('scanHarness', () => {
       },
     ])
 
-    await expect(scanHarness(root, NO_TRAILER, unbounded)).resolves.toEqual({
+    await expect(
+      scanHarness(await trackedTree(root, unbounded), NO_TRAILER, unbounded),
+    ).resolves.toEqual({
       capabilities: [],
       undecidable: ['loops'],
     })
@@ -1243,7 +1390,9 @@ describe('scanHarness', () => {
       },
     ])
 
-    await expect(scanHarness(root, NO_TRAILER, unbounded)).resolves.toEqual({
+    await expect(
+      scanHarness(await trackedTree(root, unbounded), NO_TRAILER, unbounded),
+    ).resolves.toEqual({
       capabilities: [],
       undecidable: [],
     })
@@ -1258,7 +1407,9 @@ describe('scanHarness', () => {
       },
     ])
 
-    await expect(scanHarness(root, NO_TRAILER, unbounded)).resolves.toEqual({
+    await expect(
+      scanHarness(await trackedTree(root, unbounded), NO_TRAILER, unbounded),
+    ).resolves.toEqual({
       capabilities: [],
       undecidable: [],
     })
@@ -1294,7 +1445,9 @@ describe('scanHarness', () => {
           },
         ])
 
-        await expect(scanHarness(root, NO_TRAILER, unbounded)).resolves.toEqual({
+        await expect(
+          scanHarness(await trackedTree(root, unbounded), NO_TRAILER, unbounded),
+        ).resolves.toEqual({
           capabilities: ['loops'],
           undecidable: [],
         })
@@ -1316,7 +1469,9 @@ describe('scanHarness', () => {
       // `[ -f .migration-lock ]` tests a file, not the outcome of a build, test or check.
       // Admitting `test` as a project command instead would let `while [ $i -lt 10 ]` grant
       // Silver to a repository that never built a retry loop.
-      await expect(scanHarness(root, NO_TRAILER, unbounded)).resolves.toEqual({
+      await expect(
+        scanHarness(await trackedTree(root, unbounded), NO_TRAILER, unbounded),
+      ).resolves.toEqual({
         capabilities: [],
         undecidable: [],
       })
@@ -1343,7 +1498,9 @@ describe('scanHarness', () => {
         ])
 
         // The header runs nothing of the project's, so nothing gates the continuation.
-        await expect(scanHarness(root, NO_TRAILER, unbounded)).resolves.toEqual({
+        await expect(
+          scanHarness(await trackedTree(root, unbounded), NO_TRAILER, unbounded),
+        ).resolves.toEqual({
           capabilities: [],
           undecidable: [],
         })
@@ -1381,7 +1538,9 @@ describe('scanHarness', () => {
           { path: 'scripts/retry.sh', content: script, executable: true },
         ])
 
-        await expect(scanHarness(root, NO_TRAILER, unbounded)).resolves.toEqual({
+        await expect(
+          scanHarness(await trackedTree(root, unbounded), NO_TRAILER, unbounded),
+        ).resolves.toEqual({
           capabilities: ['loops'],
           undecidable: [],
         })
@@ -1399,7 +1558,9 @@ describe('scanHarness', () => {
         },
       ])
 
-      await expect(scanHarness(root, NO_TRAILER, unbounded)).resolves.toEqual({
+      await expect(
+        scanHarness(await trackedTree(root, unbounded), NO_TRAILER, unbounded),
+      ).resolves.toEqual({
         capabilities: [],
         undecidable: ['loops'],
       })
@@ -1424,7 +1585,9 @@ describe('scanHarness', () => {
     ])('reads a command line handed to %s', async (_spawner, content, path) => {
       const root = await repositoryWith([{ path, content, executable: true }])
 
-      await expect(scanHarness(root, NO_TRAILER, unbounded)).resolves.toEqual({
+      await expect(
+        scanHarness(await trackedTree(root, unbounded), NO_TRAILER, unbounded),
+      ).resolves.toEqual({
         capabilities: [],
         undecidable: ['loops'],
       })

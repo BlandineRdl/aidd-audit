@@ -1,4 +1,5 @@
 import { runGit } from './git-process.js'
+import { bucketForFiles, bucketForLines, lowerBucket, type SizeBucket } from '../size-buckets.js'
 
 /** The 180 days ending at the most recent commit, never wall-clock now: the same repository
  *  must not report two different levels on two different days. */
@@ -11,9 +12,6 @@ const MINIMUM_ACTIVE_DAYS = 5
 
 /** Field separator inside one `git log` record. Never occurs in a hash, date or parent list. */
 const FIELD = '\x1f'
-
-const SIZE_BUCKETS = ['S', 'M', 'L', 'XL'] as const
-type SizeBucket = (typeof SIZE_BUCKETS)[number]
 
 export interface GitDerivedMetrics {
   readonly sizeBucket: string | null
@@ -278,8 +276,6 @@ async function readSizeBucket(
     changedFiles.push(diffstat.files)
   }
 
-  // The lower of the two: the axis is a minimum threshold, so the higher of two disagreeing
-  // readings would publish a habit the history does not carry.
   return lowerBucket(bucketForLines(median(changedLines)), bucketForFiles(median(changedFiles)))
 }
 
@@ -362,25 +358,6 @@ async function readParallelism(
 function calendarDay(authorDate: string): string | null {
   const match = /^(\d{4}-\d{2}-\d{2})/.exec(authorDate.trim())
   return match?.[1] ?? null
-}
-
-/** Bounds are half-open, so a half-integer median lands in exactly one row. */
-function bucketForLines(value: number): SizeBucket {
-  if (value < 100) return 'S'
-  if (value < 400) return 'M'
-  if (value < 1000) return 'L'
-  return 'XL'
-}
-
-function bucketForFiles(value: number): SizeBucket {
-  if (value < 5) return 'S'
-  if (value < 10) return 'M'
-  if (value < 25) return 'L'
-  return 'XL'
-}
-
-function lowerBucket(left: SizeBucket, right: SizeBucket): SizeBucket {
-  return SIZE_BUCKETS.indexOf(left) <= SIZE_BUCKETS.indexOf(right) ? left : right
 }
 
 /** Callers guarantee a non-empty sample; an even count yields a half-integer median. */
