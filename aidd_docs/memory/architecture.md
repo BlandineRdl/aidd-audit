@@ -106,7 +106,11 @@ The maturity model is loaded through `maturity/loading/load-maturity-model.ts` (
 
 Evidence is collected through collector ports. Fixture and live-repository collectors implement the same boundary and produce normalised observations.
 
-The live-repository adapter may access the real filesystem and local Git. Network-backed collectors are post-MVP.
+The live-repository adapter may access the real filesystem and local Git. The fixture-bundle adapter may access the real filesystem, and reads a directory holding a `profile.json`. Network-backed collectors are post-MVP.
+
+The two share one `harness` scan and one `size` table, because the port promises they are interchangeable and a rule the two computed differently would break that promise. The scan reads a tree through `adapters/harness/harness-tree.ts`, which each adapter supplies — `git ls-files` on one side, a directory walk on the other. That seam is **not** a port: it crosses no context boundary, it abstracts nothing the domain knows about, and both its implementations are adapters. It lives beside them and is named for what it is.
+
+Inside `adapters/harness/`, the split is by question answered, not by size. `harness-scan.ts` decides the four capabilities and delegates every one of them; recognising a coding agent, reading a shell loop's continuation, and matching a context file are three unrelated problems that happened to share a file. The layering is one-way — `shell-loop` over `agent-invocation` over `shell-tokens` — so someone correcting how `CLAUDE.md` is found never opens the tokeniser, and someone working on retry loops cannot reach the context-engineering table. There is deliberately no `shell/` subtree: one file per question is the whole of it, and a lexer, a parser and a variable analysis filed separately would be a framework nobody asked for.
 
 ## Maturity model transcription
 

@@ -59,3 +59,5 @@ Two failure modes it exists to catch, both of which silently disarmed a rule her
 
 - `to.path` matches the **resolved** module, not the import specifier: `import 'node:fs'` resolves to `fs`, so `^node:fs$` never matches. Use `^(node:)?fs$`.
 - `dependencyTypes: ['npm']` excludes a devDependency, which is `npm-dev`. The rule keeps a dedicated devDependency sentinel so it cannot be narrowed back.
+
+**Prose has the same failure and no sentinel at all.** A comment naming a position — `the candidate gate below`, `Every table below`, `further down` — stops being true the moment its code moves, and a stale comment compiles. Three survived two refactors of `harness-scan.ts`, each caught by a reviewer rather than by a check. Name what a comment refers to instead of where it sits, and when a file is split, re-read what crossed with the code and what was left behind.

@@ -2,8 +2,10 @@ import type { AxisId, AxisVocabulary } from '../models/axis.model.js'
 import type { Observation, ObservedValue } from '../models/observation.model.js'
 import type { CollectorContext, EvidenceCollector } from '../ports/evidence-collector.port.js'
 import { readGitDerivedMetrics, hasAiAttributionTrailer } from './live-repository/git-history.js'
-import { scanHarness } from './live-repository/harness-scan.js'
+import { decidedCapabilities } from './harness/decided-capabilities.js'
+import { scanHarness } from './harness/harness-scan.js'
 import { isRepositoryRoot } from './live-repository/git-process.js'
+import { trackedTree } from './live-repository/tracked-tree.js'
 
 const COLLECTOR_ID = 'live-repository'
 
@@ -46,17 +48,11 @@ async function collectHarness(context: CollectorContext): Promise<readonly Obser
 
   try {
     const trailer = await hasAiAttributionTrailer(context.path, context.signal)
-    const scan = await scanHarness(context.path, trailer, context.signal)
+    const tree = await trackedTree(context.path, context.signal)
+    const scan = await scanHarness(tree, trailer, context.signal)
 
-    // A set has no per-member "unknown", so an undecided capability costs the whole axis:
-    // publishing the set without it would read as a practice gap nobody observed. It costs
-    // only what this model can rank, since an unrankable term hides nothing the report could
-    // have carried. `some`, never a truthiness test — an empty array is truthy.
-    const rankable = (member: string): boolean => scale.members.includes(member)
-    if (scan.undecidable.some(rankable)) return []
-
-    // Dropped rather than invented: a term outside the loaded scale is one it cannot rank.
-    const capabilities = scan.capabilities.filter(rankable)
+    const capabilities = decidedCapabilities(scan, scale)
+    if (capabilities === null) return []
 
     return [
       observation(

@@ -16,7 +16,7 @@ How this project is tested: TDD boundaries, doubles, and validation.
 * `tests/` holds only what has no such neighbour, and exists for that alone:
   * `tests/maturity/aidd-model.test.ts` — conformance of `aidd.yml`, a data file, not a function;
   * `tests/assessment/vocabulary-conformance.test.ts` — the one place allowed to import all three contexts;
-  * the acceptance suite over `profiles/` **(owed)** — the whole chain, no single unit.
+  * `tests/cli/reference-profiles.test.ts` — the four reference profiles assessed through `runAssess`, the whole chain and no single unit.
 * **Co-location is not mirroring.** `resolve-evidence.test.ts` exists because resolution is a behavior, not because `resolve-evidence.ts` is a file. `scale-comparison.ts` is owed nothing.
 * Three suffixes mark what never ships: `*.test.ts`, `*.test-adapter.ts`, `*.test-fixture.ts` — one glob, read by `vitest` and by `dependency-cruiser`.
 
@@ -33,7 +33,10 @@ How this project is tested: TDD boundaries, doubles, and validation.
 | `assess-maturity.usecase` | orchestration and assessment result; coverage is `compose-assessment-report`'s to prove | real domain collaborators, fakes at external ports only |
 | `assess.command` (`runAssess`) | argv parsing, the exit-code taxonomy, stdout/stderr, wired against the real pipeline | none — real `loadMaturityModel`, real `assessMaturity`; only `CommandIo` is an in-memory double, and it fakes no domain collaborator |
 | `tests/cli/process-contract.test.ts` | that `main.ts` and the built `dist/cli.js` deliver that taxonomy to a real shell, and that the wired collector reaches the pipeline through it | none — the process is spawned, nothing is faked |
-| `live-repository.adapter` and its modules | what a local repository can prove: the harness scan, the first-parent walk, cancellation | none — real temporary Git repositories and the real filesystem |
+| `live-repository.adapter` and its modules | what a local repository can prove: the first-parent walk, cancellation | none — real temporary Git repositories and the real filesystem |
+| `fixture-bundle.adapter` and its modules | what a recorded bundle can prove: the delivery record, the recorded tree, cancellation | none — real temporary directories and the real filesystem |
+| `harness/harness-scan` | the harness set both adapters read: the name tables, the `loops` recogniser, what makes a member undecidable | none — a real tree behind the `HarnessTree` seam |
+| `fixture-bundle/bundle-tree` | the recorded tree: what `repo-context/` rebases to, that no mode is recorded, cancellation | none — real temporary directories |
 
 The first three are not use cases: each takes domain values and returns one, so it is tested directly.
 
@@ -93,7 +96,8 @@ Gap: `NOT_MET` is a practice gap, `UNPROVEN` an evidence gap — see **The conse
 | `leodagan` | Green    | no `session.md`    |
 | `arthur`   | Copper   | no `declaratif.md` |
 
-* **None of the four profiles reaches its expected level yet**, now because a bundle is not the live collector's subject rather than because no collector exists. `aidd-audit assess <profile>` runs the live collector, which declines a bundle — see `cli.md` — so every axis still resolves `UNKNOWN` and every profile still reports `proven: null`, whatever this table says. The table records the target once collectors exist; it is not yet an assertion any suite makes.
+* **The table is an assertion.** `tests/cli/reference-profiles.test.ts` drives `runAssess(['assess', 'profiles/<name>', '--json'])` and pins each level, plus `coverage.axesConfirmed === 4` — a level named on partial evidence would be an accident. It runs in process rather than through `dist/cli.js`, which `process-contract.test.ts` builds with `clean: true` and reads alone.
+* The same suite greps `src/` for each profile's name and for `profiles/`: production code holds no profile knowledge, and nothing but a test may name one.
 * **`leodagan` is the trap the harness axis has to survive.** Expected Green, so `aidd.yml` requires `prompts` of him, yet `session.md` — the prompt-to-commit trace — is exactly what he lacks. A collector that confirms `prompts` only from a transcript file makes Green and above unreachable, and three fixtures out of four fail at once.
 * `profiles/` ship their own `*.test.ts`. They stay out through vitest's `include` and a second exclusion; drop either and `profiles/bohort/code/pricing.test.ts` fails on a `zod` it does not have while `profiles/arthur/code/usage-summary.test.ts` adds five green tests that prove nothing.
 
@@ -114,6 +118,7 @@ Gap: `NOT_MET` is a practice gap, `UNPROVEN` an evidence gap — see **The conse
 * The model loader shipped **three times** with a live guard nothing held, green suite each round. The pattern never varies: the test names the rule and asserts something weaker.
 * One honest mutation sweep over that loader ran 61 mutations; **22 survived**.
 * An earlier sweep reported every mutant killed — an invalid reporter name was making every run die at startup, which reads exactly like success.
+* **A cancellation test can be satisfied by the wrong checkpoint.** Honouring `context.signal` is a duty the collector port freezes, so every collector is owed one; but a collector checks the signal several times, and a test aiming at the deep check is satisfied by the shallow one. A test written for an abort *during* the tree walk passed with the walk's guard deleted — it was proving the adapter's pre-flight `throwIfAborted`. Only the mutation sweep said so. Drive the guarded unit directly when a checkpoint upstream can answer for it.
 * What to do about it is a rule: `.claude/rules/03-testing/3-tests.md`, loaded when a suite is edited.
 
 ## Tools

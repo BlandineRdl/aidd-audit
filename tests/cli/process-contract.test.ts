@@ -77,7 +77,7 @@ describe('1. a successful assessment exits 0 and publishes on stdout', () => {
   })
 
   it('is still a success when no level could be proven', () => {
-    const run = runCli('assess', 'profiles/perceval')
+    const run = runCli('assess', '.')
 
     expect(run.stdout).toContain('could not be established')
     expect(run.status).toBe(0)
@@ -97,7 +97,7 @@ describe('2. --json publishes one parseable document', () => {
   })
 
   it('keeps proven as a present key holding null, not an omitted one', () => {
-    const report = JSON.parse(runCli('assess', 'profiles/perceval', '--json').stdout)
+    const report = JSON.parse(runCli('assess', '.', '--json').stdout)
 
     expect('proven' in report).toBe(true)
     expect(report.proven).toBeNull()
@@ -169,7 +169,7 @@ describe('6. the code classifies responsibility, not error sub-type', () => {
   })
 
   it('separates a broken model from an assessment that proved nothing', () => {
-    const unproven = runCli('assess', 'profiles/perceval')
+    const unproven = runCli('assess', '.')
     const brokenModel = runCli('assess', 'profiles/perceval', '--model', 'absent.yml')
 
     expect(unproven.status).toBe(0)
@@ -211,7 +211,7 @@ describe('7. the assessment result never reaches the exit code', () => {
   })
 })
 
-describe('8. the live repository collector reaches the pipeline through the binary', () => {
+describe('8. the wired collectors reach the pipeline through the binary', () => {
   function reportFor(...args: readonly string[]): AssessmentReport {
     const run = runCli(...args, '--json')
     expect(run.status).toBe(0)
@@ -219,14 +219,25 @@ describe('8. the live repository collector reaches the pipeline through the bina
     return JSON.parse(run.stdout) as AssessmentReport
   }
 
-  it('runs the collector the composition root wired, on the repository itself', () => {
+  function observedFor(report: AssessmentReport, level: string, axis: string): unknown {
+    const found = report.levels.find((candidate) => candidate.id === level)
+    const requirement = found?.axes.find((candidate) => candidate.axis === axis)?.requirements.at(0)
+    return requirement?.observed
+  }
+
+  it('runs the collectors the composition root wired, on the repository itself', () => {
     // Provenance is the proof the wiring is real rather than a shape the report would
     // have had anyway: `main.ts` built a collector set, the use case ran it, and the
-    // entry survived composition into the published contract. `axes` is what the
+    // entries survived composition into the published contract. `axes` is what each
     // collector was asked to attempt, never what it answered.
     expect(reportFor('assess', '.').provenance).toEqual([
       {
         collector: 'live-repository',
+        status: 'COMPLETED',
+        axes: ['size', 'harness', 'intervention', 'parallelism'],
+      },
+      {
+        collector: 'fixture-bundle',
         status: 'COMPLETED',
         axes: ['size', 'harness', 'intervention', 'parallelism'],
       },
@@ -243,14 +254,16 @@ describe('8. the live repository collector reaches the pipeline through the bina
     expect(report.coverage.axesObserved).toBeGreaterThan(0)
   })
 
-  it('stays silent about a bundle, which is not its subject', () => {
-    // `profiles/` is tracked inside this repository, so without the repository-root gate
-    // the collector would resolve to this checkout and publish AIDD's own harness as the
-    // bundle's evidence. Asked, ran, answered nothing: an evidence gap, not a wrong one.
-    const report = reportFor('assess', 'profiles/perceval')
+  it('answers for the bundle out of the bundle, never out of the checkout holding it', () => {
+    // `profiles/` is tracked inside this repository, so without the live collector's
+    // repository-root gate that collector would resolve to this checkout and publish AIDD's
+    // own harness as the bundle's evidence. The two harness sets are what tell the sources
+    // apart: this project has instruction files and rules, that subject has neither.
+    const bundle = reportFor('assess', 'profiles/perceval')
+    const checkout = reportFor('assess', '.')
 
-    expect(report.provenance.map((entry) => entry.status)).toEqual(['COMPLETED'])
-    expect(report.coverage.axesObserved).toBe(0)
+    expect(observedFor(bundle, 'red', 'harness')).toEqual(['prompts'])
+    expect(observedFor(checkout, 'red', 'harness')).not.toEqual(['prompts'])
   })
 
   it('reports no proven level for a repository, and says so in the human rendering', () => {

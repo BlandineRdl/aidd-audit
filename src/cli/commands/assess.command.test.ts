@@ -10,6 +10,10 @@ import { runAssess } from './assess.command.js'
  *  nowhere in `src/` outside it: production code holds no profile knowledge. */
 const PERCEVAL = 'profiles/perceval'
 
+/** The repository itself: `intervention` is not recoverable from any local history, so one
+ *  axis is always UNKNOWN and no level can be proven of it. */
+const THIS_REPOSITORY = '.'
+
 function capturingIo(): { io: CommandIo; stdout: () => string; stderr: () => string } {
   const out: string[] = []
   const err: string[] = []
@@ -32,10 +36,20 @@ describe('runAssess — happy path', () => {
     expect(exitCode).toBe(0)
     expect(stderr()).toBe('')
     expect(stdout()).toContain(PERCEVAL)
+    expect(stdout()).toContain('Red')
+  })
+
+  it('says a subject could not be classified rather than naming a level for it', async () => {
+    const { io, stdout, stderr } = capturingIo()
+
+    const exitCode = await runAssess(['assess', THIS_REPOSITORY], io)
+
+    expect(exitCode).toBe(0)
+    expect(stderr()).toBe('')
     expect(stdout()).toContain('could not be established')
   })
 
-  it('renders the frozen contract under --json, with proven null', async () => {
+  it('renders the frozen contract under --json', async () => {
     const { io, stdout, stderr } = capturingIo()
 
     const exitCode = await runAssess(['assess', PERCEVAL, '--json'], io)
@@ -44,21 +58,24 @@ describe('runAssess — happy path', () => {
     expect(stderr()).toBe('')
     const report = JSON.parse(stdout()) as AssessmentReport
     expect(report.schemaVersion).toBe(1)
-    expect(report.proven).toBeNull()
+    expect(report.proven?.label).toBe('Red')
     expect(report.coverage.axesRequested).toBe(4)
 
-    // The live collector is asked about every subject and answers only for a repository.
-    // A bundle is tracked inside this one, so the gate is what stands between "no evidence
-    // about perceval" and this repository's own harness published as perceval's. Provenance
-    // records that it was asked; the empty coverage records that it did not answer.
+    // A bundle is tracked inside this repository, so the live collector's gate is what stands
+    // between perceval's own evidence and this repository's harness published as his.
     expect(report.provenance).toEqual([
       {
         collector: 'live-repository',
         status: 'COMPLETED',
         axes: ['size', 'harness', 'intervention', 'parallelism'],
       },
+      {
+        collector: 'fixture-bundle',
+        status: 'COMPLETED',
+        axes: ['size', 'harness', 'intervention', 'parallelism'],
+      },
     ])
-    expect(report.coverage.axesObserved).toBe(0)
+    expect(report.coverage.axesObserved).toBe(4)
   })
 
   it('produces the same report through --model aidd.yml as through the packaged default', async () => {
