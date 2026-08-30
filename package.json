@@ -12,6 +12,7 @@
     "mutation": "stryker run",
     "check": "pnpm typecheck && pnpm test && pnpm architecture && pnpm comments",
     "build": "tsup",
+    "build:standalone": "tsup --config tsup.standalone.config.ts && cp aidd.yml plugins/aidd-evaluation/bin/aidd.yml",
     "prepare": "lefthook install"
   },
   "keywords": [],

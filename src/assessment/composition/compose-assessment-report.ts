@@ -1,4 +1,5 @@
 import type { CollectorProvenance } from '../../evidence/models/collector-provenance.model.js'
+import type { CollectorDiagnostic } from '../../evidence/models/collector-diagnostic.model.js'
 import type { Evidence } from '../../evidence/models/observation.model.js'
 import { checkMaturity } from '../../maturity/engine/maturity-engine.js'
 import type { AxisObservation } from '../../maturity/models/axis-observation.model.js'
@@ -16,6 +17,7 @@ import type {
 import {
   ASSESSMENT_REPORT_SCHEMA_VERSION,
   type AssessmentReport,
+  type AxisVocabularyReport,
   type AxisReport,
   type BlockingRequirement,
   type CoverageReport,
@@ -27,17 +29,19 @@ import {
   type Threshold,
 } from '../contracts/assessment-report.contract.js'
 import { UndeclaredAxisError } from './undeclared-axis.error.js'
+import { scaleNamedBy } from '../../maturity/models/scale-for-axis.js'
 
 export interface AssessmentComposition {
   readonly subjectPath: string
   readonly model: MaturityModel
   readonly evidence: readonly Evidence[]
   readonly provenance: readonly CollectorProvenance[]
+  readonly diagnostics?: readonly CollectorDiagnostic[]
 }
 
 // Publishes only the engine's own verdicts; this function decides none of them.
 export function composeAssessmentReport(input: AssessmentComposition): AssessmentReport {
-  const { model, evidence, subjectPath, provenance } = input
+  const { model, evidence, subjectPath, provenance, diagnostics = [] } = input
 
   requireDeclaredAxes(model, evidence)
 
@@ -47,6 +51,7 @@ export function composeAssessmentReport(input: AssessmentComposition): Assessmen
   const check = checkMaturity(model, sustained.map(toObservation))
   const context: ProjectionContext = {
     evidenceByAxis: new Map(sustained.map((entry) => [entry.axis, entry])),
+    diagnosticsByAxis: new Map(diagnostics.map((diagnostic) => [diagnostic.axis, diagnostic])),
     labelsByAxis: new Map(model.axes.map((axis) => [axis.id, axis.label])),
   }
   const next = check.next === null ? null : reportLevel(check.next, context)
@@ -61,9 +66,34 @@ export function composeAssessmentReport(input: AssessmentComposition): Assessmen
     demonstrated: reportDemonstrated(model, sustained, demonstrated, check.proven, context),
     levels: check.levels.map((level) => reportLevel(level, context)),
     blocking: blockersOf(next),
+    vocabulary: reportVocabulary(model),
     coverage: deriveCoverage(model, sustained),
     provenance: provenance.map(toProvenanceEntry),
   }
+}
+
+function reportVocabulary(model: MaturityModel): readonly AxisVocabularyReport[] {
+  return model.axes.map((axis) => {
+    const scale = scaleNamedBy(model, axis)
+    switch (scale.kind) {
+      case 'ordinal':
+        return {
+          axis: axis.id,
+          kind: 'ordinal',
+          values: scale.values,
+          descriptions: scale.descriptions,
+        }
+      case 'set':
+        return {
+          axis: axis.id,
+          kind: 'set',
+          members: scale.members,
+          descriptions: scale.descriptions,
+        }
+      case 'numeric':
+        return { axis: axis.id, kind: 'numeric', description: scale.description }
+    }
+  })
 }
 
 // INVARIANT: The engine is asked a second time, and is not modified to answer it. Two readings are
@@ -170,6 +200,7 @@ function toProvenanceEntry(entry: CollectorProvenance): ProvenanceEntry {
 
 interface ProjectionContext {
   readonly evidenceByAxis: ReadonlyMap<AxisId, Evidence>
+  readonly diagnosticsByAxis: ReadonlyMap<AxisId, CollectorDiagnostic>
   readonly labelsByAxis: ReadonlyMap<AxisId, string>
 }
 
@@ -215,7 +246,11 @@ function reportAxis(result: AxisResult, context: ProjectionContext): AxisReport 
     label: labelOf(result.axis, context),
     outcome: result.outcome,
     requirements: result.requirements.map((requirement) =>
-      reportRequirement(requirement, context.evidenceByAxis.get(result.axis)),
+      reportRequirement(
+        requirement,
+        context.evidenceByAxis.get(result.axis),
+        context.diagnosticsByAxis.get(result.axis),
+      ),
     ),
   }
 }
@@ -232,11 +267,12 @@ function labelOf(axis: AxisId, context: ProjectionContext): string {
 function reportRequirement(
   result: RequirementResult,
   evidence: Evidence | undefined,
+  diagnostic: CollectorDiagnostic | undefined,
 ): RequirementReport {
   const threshold = thresholdOf(result.requirement)
 
   if (evidence === undefined) {
-    return unprovenRequirement(result, threshold, 'UNKNOWN')
+    return unprovenRequirement(result, threshold, 'UNKNOWN', diagnostic)
   }
 
   switch (evidence.status) {
@@ -254,7 +290,7 @@ function reportRequirement(
     case 'CLAIMED':
     case 'CONFLICTING':
     case 'UNKNOWN':
-      return unprovenRequirement(result, threshold, evidence.status)
+      return unprovenRequirement(result, threshold, evidence.status, diagnostic)
   }
 }
 
@@ -262,11 +298,19 @@ function unprovenRequirement(
   result: RequirementResult,
   threshold: Threshold,
   evidence: 'CLAIMED' | 'CONFLICTING' | 'UNKNOWN',
+  diagnostic: CollectorDiagnostic | undefined,
 ): RequirementReport {
   if (result.outcome !== 'UNPROVEN') {
     throw contradiction(result, evidence)
   }
-  return { axis: result.axis, threshold, observed: null, evidence, outcome: 'UNPROVEN' }
+  return {
+    axis: result.axis,
+    threshold,
+    observed: null,
+    evidence,
+    outcome: 'UNPROVEN',
+    ...(evidence === 'UNKNOWN' && diagnostic !== undefined ? { diagnostic } : {}),
+  }
 }
 
 // Guards the evidence/outcome invariant shared with the maturity engine.

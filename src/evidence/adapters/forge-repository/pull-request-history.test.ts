@@ -181,6 +181,7 @@ describe('readForgeDerivedMetrics', () => {
         demonstratedIntervention: null,
         parallelism: null,
         demonstratedParallelism: null,
+        activeDays: 4,
       })
     },
     A_LONG_TIME,
@@ -427,6 +428,7 @@ describe('readForgeDerivedMetrics', () => {
         demonstratedIntervention: null,
         parallelism: null,
         demonstratedParallelism: null,
+        activeDays: null,
       })
     },
     A_LONG_TIME,

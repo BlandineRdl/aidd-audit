@@ -1,7 +1,12 @@
+import { stat } from 'node:fs/promises'
+import { join } from 'node:path'
 import type { AxisId, AxisVocabulary } from '../models/axis.model.js'
 import type { Observation, ObservedValue } from '../models/observation.model.js'
-import type { CollectorContext, EvidenceCollector } from '../ports/evidence-collector.port.js'
-import { isBundle } from './fixture-bundle/bundle-manifest.js'
+import type {
+  CollectorCollection,
+  CollectorContext,
+  EvidenceCollector,
+} from '../ports/evidence-collector.port.js'
 import { bundleTree } from './fixture-bundle/bundle-tree.js'
 import { readRecordedActivity, type RecordedActivity } from './fixture-bundle/recorded-activity.js'
 import { decidedCapabilities } from './harness/decided-capabilities.js'
@@ -9,21 +14,38 @@ import { scanHarness } from './harness/harness-scan.js'
 
 const COLLECTOR_ID = 'fixture-bundle'
 
+// A marker, never a source: nothing in it is admissible for any axis.
+const BUNDLE_MANIFEST = 'profile.json'
+
 // INVARIANT: Every observation is `OBSERVED`: the one declarative artifact a bundle carries is
 // prose, and prose is never parsed.
 export class FixtureBundleEvidenceCollector implements EvidenceCollector {
   readonly id = COLLECTOR_ID
   readonly supportedAxes: readonly AxisId[] = ['size', 'harness', 'intervention', 'parallelism']
 
-  async collect(context: CollectorContext): Promise<readonly Observation[]> {
+  async collect(context: CollectorContext): Promise<CollectorCollection> {
     context.signal.throwIfAborted()
 
-    if (!(await isBundle(context.path))) return []
+    if (!(await isBundle(context.path))) return { observations: [], diagnostics: [] }
 
     const activity = await readRecordedActivity(context.path)
     context.signal.throwIfAborted()
 
-    return [...(await collectHarness(context, activity)), ...collectRecorded(context, activity)]
+    return {
+      observations: [
+        ...(await collectHarness(context, activity)),
+        ...collectRecorded(context, activity),
+      ],
+      diagnostics: [],
+    }
+  }
+}
+
+async function isBundle(path: string): Promise<boolean> {
+  try {
+    return (await stat(join(path, BUNDLE_MANIFEST))).isFile()
+  } catch {
+    return false
   }
 }
 

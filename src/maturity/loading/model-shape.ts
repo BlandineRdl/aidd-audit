@@ -94,24 +94,61 @@ function requireScale(value: unknown, scaleId: string): Scale {
   }
 
   if (value.kind === 'ordinal') {
+    const values = requireStringArray(value.values, `scale '${scaleId}'.values`)
     return {
       kind: 'ordinal',
-      values: requireStringArray(value.values, `scale '${scaleId}'.values`),
+      values,
+      descriptions: requireDescriptions(value.descriptions, values, `scale '${scaleId}'`),
     }
   }
   if (value.kind === 'set') {
+    const members = requireStringArray(value.members, `scale '${scaleId}'.members`)
     return {
       kind: 'set',
-      members: requireStringArray(value.members, `scale '${scaleId}'.members`),
+      members,
+      descriptions: requireDescriptions(value.descriptions, members, `scale '${scaleId}'`),
     }
   }
   if (value.kind === 'numeric') {
-    return { kind: 'numeric' }
+    return {
+      kind: 'numeric',
+      description: requireNonEmptyString(value.description, `scale '${scaleId}'.description`),
+    }
   }
   throw new InvalidMaturityModelError(
     `Scale '${scaleId}' has an unknown kind ${describeType(value.kind)}; ` +
       `expected 'ordinal', 'set' or 'numeric'.`,
   )
+}
+
+// INVARIANT: The descriptions are part of the model's scale vocabulary, rather than renderer copy. Exact
+// coverage prevents a custom model from silently producing opaque terms or unused prose.
+function requireDescriptions(
+  value: unknown,
+  vocabulary: readonly string[],
+  field: string,
+): Readonly<Record<string, string>> {
+  if (!isRecord(value)) {
+    throw new InvalidMaturityModelError(
+      `'${field}.descriptions' must be a mapping, got ${describeType(value)}.`,
+    )
+  }
+
+  const descriptions: Record<string, string> = Object.create(null)
+  for (const [term, description] of Object.entries(value)) {
+    if (!vocabulary.includes(term)) {
+      throw new InvalidMaturityModelError(
+        `'${field}.descriptions' names '${term}', which is not on its scale.`,
+      )
+    }
+    descriptions[term] = requireNonEmptyString(description, `${field}.descriptions.${term}`)
+  }
+  for (const term of vocabulary) {
+    if (!Object.hasOwn(descriptions, term)) {
+      throw new InvalidMaturityModelError(`'${field}.descriptions' is missing '${term}'.`)
+    }
+  }
+  return descriptions
 }
 
 function requireAxes(value: unknown): readonly Axis[] {

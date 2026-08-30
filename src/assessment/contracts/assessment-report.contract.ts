@@ -20,7 +20,16 @@ export type RequirementReport =
       readonly observed: ObservedValue | null
       readonly evidence: Exclude<EvidenceStatus, 'CONFIRMED'>
       readonly outcome: 'UNPROVEN'
+      readonly diagnostic?: EvidenceGapDiagnostic
     }
+
+export interface EvidenceGapDiagnostic {
+  readonly collector: string
+  readonly axis: string
+  readonly reason: 'INSUFFICIENT_ACTIVE_DAYS'
+  readonly observed: number
+  readonly minimum: number
+}
 
 export interface AxisReport {
   readonly axis: string
@@ -76,6 +85,27 @@ export interface CoverageReport {
   readonly axesObserved: number
   readonly axesConfirmed: number
 }
+
+// INVARIANT: The loaded model owns the words explaining its scale values. Renderers receive this projection
+// with the verdict, rather than reopening the model or carrying an AIDD-specific glossary.
+export type AxisVocabularyReport =
+  | {
+      readonly axis: string
+      readonly kind: 'ordinal'
+      readonly values: readonly string[]
+      readonly descriptions: Readonly<Record<string, string>>
+    }
+  | {
+      readonly axis: string
+      readonly kind: 'set'
+      readonly members: readonly string[]
+      readonly descriptions: Readonly<Record<string, string>>
+    }
+  | {
+      readonly axis: string
+      readonly kind: 'numeric'
+      readonly description: string
+    }
 
 // INVARIANT: What a share counts. Size counts delivered changes and parallelism counts active days,
 // so a rendering that said "40% of occasions" for both would erase a difference the reader needs.
@@ -147,6 +177,10 @@ export interface AssessmentReport {
 
   // Requirements preventing next from being proven.
   readonly blocking: readonly BlockingRequirement[]
+
+  // INVARIANT: Per-axis scale vocabulary comes from the loaded model. Raw scale values remain the public facts;
+  // descriptions make them legible without teaching a renderer any model-specific terminology.
+  readonly vocabulary: readonly AxisVocabularyReport[]
 
   readonly coverage: CoverageReport
   readonly provenance: readonly ProvenanceEntry[]

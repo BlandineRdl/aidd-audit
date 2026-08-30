@@ -7,6 +7,7 @@ import type { AssessmentReport } from '../../assessment/contracts/assessment-rep
 import { gitEnvironment } from '../../evidence/adapters/live-repository/git-process.js'
 import type { Observation } from '../../evidence/models/observation.model.js'
 import type {
+  CollectorCollection,
   CollectorContext,
   EvidenceCollector,
 } from '../../evidence/ports/evidence-collector.port.js'
@@ -28,6 +29,7 @@ function capturingIo(): { io: CommandIo; stdout: () => string; stderr: () => str
     io: {
       stdout: (text) => out.push(text),
       stderr: (text) => err.push(text),
+      colours: false,
     },
     stdout: () => out.join(''),
     stderr: () => err.join(''),
@@ -53,7 +55,7 @@ describe('runAssess — happy path', () => {
 
     expect(exitCode).toBe(0)
     expect(stderr()).toBe('')
-    expect(stdout()).toContain('could not be established')
+    expect(stdout()).toContain("Aucun niveau n'a pu être entièrement prouvé")
   })
 
   it('renders the frozen contract under --json', async () => {
@@ -403,6 +405,7 @@ describe('runAssess — model errors exit 2, nothing on stdout', () => {
         '  size:',
         '    kind: ordinal',
         '    values: [S, M, L]',
+        '    descriptions: { S: small, M: medium, L: large }',
         'axes:',
         '  - id: size',
         '    label: Size',
@@ -446,19 +449,25 @@ class OffVocabularyEvidenceCollector implements EvidenceCollector {
 
   constructor(private readonly value: string | number) {}
 
-  async collect(context: CollectorContext): Promise<readonly Observation[]> {
+  async collect(context: CollectorContext): Promise<{
+    readonly observations: readonly Observation[]
+    readonly diagnostics: readonly []
+  }> {
     context.signal.throwIfAborted()
-    return [
-      {
-        axis: 'parallelism',
-        reading: 'SUSTAINED',
-        value: this.value,
-        kind: 'OBSERVED',
-        collector: this.id,
-        basis: 'a value this suite chose',
-        demonstration: null,
-      },
-    ]
+    return {
+      observations: [
+        {
+          axis: 'parallelism',
+          reading: 'SUSTAINED' as const,
+          value: this.value,
+          kind: 'OBSERVED' as const,
+          collector: this.id,
+          basis: 'a value this suite chose',
+          demonstration: null,
+        },
+      ],
+      diagnostics: [],
+    }
   }
 }
 
@@ -474,10 +483,10 @@ class PoisonedForOneSubject implements EvidenceCollector {
     private readonly value: number,
   ) {}
 
-  async collect(context: CollectorContext): Promise<readonly Observation[]> {
+  async collect(context: CollectorContext): Promise<CollectorCollection> {
     context.signal.throwIfAborted()
-    if (!context.path.endsWith(this.subjectName)) return []
-    return [
+    if (!context.path.endsWith(this.subjectName)) return { observations: [], diagnostics: [] }
+    return { observations: [
       {
         axis: 'parallelism',
         reading: 'SUSTAINED',
@@ -487,7 +496,7 @@ class PoisonedForOneSubject implements EvidenceCollector {
         basis: 'a value this suite chose',
         demonstration: null,
       },
-    ]
+    ], diagnostics: [] }
   }
 }
 

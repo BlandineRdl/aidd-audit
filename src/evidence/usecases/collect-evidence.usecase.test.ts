@@ -26,6 +26,43 @@ function noSignal(): AbortSignal {
 }
 
 describe('collectEvidence', () => {
+  it('preserves a completed collector diagnostic without fabricating an observation', async () => {
+    const diagnostic = {
+      collector: 'forge-repository',
+      axis: 'parallelism' as const,
+      reason: 'INSUFFICIENT_ACTIVE_DAYS' as const,
+      observed: 3,
+      minimum: 5,
+    }
+    const collector = new FakeInMemoryEvidenceCollector(
+      'forge-repository',
+      ['parallelism'],
+      [],
+      [diagnostic],
+    )
+
+    const result = await collectEvidence({
+      path: '/repo/example',
+      vocabulary: [{ axis: 'parallelism', kind: 'numeric' }],
+      collectors: [collector],
+      signal: new AbortController().signal,
+    })
+
+    expect(result.diagnostics).toEqual([diagnostic])
+    expect(result.evidence).toHaveLength(2)
+    expect(result.evidence).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          axis: 'parallelism',
+          reading: 'SUSTAINED',
+          status: 'UNKNOWN',
+          value: null,
+          observations: [],
+        }),
+      ]),
+    )
+  })
+
   it('passes the requested path, vocabulary and caller signal to every called collector', async () => {
     const vocabulary = [ordinalVocabulary('size')]
     const controller = new AbortController()
@@ -163,6 +200,31 @@ describe('collectEvidence', () => {
         value: null,
         demonstration: null,
         observations: [],
+      },
+    ])
+  })
+
+  it('publishes no diagnostic when the forge run fails', async () => {
+    const forge = new FailingEvidenceCollector(
+      'forge-repository',
+      ['parallelism'],
+      new Error('gh api graphql refused'),
+    )
+
+    const result = await collectEvidence({
+      path: '.',
+      vocabulary: [{ axis: 'parallelism', kind: 'numeric' }],
+      collectors: [forge],
+      signal: noSignal(),
+    })
+
+    expect(result.diagnostics).toEqual([])
+    expect(result.provenance).toEqual([
+      {
+        collector: 'forge-repository',
+        status: 'FAILED',
+        axes: ['parallelism'],
+        reason: 'gh api graphql refused',
       },
     ])
   })

@@ -84,6 +84,44 @@ describe('4. observed: null on an unproven requirement is preserved', () => {
     expect('observed' in requirement).toBe(true)
     expect(requirement.observed).toBeNull()
   })
+
+  it('allows an explicit evidence diagnostic through the public JSON contract', () => {
+    const diagnostic = {
+      collector: 'forge-repository',
+      axis: 'parallelism',
+      reason: 'INSUFFICIENT_ACTIVE_DAYS' as const,
+      observed: 3,
+      minimum: 5,
+    }
+    const blue = levelReport({
+      axes: [
+        axisReport({
+          axis: 'parallelism',
+          requirements: [unprovenRequirement('parallelism', 1, 'UNKNOWN', null, diagnostic)],
+        }),
+      ],
+    })
+
+    const parsed = JSON.parse(renderJsonReport(assessmentReport({ next: blue, levels: [blue] })))
+    expect(parsed.levels[0].axes[0].requirements[0].diagnostic).toEqual(diagnostic)
+  })
+})
+
+describe('4.1 model vocabulary is published as report data', () => {
+  it('keeps raw values and their loaded descriptions', () => {
+    const parsed = JSON.parse(renderJsonReport(assessmentReport()))
+    expect(parsed.vocabulary).toContainEqual({
+      axis: 'harness',
+      kind: 'set',
+      members: ['prompts', 'behavior'],
+      descriptions: { prompts: 'prompts', behavior: 'guardrails' },
+    })
+    expect(parsed.vocabulary).toContainEqual({
+      axis: 'parallelism',
+      kind: 'numeric',
+      description: 'active work per day',
+    })
+  })
 })
 
 describe('5. outcomes and evidence statuses are never reinterpreted', () => {
@@ -189,6 +227,7 @@ describe('6. rendering is deterministic', () => {
       provenance: [provenanceB],
       coverage: { ...reportA.coverage },
       blocking: [blockerB],
+      vocabulary: reportA.vocabulary,
       levels: [levelB],
       demonstrated: null,
       next: null,

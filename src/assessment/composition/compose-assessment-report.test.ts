@@ -8,6 +8,7 @@ import type {
 } from '../contracts/assessment-report.contract.js'
 import { UndeclaredAxisError } from './undeclared-axis.error.js'
 import type { CollectorProvenance } from '../../evidence/models/collector-provenance.model.js'
+import type { CollectorDiagnostic } from '../../evidence/models/collector-diagnostic.model.js'
 import type { AxisId } from '../../evidence/models/axis.model.js'
 import type {
   Evidence,
@@ -71,13 +72,17 @@ const provenance: readonly CollectorProvenance[] = [
 
 const compose = (
   evidence: readonly Evidence[],
-  overrides: Partial<{ provenance: readonly CollectorProvenance[] }> = {},
+  overrides: Partial<{
+    provenance: readonly CollectorProvenance[]
+    diagnostics: readonly CollectorDiagnostic[]
+  }> = {},
 ): AssessmentReport =>
   composeAssessmentReport({
     subjectPath: '/repo/example',
     model,
     evidence,
     provenance: overrides.provenance ?? provenance,
+    ...(overrides.diagnostics === undefined ? {} : { diagnostics: overrides.diagnostics }),
   })
 
 const levelOf = (report: AssessmentReport, levelId: string): LevelReport =>
@@ -137,6 +142,22 @@ describe('a requirement carries both its verdict and the evidence behind it', ()
     })
   })
 
+  it('attaches a completed collector diagnostic to the UNKNOWN requirement it explains', () => {
+    const diagnostic: CollectorDiagnostic = {
+      collector: 'forge-repository',
+      axis: 'parallelism',
+      reason: 'INSUFFICIENT_ACTIVE_DAYS',
+      observed: 3,
+      minimum: 5,
+    }
+
+    const report = compose(evidenceOf({ parallelism: unresolved('UNKNOWN') }), {
+      diagnostics: [diagnostic],
+    })
+
+    expect(requirementOf(report, 'high', 'parallelism')).toMatchObject({ diagnostic })
+  })
+
   it('reports a set requirement by the members it asks for, and a minimum by its value', () => {
     const report = compose(evidenceOf())
     expect(requirementOf(report, 'high', 'harness').threshold).toEqual([
@@ -149,6 +170,41 @@ describe('a requirement carries both its verdict and the evidence behind it', ()
   it('labels each axis from the model, so the report never speaks in ids alone', () => {
     const axis = levelOf(compose(evidenceOf()), 'high').axes.find((a) => a.axis === 'parallelism')!
     expect(axis.label).toBe('En parallèle')
+  })
+
+  it('projects only the loaded model vocabulary into the report', () => {
+    const custom = {
+      ...model,
+      scales: {
+        ...model.scales,
+        harness: {
+          kind: 'set' as const,
+          members: ['prompts', 'context-engineering', 'behavior'],
+          descriptions: {
+            prompts: 'custom prompt practice',
+            'context-engineering': 'custom project context',
+            behavior: 'custom guardrails',
+          },
+        },
+      },
+    }
+    const report = composeAssessmentReport({
+      subjectPath: '/repo/custom',
+      model: custom,
+      evidence: evidenceOf(),
+      provenance,
+    })
+
+    expect(report.vocabulary).toContainEqual({
+      axis: 'harness',
+      kind: 'set',
+      members: ['prompts', 'context-engineering', 'behavior'],
+      descriptions: {
+        prompts: 'custom prompt practice',
+        'context-engineering': 'custom project context',
+        behavior: 'custom guardrails',
+      },
+    })
   })
 })
 

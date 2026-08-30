@@ -15,11 +15,11 @@ export interface AssessMaturityRequest {
 export async function assessMaturity(request: AssessMaturityRequest): Promise<AssessmentReport> {
   const { subjectPath, model, collectors, signal } = request
   const vocabulary = axisVocabularyOf(model)
-  const { evidence, provenance } = await collectEvidence({
+  const { evidence, provenance, diagnostics } = await collectEvidence({
     path: subjectPath,
     vocabulary,
     collectors,
     signal,
   })
-  return composeAssessmentReport({ subjectPath, model, evidence, provenance })
+  return composeAssessmentReport({ subjectPath, model, evidence, provenance, diagnostics })
 }
