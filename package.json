@@ -27,6 +27,7 @@
   },
   "packageManager": "pnpm@11.24.0",
   "dependencies": {
+    "gpt-tokenizer": "4.0.0",
     "yaml": "^2.9.0"
   },
   "devDependencies": {

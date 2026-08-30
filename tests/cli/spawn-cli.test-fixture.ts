@@ -33,13 +33,17 @@ export interface CliRun {
   readonly stderr: string
 }
 
-export function runCli(...args: readonly string[]): CliRun {
+function spawnCli(
+  args: readonly string[],
+  envOverrides: Readonly<Record<string, string>> = {},
+): CliRun {
   const result = spawnSync(process.execPath, [BUNDLE, ...args], {
     cwd: REPO_ROOT,
     encoding: 'utf8',
     env: {
       ...process.env,
       PATH: `${directoryHoldingARefusingGh()}:${process.env.PATH ?? ''}`,
+      ...envOverrides,
     },
   })
   if (result.error !== undefined) throw result.error
@@ -48,4 +52,15 @@ export function runCli(...args: readonly string[]): CliRun {
     throw new Error(`aidd-audit was killed by ${result.signal ?? 'an unknown signal'}.`)
   }
   return { status: result.status, stdout: result.stdout, stderr: result.stderr }
+}
+
+export function runCli(...args: readonly string[]): CliRun {
+  return spawnCli(args)
+}
+
+// INVARIANT: the harness command reads the machine's own configuration from `homedir()`, so a suite
+// wanting a machine reading with nothing in it — never the real developer machine this gate happens
+// to run on — must give the child its own empty HOME rather than rely on the caller's.
+export function runCliWithHome(args: readonly string[], home: string): CliRun {
+  return spawnCli(args, { HOME: home })
 }

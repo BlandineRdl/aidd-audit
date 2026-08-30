@@ -5,17 +5,32 @@ module.exports = {
   forbidden: [
     {
       name: 'maturity-is-a-peer',
-      comment: 'maturity/ is a peer of evidence/ and never depends on evidence, assessment or cli.',
+      comment:
+        'maturity/ is a peer of evidence/ and harness/ and never depends on evidence, harness, ' +
+        'assessment or cli.',
       severity: 'error',
       from: { path: '^src/maturity/' },
-      to: { path: '^src/(evidence|assessment|cli)/' },
+      to: { path: '^src/(evidence|harness|assessment|cli)/' },
     },
     {
       name: 'evidence-is-a-peer',
-      comment: 'evidence/ is a peer of maturity/ and never depends on maturity, assessment or cli.',
+      comment:
+        'evidence/ is a peer of maturity/ and harness/ and never depends on maturity, harness, ' +
+        'assessment or cli.',
       severity: 'error',
       from: { path: '^src/evidence/' },
-      to: { path: '^src/(maturity|assessment|cli)/' },
+      to: { path: '^src/(maturity|harness|assessment|cli)/' },
+    },
+    {
+      name: 'harness-is-a-peer',
+      comment:
+        'harness/ measures a harness the same way maturity/ and evidence/ measure a repository, ' +
+        'and is a peer of both: it never depends on maturity, evidence, assessment or cli. It ' +
+        'feeds no assessment — the audit is a second command, not a fifth axis — so the reverse ' +
+        'is barred too; see assessment-never-depends-on-harness.',
+      severity: 'error',
+      from: { path: '^src/harness/' },
+      to: { path: '^src/(maturity|evidence|assessment|cli)/' },
     },
     {
       name: 'assessment-composes-never-adapts',
@@ -35,18 +50,32 @@ module.exports = {
       to: { path: '^src/cli/' },
     },
     {
+      name: 'assessment-never-depends-on-harness',
+      comment:
+        'The harness audit feeds no assessment: it publishes its own command and its own JSON ' +
+        'shape, contributing no axis and no field to the maturity report. assessment must never ' +
+        'import it.',
+      severity: 'error',
+      from: { path: '^src/assessment/' },
+      to: { path: '^src/harness/' },
+    },
+    {
       name: 'domain-has-no-filesystem',
       comment:
         'Infrastructure crosses inward through ports. Models and use cases never touch the disk.',
       severity: 'error',
-      from: { path: '^src/[^/]+/(models|usecases|contracts|engine|ports|resolution|composition)/' },
+      from: {
+        path: '^src/[^/]+/(models|usecases|contracts|engine|ports|resolution|composition|measurement|advice)/',
+      },
       to: { dependencyTypes: ['core'], path: '^(node:)?(fs|fs/promises|path|os)$' },
     },
     {
       name: 'domain-has-no-processes',
       comment: 'Git is reached through an adapter, never spawned from a use case.',
       severity: 'error',
-      from: { path: '^src/[^/]+/(models|usecases|contracts|engine|ports|resolution|composition)/' },
+      from: {
+        path: '^src/[^/]+/(models|usecases|contracts|engine|ports|resolution|composition|measurement|advice)/',
+      },
       to: { dependencyTypes: ['core'], path: '^(node:)?child_process$' },
     },
     {
@@ -54,7 +83,9 @@ module.exports = {
       comment:
         'The YAML parser belongs to maturity/loading/. No domain or use-case file imports a vendor package.',
       severity: 'error',
-      from: { path: '^src/[^/]+/(models|usecases|contracts|engine|ports|resolution|composition)/' },
+      from: {
+        path: '^src/[^/]+/(models|usecases|contracts|engine|ports|resolution|composition|measurement|advice)/',
+      },
       to: {
         dependencyTypes: [
           'npm',
