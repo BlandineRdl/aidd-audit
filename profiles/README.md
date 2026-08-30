@@ -10,12 +10,20 @@ Leur niveau est donné par rapport à la grille.
 
 ## Qui ils sont
 
-| Dossier | Niveau | Ce qui rend le dossier particulier |
-| :--- | :--- | :--- |
-| `perceval` | 🔺 **Red** | Se décrit « plutôt avancé ». Ses chiffres disent autre chose |
-| `bohort` | 🔹 **Blue** | Le dossier le plus complet |
-| `leodagan` | 🟢 **Green** | Pas de session de travail |
-| `arthur` | 🥉 **Copper** | Ne dit rien de lui-même. Tout est dans ce qu'il a mis en place |
+Chaque dossier est spécifié par **deux** niveaux : celui qu'il tient d'habitude, et celui qu'il a
+démontré assez souvent pour que ça compte. Les deux sont épinglés par `tests/cli/reference-profiles.test.ts`.
+
+| Dossier | Tenu | Démontré | Ce qui rend le dossier particulier |
+| :--- | :--- | :--- | :--- |
+| `perceval` | 🔺 **Red** | 🔺 Red | Se décrit « plutôt avancé ». Ses chiffres disent autre chose |
+| `bohort` | 🔹 **Blue** | 🔹 Blue | Le dossier le plus complet |
+| `leodagan` | 🟢 **Green** | 🥉 **Copper** | Pas de session de travail. Le seul dont les deux lectures diffèrent |
+| `arthur` | 🥉 **Copper** | 🥉 Copper | Ne dit rien de lui-même. Tout est dans ce qu'il a mis en place |
+
+**L'écart de `leodagan` n'est pas une coquille, c'est son second rôle.** Ses journées enregistrées
+portent trois chantiers assez souvent pour atteindre Copper sur l'axe que sa médiane laisse à un.
+C'est la seule fixture qui exerce la lecture « démontré » depuis un bundle jusqu'au contrat publié ;
+sans elle ce chemin partirait sans preuve.
 
 ---
 

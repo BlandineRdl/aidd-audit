@@ -13,6 +13,17 @@ const EXPECTED_LEVEL = {
   arthur: 'Copper',
 } as const
 
+// INVARIANT: What each bundle demonstrates, which is a second specification and not a restatement of
+// the first. `leodagan` is the one that differs, and deliberately: his recorded days carry three
+// branches often enough to reach Copper on the axis his median leaves at one. Without him no bundle
+// would exercise the demonstrated reading end to end, and the path would ship unproven.
+const EXPECTED_DEMONSTRATED = {
+  perceval: 'Red',
+  bohort: 'Blue',
+  leodagan: 'Copper',
+  arthur: 'Copper',
+} as const
+
 const AXES_IN_THE_MODEL = 4
 
 function capturingIo(): { io: CommandIo; stdout: () => string } {
@@ -36,6 +47,28 @@ describe('every reference profile reaches the level its bundle proves', () => {
       expect(report.proven?.label).toBe(level)
     })
   }
+
+  for (const [profile, level] of Object.entries(EXPECTED_DEMONSTRATED)) {
+    it(`demonstrates ${level} for ${profile}`, async () => {
+      const report = await reportFor(profile)
+
+      // INVARIANT: a bundle with no recorded distribution reports null here, so this also proves
+      // the four fixtures still carry one.
+      expect(report.demonstrated?.level?.label).toBe(level)
+    })
+  }
+
+  it('never demonstrates less than it proves, and always says how often', async () => {
+    for (const profile of Object.keys(EXPECTED_LEVEL)) {
+      const report = await reportFor(profile)
+
+      expect(report.demonstrated?.level?.rank).toBeGreaterThanOrEqual(report.proven?.rank ?? 0)
+      for (const axis of report.demonstrated?.axes ?? []) {
+        expect(axis.share).toBeGreaterThan(0)
+        expect(axis.share).toBeLessThanOrEqual(1)
+      }
+    }
+  })
 
   it.each(Object.keys(EXPECTED_LEVEL))('confirms every axis from %s alone', async (profile) => {
     const report = await reportFor(profile)

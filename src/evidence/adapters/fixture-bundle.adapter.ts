@@ -114,6 +114,21 @@ function collectRecorded(
     )
   }
 
+  if (
+    activity.demonstratedParallelism !== null &&
+    scaleFor(context.vocabulary, 'parallelism')?.kind === 'numeric'
+  ) {
+    observations.push({
+      axis: 'parallelism',
+      reading: 'DEMONSTRATED',
+      value: activity.demonstratedParallelism.value,
+      kind: 'OBSERVED',
+      collector: COLLECTOR_ID,
+      basis: 'recorded active days carrying that many branches at once',
+      demonstration: { share: activity.demonstratedParallelism.share, unit: 'ACTIVE_DAYS' },
+    })
+  }
+
   return observations
 }
 
@@ -131,5 +146,15 @@ function scaleFor(vocabulary: readonly AxisVocabulary[], axis: AxisId): AxisVoca
 }
 
 function observation(axis: AxisId, value: ObservedValue, basis: string): Observation {
-  return { axis, value, kind: 'OBSERVED', collector: COLLECTOR_ID, basis }
+  // LIMITATION: a bundle records pre-aggregated medians and no distribution behind them, so it
+  // answers the habitual question alone. Lifting that needs the record to carry a distribution.
+  return {
+    axis,
+    reading: 'SUSTAINED',
+    value,
+    kind: 'OBSERVED',
+    collector: COLLECTOR_ID,
+    basis,
+    demonstration: null,
+  }
 }

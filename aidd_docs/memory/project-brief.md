@@ -11,7 +11,7 @@ What this project is, the problem it solves, and its domain language. The non-de
 
 - Self-declared AI maturity is unreliable. The governing principle is **don't ask what you can observe, and don't pretend to know what you can't prove**.
 - The differentiator: the level is **calculated deterministically and explained, never inferred by a language model**. An LLM may narrate the result, never decide it.
-- The architectural invariant everything else serves: given the same maturity model and the same observable evidence, the result is always the same — offline, without an LLM, with enough provenance to explain exactly why.
+- The architectural invariant everything else serves: given the same maturity model and the same observable evidence, the result is always the same, without an LLM, with enough provenance to explain exactly why. **Offline holds for the evidence a subject carries**; a forge reading is reproducible against a fixed forge state and not beyond it.
 
 ## Domain language
 
@@ -38,9 +38,9 @@ What this project is, the problem it solves, and its domain language. The non-de
 ## Key features
 
 - Deterministic decision chain: raw observations → normalised evidence → evidence resolution → axis satisfaction → level satisfaction → highest proven level.
-- Two evidence sources behind one port: fixture bundles and a live local repository (filesystem + Git).
+- Three evidence sources behind one port: a recorded fixture bundle, a live local repository (filesystem + Git), and the GitHub forge that hosts it.
 - Two renderers: a human explanation and a versioned JSON contract.
-- Runs fully offline. Installation may need the network; execution never does.
+- **Offline is a floor, no longer a guarantee.** A bundle, and a repository with no GitHub origin, are assessed with no network at all: everything the local sources answer, they answer offline. A repository hosted on GitHub is assessed through its forge as well, because three of the four axes are unobservable or artefact-prone on a squash-merged history, and the merge graph is not the delivery record there. Without credentials the forge collector **fails rather than falling silent** — `FAILED` in provenance, naming what refused, and the three axes it owns go `UNKNOWN`. Silence in this codebase means no observation *and* no failure, which is what a collector does for a subject that is not its own; a refusal is a different thing and the report says which. What was promised before this, and is no longer true, is that *execution never touches the network*.
 
 ## The conservative rule
 

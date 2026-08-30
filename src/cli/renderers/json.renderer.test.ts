@@ -190,6 +190,7 @@ describe('6. rendering is deterministic', () => {
       coverage: { ...reportA.coverage },
       blocking: [blockerB],
       levels: [levelB],
+      demonstrated: null,
       next: null,
       proven: levelB,
       subject: { path: reportA.subject.path },
@@ -393,6 +394,22 @@ describe('12. a non-finite number is refused, never published as null', () => {
       coverage: { axesRequested: 4, axesObserved: Number.NaN, axesConfirmed: 1 },
     })
     expect(() => renderJsonReport(report)).toThrow(UnrenderableReportError)
+  })
+
+  it('refuses a non-finite demonstrated share, naming the path it sits on', () => {
+    const copper = levelReport({ id: 'copper', rank: 4, label: 'Copper' })
+    const report = assessmentReport({
+      demonstrated: {
+        level: { id: copper.id, rank: copper.rank, label: copper.label, outcome: copper.outcome },
+        axes: [{ axis: 'size', observed: 'L', share: Number.NaN, unit: 'DELIVERIES' }],
+      },
+    })
+
+    // INVARIANT: a share is what separates a demonstrated value from a maximum. JSON renders NaN as
+    // null, which this contract reads as absence, so publishing it would hand the reader a
+    // demonstrated level it cannot weigh — the one thing this reading must never become.
+    expect(() => renderJsonReport(report)).toThrow(UnrenderableReportError)
+    expect(() => renderJsonReport(report)).toThrow(/\$\.demonstrated\.axes\[0\]\.share/)
   })
 
   it('refuses a non-finite level rank', () => {

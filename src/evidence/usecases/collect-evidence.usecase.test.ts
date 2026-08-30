@@ -7,10 +7,12 @@ import { FakeInMemoryEvidenceCollector } from '../adapters/fake-in-memory-eviden
 
 function observation(overrides: Partial<Observation> & Pick<Observation, 'axis'>): Observation {
   return {
+    reading: 'SUSTAINED',
     value: 'L',
     kind: 'OBSERVED',
     collector: 'fake',
     basis: 'fixture',
+    demonstration: null,
     ...overrides,
   }
 }
@@ -63,7 +65,8 @@ describe('collectEvidence', () => {
       signal: noSignal(),
     })
 
-    expect(result.evidence).toHaveLength(1)
+    // One entry per requested axis and reading: size sustained, then size demonstrated.
+    expect(result.evidence).toHaveLength(2)
     expect(result.evidence[0]).toMatchObject({ axis: 'size', status: 'CONFIRMED', value: 'L' })
     expect(result.evidence[0]?.observations).toHaveLength(2)
   })
@@ -121,8 +124,17 @@ describe('collectEvidence', () => {
       signal: noSignal(),
     })
 
-    const harness = result.evidence.find((entry) => entry.axis === 'harness')
-    expect(harness).toEqual({ axis: 'harness', status: 'UNKNOWN', value: null, observations: [] })
+    const harness = result.evidence.find(
+      (entry) => entry.axis === 'harness' && entry.reading === 'SUSTAINED',
+    )
+    expect(harness).toEqual({
+      axis: 'harness',
+      reading: 'SUSTAINED',
+      status: 'UNKNOWN',
+      value: null,
+      demonstration: null,
+      observations: [],
+    })
   })
 
   it('leaves a throwing collector axis UNKNOWN, never a fabricated negative or a missing entry', async () => {
@@ -136,7 +148,22 @@ describe('collectEvidence', () => {
     })
 
     expect(result.evidence).toEqual([
-      { axis: 'size', status: 'UNKNOWN', value: null, observations: [] },
+      {
+        axis: 'size',
+        reading: 'SUSTAINED',
+        status: 'UNKNOWN',
+        value: null,
+        demonstration: null,
+        observations: [],
+      },
+      {
+        axis: 'size',
+        reading: 'DEMONSTRATED',
+        status: 'UNKNOWN',
+        value: null,
+        demonstration: null,
+        observations: [],
+      },
     ])
   })
 
@@ -235,7 +262,12 @@ describe('collectEvidence', () => {
     expect(result.provenance).toEqual([
       { collector: 'silent', status: 'COMPLETED', axes: ['size', 'harness'] },
     ])
-    expect(result.evidence.map((entry) => entry.status)).toEqual(['UNKNOWN', 'UNKNOWN'])
+    expect(result.evidence.map((entry) => entry.status)).toEqual([
+      'UNKNOWN',
+      'UNKNOWN',
+      'UNKNOWN',
+      'UNKNOWN',
+    ])
   })
 
   it('reports provenance for every configured collector in configuration order with its responsible axes', async () => {

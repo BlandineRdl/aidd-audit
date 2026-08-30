@@ -32,8 +32,9 @@
     "prs_with_tests_ratio": 0.93
   },
   "parallelism": {
-    "max_concurrent_branches": 2,
-    "median_concurrent_branches": 1
+    "max_concurrent_branches": 4,
+    "median_concurrent_branches": 1,
+    "days_at_concurrency": { "1": 10, "3": 5, "4": 3 }
   },
   "ci": {
     "failure_rate": 0.04,

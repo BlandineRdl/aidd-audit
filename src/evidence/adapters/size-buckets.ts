@@ -1,7 +1,8 @@
 // INVARIANT: A table two adapters computed differently would break their interchangeability behind
 // the collector port.
 
-const SIZE_BUCKETS = ['S', 'M', 'L', 'XL'] as const
+// Ordered low to high, which is what lets a demonstrated reading walk it from the top.
+export const SIZE_BUCKETS = ['S', 'M', 'L', 'XL'] as const
 
 export type SizeBucket = (typeof SIZE_BUCKETS)[number]
 

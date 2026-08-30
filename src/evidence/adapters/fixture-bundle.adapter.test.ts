@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import type { AxisVocabulary } from '../models/axis.model.js'
 import type { Observation } from '../models/observation.model.js'
 import { FixtureBundleEvidenceCollector } from './fixture-bundle.adapter.js'
+import { InconsistentRecordError } from './fixture-bundle/inconsistent-record.error.js'
 
 const AIDD_VOCABULARY: readonly AxisVocabulary[] = [
   { axis: 'size', kind: 'ordinal', values: ['none', 'S', 'M', 'L', 'XL'] },
@@ -180,6 +181,71 @@ describe('the recorded delivery answers three axes', () => {
     })
 
     expect(valueFor(await collectFrom(path), 'parallelism')).toBe(2)
+  })
+
+  it('answers the habitual question alone when the record carries no distribution', async () => {
+    const path = bundleHolding({
+      ...MANIFEST,
+      'git-activity.json': activity(
+        { total: 40 },
+        { parallelism: { max_concurrent_branches: 9, median_concurrent_branches: 2 } },
+      ),
+    })
+
+    // INVARIANT: a bundle written before the field existed must not gain a reading it never
+    // recorded. `max_concurrent_branches` is not a distribution and never stands in for one.
+    const observations = await collectFrom(path)
+    expect(observations.filter((entry) => entry.reading === 'DEMONSTRATED')).toEqual([])
+  })
+
+  it('reads the recorded days to say what the subject reached, and how often', async () => {
+    const path = bundleHolding({
+      ...MANIFEST,
+      'git-activity.json': activity(
+        { total: 40 },
+        {
+          parallelism: {
+            max_concurrent_branches: 4,
+            median_concurrent_branches: 1,
+            days_at_concurrency: { '1': 10, '3': 5, '4': 3 },
+          },
+        },
+      ),
+    })
+
+    const observations = await collectFrom(path)
+    const demonstrated = observations.find((entry) => entry.reading === 'DEMONSTRATED')
+
+    // Eight of eighteen days carried three branches or more, past a third; only three carried four.
+    expect(demonstrated).toMatchObject({
+      axis: 'parallelism',
+      value: 3,
+      demonstration: { unit: 'ACTIVE_DAYS' },
+    })
+    expect(valueFor(observations, 'parallelism')).toBe(1)
+  })
+
+  it('refuses a distribution that cannot support the median recorded beside it', async () => {
+    const path = bundleHolding({
+      ...MANIFEST,
+      'git-activity.json': activity(
+        { total: 40 },
+        {
+          parallelism: {
+            max_concurrent_branches: 4,
+            median_concurrent_branches: 4,
+            days_at_concurrency: { '1': 10, '3': 5, '4': 3 },
+          },
+        },
+      ),
+    })
+
+    // INVARIANT: named, not dropped. Dropping it would be indistinguishable from a bundle that
+    // recorded no distribution at all, and the reader would never learn the record was wrong. The
+    // rejection carries both numbers, so the message says which halves disagree.
+    await expect(collectFrom(path)).rejects.toBeInstanceOf(InconsistentRecordError)
+    await expect(collectFrom(path)).rejects.toThrow(/median of 4/)
+    await expect(collectFrom(path)).rejects.toThrow(/yields 1/)
   })
 
   it('reports a period that delivered nothing as such, not as a gap', async () => {

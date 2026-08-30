@@ -299,10 +299,12 @@ class OffVocabularyEvidenceCollector implements EvidenceCollector {
     return [
       {
         axis: 'parallelism',
+        reading: 'SUSTAINED',
         value: this.value,
         kind: 'OBSERVED',
         collector: this.id,
         basis: 'a value this suite chose',
+        demonstration: null,
       },
     ]
   }

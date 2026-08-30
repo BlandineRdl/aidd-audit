@@ -104,6 +104,48 @@ async function deliverDeletion(
   await git(repository, ['merge', '--no-ff', '-q', '-m', `merge ${branch}`, branch], date)
 }
 
+const AGENT_TRAILER = 'Co-Authored-By: Claude <noreply@anthropic.com>'
+
+// INVARIANT: A branch and its `--no-ff` merge back, holding one commit per entry of `trailers`. An
+// entry is the trailer that commit carries, `null` a commit carrying none.
+async function deliverChangeAuthoredBy(
+  repository: string,
+  branch: string,
+  date: string,
+  trailers: readonly (string | null)[],
+): Promise<void> {
+  await git(repository, ['checkout', '-q', '-b', branch])
+  for (const [index, trailer] of trailers.entries()) {
+    await writeFile(join(repository, `${branch}-${index}.txt`), linesOf(10))
+    await git(repository, ['add', '-A'])
+    const message = trailer === null ? `work on ${branch}` : `work on ${branch}\n\n${trailer}`
+    await git(repository, ['commit', '-q', '-m', message], date)
+  }
+  await git(repository, ['checkout', '-q', 'main'])
+  await git(repository, ['merge', '--no-ff', '-q', '-m', `merge ${branch}`, branch], date)
+}
+
+// INVARIANT: A merge whose second parent is already an ancestor of its first, so it absorbs no
+// commit at all. `git merge` declines to build one, and a back-merged or rewritten history holds
+// them, so it is built here the only way it occurs: by hand, over the mainline's own tree.
+async function deliverAlreadyLandedChange(
+  repository: string,
+  branch: string,
+  date: string,
+): Promise<void> {
+  const tree = (await git(repository, ['rev-parse', 'HEAD^{tree}'])).trim()
+  const mainline = (await git(repository, ['rev-parse', 'HEAD'])).trim()
+  const side = (await git(repository, ['rev-parse', branch])).trim()
+  const merge = (
+    await git(
+      repository,
+      ['commit-tree', tree, '-p', mainline, '-p', side, '-m', `re-merge ${branch}`],
+      date,
+    )
+  ).trim()
+  await git(repository, ['update-ref', 'HEAD', merge])
+}
+
 // `count` files whose added lines sum to exactly `total`.
 function fileSizesTotalling(count: number, total: number): readonly number[] {
   return [total - (count - 1), ...Array.from({ length: count - 1 }, () => 1)]
@@ -119,6 +161,7 @@ describe('readGitDerivedMetrics', () => {
 
       await expect(readGitDerivedMetrics(repository, NEVER_ABORTED)).resolves.toEqual({
         sizeBucket: null,
+        intervention: null,
         parallelism: null,
       })
     },
@@ -147,6 +190,7 @@ describe('readGitDerivedMetrics', () => {
 
       await expect(readGitDerivedMetrics(truncated, NEVER_ABORTED)).resolves.toEqual({
         sizeBucket: null,
+        intervention: null,
         parallelism: null,
       })
     },
@@ -168,6 +212,7 @@ describe('readGitDerivedMetrics', () => {
 
       await expect(readGitDerivedMetrics(repository, NEVER_ABORTED)).resolves.toEqual({
         sizeBucket: null,
+        intervention: null,
         parallelism: null,
       })
     },
@@ -427,10 +472,12 @@ describe('readGitDerivedMetrics', () => {
       // Both hold five delivered changes, so the day count alone separates them.
       await expect(readGitDerivedMetrics(four, NEVER_ABORTED)).resolves.toEqual({
         sizeBucket: 'S',
+        intervention: null,
         parallelism: null,
       })
       await expect(readGitDerivedMetrics(five, NEVER_ABORTED)).resolves.toEqual({
         sizeBucket: 'S',
+        intervention: null,
         parallelism: 1,
       })
     },
@@ -440,25 +487,20 @@ describe('readGitDerivedMetrics', () => {
   it(
     'measures parallelism over the same window as size',
     async () => {
-      const repository = await initRepository()
-      await commitOnMainline(repository, { 'README.md': 'base\n' }, 'base', DAY(1))
+      const repository = await repositoryWithABaseCommit(DAY(1))
       for (const day of [1, 2, 3, 4, 5]) {
-        await commitOnMainline(repository, { [`old-${day}.txt`]: 'x\n' }, `old ${day}`, DAY(day))
-        await deliverChange(repository, `old-branch-${day}`, DAY(day), [1])
+        await deliverChange(repository, `old-a-${day}`, DAY(day), [1])
+        await deliverChange(repository, `old-b-${day}`, DAY(day), [1])
       }
       for (const day of [5, 6, 7, 8, 9]) {
-        await commitOnMainline(
-          repository,
-          { [`recent-${day}.txt`]: 'x\n' },
-          `recent ${day}`,
-          `2026-07-0${day}T12:00:00+00:00`,
-        )
+        await deliverChange(repository, `recent-${day}`, `2026-07-0${day}T12:00:00+00:00`, [1])
       }
 
       // INVARIANT: only the quiet days fall in the window: one branch each, median 1. The whole
-      // history would find five days at two branches and answer 1.5.
+      // history would find five busier days at two branches and answer 1.5.
       await expect(readGitDerivedMetrics(repository, NEVER_ABORTED)).resolves.toEqual({
-        sizeBucket: null,
+        sizeBucket: 'S',
+        intervention: null,
         parallelism: 1,
       })
     },
@@ -543,6 +585,243 @@ describe('readGitDerivedMetrics', () => {
       const repository = await repositoryWithABaseCommit(DAY(1))
 
       await expect(readGitDerivedMetrics(repository, AbortSignal.abort())).rejects.toThrow(/abort/i)
+    },
+    A_LONG_TIME,
+  )
+})
+
+describe('readGitDerivedMetrics, when merges are not the delivery record', () => {
+  // INVARIANT: `mainlineCommits` non-merge commits on the first-parent walk, beside `merges`
+  // delivered changes. The base commit counts among the non-merge ones, so the caller asks for the
+  // total it wants on that side, and the share under test is `merges / (merges + mainlineCommits)`.
+  async function repositoryMixing(merges: number, mainlineCommits: number): Promise<string> {
+    const repository = await repositoryWithABaseCommit(DAY(1))
+    for (let index = 1; index <= merges; index += 1) {
+      await deliverChange(repository, `change-${index}`, DAY(index + 1), [10])
+    }
+    for (let index = 1; index < mainlineCommits; index += 1) {
+      await commitOnMainline(
+        repository,
+        { [`direct-${index}.txt`]: linesOf(10) },
+        `direct ${index}`,
+        DAY(index + merges + 1),
+      )
+    }
+    return repository
+  }
+
+  it(
+    'keeps both branch-derived axes when merges are exactly a quarter of what landed',
+    async () => {
+      const repository = await repositoryMixing(5, 15)
+
+      await expect(readGitDerivedMetrics(repository, NEVER_ABORTED)).resolves.toMatchObject({
+        sizeBucket: 'S',
+        parallelism: 1,
+      })
+    },
+    A_LONG_TIME,
+  )
+
+  it(
+    'withholds both branch-derived axes when merges fall just under a quarter',
+    async () => {
+      const repository = await repositoryMixing(5, 16)
+
+      // INVARIANT: a median drawn from a minority of what was delivered is not a measurement. The
+      // axes go unobserved, which is an evidence gap, never a practice gap published low.
+      await expect(readGitDerivedMetrics(repository, NEVER_ABORTED)).resolves.toMatchObject({
+        sizeBucket: null,
+        parallelism: null,
+      })
+    },
+    A_LONG_TIME,
+  )
+
+  it(
+    'withholds intervention too from a history whose merges are a minority',
+    async () => {
+      const repository = await repositoryWithABaseCommit(DAY(1))
+      for (let index = 1; index <= 5; index += 1) {
+        await deliverChangeAuthoredBy(repository, `change-${index}`, DAY(index + 1), [
+          AGENT_TRAILER,
+        ])
+      }
+      for (let index = 1; index <= 15; index += 1) {
+        await commitOnMainline(
+          repository,
+          { [`direct-${index}.txt`]: linesOf(10) },
+          `direct ${index}`,
+          DAY(index + 7),
+        )
+      }
+
+      // INVARIANT: all five merges here are agent-authored, so the autonomy share is 1.0 and the
+      // top rank would be granted — from five deliveries out of twenty-one landings. A squashed
+      // delivery leaves no side to read, so it cannot contribute; reading the survivors anyway
+      // would grant the scale's top rank from exactly the minority the share guard just rejected.
+      await expect(readGitDerivedMetrics(repository, NEVER_ABORTED)).resolves.toEqual({
+        sizeBucket: null,
+        intervention: null,
+        parallelism: null,
+      })
+    },
+    A_LONG_TIME,
+  )
+})
+
+describe('readGitDerivedMetrics, on the intervention axis', () => {
+  it(
+    'grants autonomy to a history whose delivered changes hold no human commit',
+    async () => {
+      const repository = await repositoryWithABaseCommit(DAY(1))
+      for (let index = 1; index <= 5; index += 1) {
+        await deliverChangeAuthoredBy(repository, `change-${index}`, DAY(index + 1), [
+          AGENT_TRAILER,
+          AGENT_TRAILER,
+        ])
+      }
+
+      await expect(readGitDerivedMetrics(repository, NEVER_ABORTED)).resolves.toMatchObject({
+        intervention: 'never-once-framed',
+      })
+    },
+    A_LONG_TIME,
+  )
+
+  it(
+    'reports no intervention at all, never a low one, when nothing was authored by an agent',
+    async () => {
+      const repository = await repositoryWithABaseCommit(DAY(1))
+      for (let index = 1; index <= 8; index += 1) {
+        await deliverChangeAuthoredBy(repository, `change-${index}`, DAY(index + 1), [null])
+      }
+
+      // INVARIANT: the absence of a trailer is not evidence of a human. A value here would be a
+      // practice gap nobody observed; withholding it is the evidence gap the situation is.
+      await expect(readGitDerivedMetrics(repository, NEVER_ABORTED)).resolves.toMatchObject({
+        intervention: null,
+      })
+    },
+    A_LONG_TIME,
+  )
+
+  it(
+    'withholds autonomy from a change carrying one human commit beside its agent ones',
+    async () => {
+      const repository = await repositoryWithABaseCommit(DAY(1))
+      for (let index = 1; index <= 5; index += 1) {
+        await deliverChangeAuthoredBy(repository, `change-${index}`, DAY(index + 1), [
+          AGENT_TRAILER,
+          null,
+        ])
+      }
+
+      await expect(readGitDerivedMetrics(repository, NEVER_ABORTED)).resolves.toMatchObject({
+        intervention: null,
+      })
+    },
+    A_LONG_TIME,
+  )
+
+  it(
+    'grants autonomy at nine changes in ten, and withholds it at eight',
+    async () => {
+      const nine = await repositoryWithABaseCommit(DAY(1))
+      for (let index = 1; index <= 10; index += 1) {
+        await deliverChangeAuthoredBy(nine, `change-${index}`, DAY(index + 1), [
+          index === 1 ? null : AGENT_TRAILER,
+        ])
+      }
+      const eight = await repositoryWithABaseCommit(DAY(1))
+      for (let index = 1; index <= 10; index += 1) {
+        await deliverChangeAuthoredBy(eight, `change-${index}`, DAY(index + 1), [
+          index <= 2 ? null : AGENT_TRAILER,
+        ])
+      }
+
+      await expect(readGitDerivedMetrics(nine, NEVER_ABORTED)).resolves.toMatchObject({
+        intervention: 'never-once-framed',
+      })
+      await expect(readGitDerivedMetrics(eight, NEVER_ABORTED)).resolves.toMatchObject({
+        intervention: null,
+      })
+    },
+    A_LONG_TIME,
+  )
+
+  it(
+    'reports no autonomy from four agent-authored changes, and grants it from five',
+    async () => {
+      const four = await repositoryWithABaseCommit(DAY(1))
+      for (let index = 1; index <= 4; index += 1) {
+        await deliverChangeAuthoredBy(four, `change-${index}`, DAY(index + 1), [AGENT_TRAILER])
+      }
+      const five = await repositoryWithABaseCommit(DAY(1))
+      for (let index = 1; index <= 5; index += 1) {
+        await deliverChangeAuthoredBy(five, `change-${index}`, DAY(index + 1), [AGENT_TRAILER])
+      }
+
+      await expect(readGitDerivedMetrics(four, NEVER_ABORTED)).resolves.toMatchObject({
+        intervention: null,
+      })
+      await expect(readGitDerivedMetrics(five, NEVER_ABORTED)).resolves.toMatchObject({
+        intervention: 'never-once-framed',
+      })
+    },
+    A_LONG_TIME,
+  )
+
+  it(
+    'does not read a merge that absorbed no commit as one an agent authored',
+    async () => {
+      const repository = await repositoryWithABaseCommit(DAY(1))
+      for (let index = 1; index <= 5; index += 1) {
+        await deliverChangeAuthoredBy(repository, `change-${index}`, DAY(index + 1), [
+          AGENT_TRAILER,
+        ])
+      }
+      await expect(readGitDerivedMetrics(repository, NEVER_ABORTED)).resolves.toMatchObject({
+        intervention: 'never-once-framed',
+      })
+
+      for (let index = 1; index <= 5; index += 1) {
+        await deliverAlreadyLandedChange(repository, `change-${index}`, DAY(index + 7))
+      }
+
+      // INVARIANT: "every commit carries a trailer" is vacuously true of no commit at all. A
+      // change an agent authored is one an agent actually wrote something in.
+      await expect(readGitDerivedMetrics(repository, NEVER_ABORTED)).resolves.toMatchObject({
+        intervention: null,
+      })
+    },
+    A_LONG_TIME,
+  )
+
+  it(
+    'reads autonomy over the same window as size, so an abandoned practice stops counting',
+    async () => {
+      const repository = await repositoryWithABaseCommit('2025-01-01T12:00:00+00:00')
+      for (let index = 1; index <= 6; index += 1) {
+        await deliverChangeAuthoredBy(
+          repository,
+          `old-${index}`,
+          `2025-01-${String(index + 1).padStart(2, '0')}T12:00:00+00:00`,
+          [AGENT_TRAILER],
+        )
+      }
+      for (let index = 1; index <= 6; index += 1) {
+        await deliverChangeAuthoredBy(
+          repository,
+          `recent-${index}`,
+          `2026-01-${String(index + 1).padStart(2, '0')}T12:00:00+00:00`,
+          [null],
+        )
+      }
+
+      await expect(readGitDerivedMetrics(repository, NEVER_ABORTED)).resolves.toMatchObject({
+        intervention: null,
+      })
     },
     A_LONG_TIME,
   )

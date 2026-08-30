@@ -1,44 +1,46 @@
-import { runGit } from './git-process.js'
+import { mostRecentCommitDate, runGit } from './git-process.js'
+import { AUTONOMOUS_INTERVENTION, ZERO_TOUCH_SHARE_FOR_AUTONOMY } from '../autonomy.js'
+import {
+  MINIMUM_ACTIVE_DAYS,
+  MINIMUM_DELIVERED_CHANGES,
+  median,
+  windowStartFrom,
+} from '../delivery-sample.js'
 import { bucketForFiles, bucketForLines, lowerBucket, type SizeBucket } from '../size-buckets.js'
 
-// LIMITATION: The 180 days ending at the most recent commit, never wall-clock now: the same
-// repository must not report two different levels on two different days. **The length is chosen,
-// not measured**, on the same footing as the sample floors below: long enough that two quarters of
-// ordinary delivery fall inside it, short enough that a practice abandoned a year ago stops
-// counting. Nothing observed here establishes 180 over 90 or 365.
-const WINDOW_DAYS = 180
-const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000
-
-// LIMITATION: A sample is not a habit: below these counts a median describes an accident, and this
-// collector emits nothing rather than publish it. That much follows from the conservative rule.
-// **The number 5 is chosen, not measured, and nothing in this project establishes it.** No
-// distribution of delivered changes was consulted, and the four reference profiles cannot stand in
-// for one: they are fixture bundles, and a bundle publishes pre-aggregated medians without the
-// counts behind them, so they never cross this floor at all. What is known is the shape of the cost
-// on each side, and it is asymmetric. Too low, and a fortnight of unusual weeks is published as a
-// habit — a wrong level, stated confidently, on a repository no offline reader can contradict. Too
-// high, and a small but genuine practice stays UNKNOWN — an evidence gap, which the report names as
-// one and which may never be read as a practice gap. Withholding a level is recoverable; inventing
-// one is not. That asymmetry is the whole argument for 5 over 3, and it is an argument about
-// direction, not about the value. **Not to be lowered so that a given repository classifies.** That
-// is fitting the measure to the result one hoped for, and this repository — 3 merges over 3 active
-// days as this is written — is precisely the case that invites it. Move either number only from an
-// observed distribution across real repositories, which needs a corpus this project does not have
-// and is post-MVP. Until then the floor stands and the history accumulates. Either number changes
-// what `assess` reports about every repository, so it is a product decision, never a tuning knob.
-const MINIMUM_DELIVERED_CHANGES = 5
-const MINIMUM_ACTIVE_DAYS = 5
+// LIMITATION: The share of what landed on the mainline that must be a merge before branch shape is
+// read as the delivery record. Below it the merges are a minority of what was delivered, and a
+// median or a branch count drawn from them describes that minority while reading as a statement
+// about the repository. A squash-merged or rebased history is the case: the branch is gone, its
+// delivery lands as an ordinary mainline commit, and nothing distinguishes it from a direct push.
+// **One in four is chosen, not measured, and nothing in this project establishes it.** It is not
+// one in two because merging every branch while pushing an equal number of direct commits is an
+// ordinary workflow that sits exactly at a half, and a rule withholding there would call half a
+// sample a minority. The cost is asymmetric in the usual direction. Too high withholds two axes
+// from a repository that merges most of its work and pushes the rest directly, which is an evidence
+// gap the report names as one. Too low publishes a confident value computed from a fraction of the
+// deliveries, and on a minimum-threshold scale a low value is a practice gap nobody observed. **Not
+// to be lowered so that a given repository classifies.** Move it only from an observed distribution
+// across real repositories, which needs a corpus this project does not have. What lifts this
+// properly is a forge collector, which reads the pull request rather than the graph the merge left
+// behind.
+const MINIMUM_MERGE_SHARE = 0.25
 
 // Field separator inside one `git log` record. Never occurs in a hash, date or parent list.
 const FIELD = '\x1f'
 
 export interface GitDerivedMetrics {
   readonly sizeBucket: string | null
+  readonly intervention: string | null
   readonly parallelism: number | null
 }
 
 // Nothing was recoverable: an evidence gap, never a measurement of zero.
-const UNRECOVERABLE: GitDerivedMetrics = { sizeBucket: null, parallelism: null }
+const UNRECOVERABLE: GitDerivedMetrics = {
+  sizeBucket: null,
+  intervention: null,
+  parallelism: null,
+}
 
 interface WalkCommit {
   readonly hash: string
@@ -75,30 +77,55 @@ export async function readGitDerivedMetrics(
   const merges = walk.filter(isDeliveredChange)
   if (merges.length === 0) return UNRECOVERABLE
 
-  const windowEnd = await readMostRecentCommitDate(path, signal)
+  const windowEnd = await mostRecentCommitDate(path, signal)
   if (windowEnd === null) return UNRECOVERABLE
-  const windowStart = windowEnd - WINDOW_DAYS * MILLISECONDS_PER_DAY
+  const windowStart = windowStartFrom(windowEnd)
   const inWindow = (authorDate: string): boolean => {
     const instant = Date.parse(authorDate)
     return Number.isFinite(instant) && instant >= windowStart
   }
 
-  const sizeBucket = await readSizeBucket(
-    path,
-    merges.filter((merge) => inWindow(merge.authorDate)),
-    signal,
+  const deliveredInWindow = merges.filter((merge) => inWindow(merge.authorDate))
+  const landedDirectlyInWindow = walk.filter(
+    (commit) => !isDeliveredChange(commit) && inWindow(commit.authorDate),
   )
 
-  const parallelism = await readParallelism(path, walk, merges, inWindow, signal)
+  // SAFETY: All three axes stand or fall together, because all three read the merge graph.
+  // `readAutonomy` reads the authorship of the commits a merge absorbed, and a squash absorbs
+  // nothing: a squashed delivery is not among `deliveredInWindow` at all, so it neither contributes
+  // to the share nor counts against it, while the same landing does sit in the denominator that
+  // decides whether merges are the delivery record. Reading it anyway would grant the scale's top
+  // rank from the very minority the guard below just decided is not the record.
+  const readsBranchShape = mergesCarryTheDeliveries(
+    deliveredInWindow.length,
+    landedDirectlyInWindow.length,
+  )
 
-  return { sizeBucket, parallelism }
+  const sizeBucket = readsBranchShape ? await readSizeBucket(path, deliveredInWindow, signal) : null
+
+  const intervention = readsBranchShape ? await readAutonomy(path, deliveredInWindow, signal) : null
+
+  const parallelism = readsBranchShape
+    ? await readParallelism(path, walk, merges, inWindow, signal)
+    : null
+
+  return { sizeBucket, intervention, parallelism }
+}
+
+// Nothing landed in the window clears no share; it is nothing to read.
+function mergesCarryTheDeliveries(merges: number, landedDirectly: number): boolean {
+  const landings = merges + landedDirectly
+  return landings > 0 && merges / landings >= MINIMUM_MERGE_SHARE
 }
 
 // SAFETY: Three answers, not two: `null` is a history that could not be read, and collapsing it
 // into `false` publishes a harness set missing `prompts` — a practice gap nobody observed, where an
 // UNKNOWN axis is honest. Read outside the shallow guard and the window, which can only hide a
 // trailer, never fabricate one. A trailer is attribution, never authorship: it feeds the harness
-// `prompts` capability alone. No `intervention` value is emitted anywhere here — a merge records
+// `prompts` capability alone, and answers whether the whole history holds one rather than which
+// commit does, which is `readAutonomy`'s question and is bound by both the guard and the window.
+//
+// LIMITATION: No value below `AUTONOMOUS_INTERVENTION` is emitted anywhere in this file — a merge records
 // that a branch landed, never what followed review, and no local history has it.
 export async function hasAiAttributionTrailer(
   path: string,
@@ -262,22 +289,6 @@ async function readFirstParentWalk(
   return commits
 }
 
-// INVARIANT: Taken over everything reachable from HEAD rather than at HEAD's own date, so a merge
-// landing an older branch cannot move the end of the window backwards.
-async function readMostRecentCommitDate(path: string, signal: AbortSignal): Promise<number | null> {
-  const stdout = await readGit(path, ['log', '--format=%aI', 'HEAD'], signal)
-  if (stdout === null) return null
-
-  let mostRecent: number | null = null
-  for (const line of stdout.split('\n')) {
-    if (line.trim() === '') continue
-    const instant = Date.parse(line.trim())
-    if (!Number.isFinite(instant)) continue
-    if (mostRecent === null || instant > mostRecent) mostRecent = instant
-  }
-  return mostRecent
-}
-
 // INVARIANT: one `git` invocation for every delivered change, not one per change. `--no-walk` names
 // the merges instead of traversing to them, and `--diff-merges=first-parent` gives each the same
 // diff `git diff M^1 M` gives — the batch is a change of cost, never of reading. The chunk bound is
@@ -365,6 +376,98 @@ function readDiffstat(stdout: string): Diffstat {
   return { lines, files }
 }
 
+// INVARIANT: Every rank below `AUTONOMOUS_INTERVENTION` is withheld here on purpose, and `null` is
+// the only other answer this function has. Those ranks separate *when* a human intervened relative
+// to review, which no local Git object records, so emitting one would publish a practice gap nobody
+// observed. This one is granted upward only, on positive evidence: a delivered change whose every
+// commit is attributed to an agent held no human work at all — strictly more than the recorded
+// "never edited after it was opened" the same value stands for, and so admissible on it.
+//
+// LIMITATION: An unattributed history is silent, never low. A repository whose agent writes no
+// trailer is indistinguishable from one that uses no agent, and reading absence as human authorship
+// is the fabrication this whole axis exists to avoid. Lifting that needs a source the tool does not
+// have offline, which is the forge, and it belongs in a collector of its own.
+async function readAutonomy(
+  path: string,
+  deliveredChanges: readonly DeliveredChange[],
+  signal: AbortSignal,
+): Promise<string | null> {
+  if (deliveredChanges.length < MINIMUM_DELIVERED_CHANGES) return null
+
+  const attributed = await readAgentAttributedCommits(path, signal)
+  if (attributed === null) return null
+
+  let zeroTouch = 0
+  for (const merge of deliveredChanges) {
+    if (await absorbedAgentWorkAlone(path, merge, attributed, signal)) zeroTouch += 1
+  }
+
+  const share = zeroTouch / deliveredChanges.length
+  return share >= ZERO_TOUCH_SHARE_FOR_AUTONOMY ? AUTONOMOUS_INTERVENTION : null
+}
+
+// Every commit whose message carries an agent attribution trailer, in one walk rather than per side.
+async function readAgentAttributedCommits(
+  path: string,
+  signal: AbortSignal,
+): Promise<ReadonlySet<string> | null> {
+  const stdout = await readGit(
+    path,
+    [
+      'log',
+      '--format=%H',
+      '--regexp-ignore-case',
+      '--extended-regexp',
+      ...AI_ATTRIBUTION_PATTERNS.map((pattern) => `--grep=${pattern}`),
+      'HEAD',
+    ],
+    signal,
+  )
+  if (stdout === null) return null
+
+  return new Set(
+    stdout
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((hash) => hash !== ''),
+  )
+}
+
+// SAFETY: A merge absorbing no commit is not one an agent authored — "every commit is attributed"
+// is vacuously true of no commit at all, and a back-merged or rewritten history holds such merges.
+// It still counts against the share rather than being dropped from it, because that withholds a
+// level where dropping it would grant one, and only the first of those is recoverable.
+async function absorbedAgentWorkAlone(
+  path: string,
+  merge: DeliveredChange,
+  attributed: ReadonlySet<string>,
+  signal: AbortSignal,
+): Promise<boolean> {
+  let absorbed = 0
+  for (const side of mergeSideRevisions(merge)) {
+    const stdout = await runGit(path, ['log', '--format=%H', ...side], signal)
+    for (const line of stdout.split('\n')) {
+      const hash = line.trim()
+      if (hash === '') continue
+      if (!attributed.has(hash)) return false
+      absorbed += 1
+    }
+  }
+  return absorbed > 0
+}
+
+// INVARIANT: One revision range per side a merge absorbed, `M^1..M^2` on the ordinary two-parent
+// case. Every other parent is excluded, so an octopus merge's sides stay distinct instead of
+// counting their shared commits under each of them.
+function mergeSideRevisions(merge: DeliveredChange): readonly (readonly string[])[] {
+  return merge.parents
+    .slice(1)
+    .map((side) => [
+      side,
+      ...merge.parents.filter((parent) => parent !== side).map((parent) => `^${parent}`),
+    ])
+}
+
 // INVARIANT: The median number of distinct branches receiving a commit on an active day, over the
 // same window as `size` — the median and not the peak, because a spike is not a habit. A reading is
 // forced here: local Git records no branch for a commit, only the merge graph, so a branch is
@@ -397,16 +500,16 @@ async function readParallelism(
     record('mainline', commit.authorDate)
   }
 
-  // INVARIANT: Every other parent is excluded, so an octopus merge's sides stay distinct branches
-  // instead of counting their shared commits twice. With two parents this is `M^1..M^2`. Each side
-  // is its own revision range and cannot be batched into one invocation without losing which side a
-  // commit came from, so the cost is bounded by running them a few at a time rather than one at a
-  // time. The results are recorded in the order the sides were listed, never the order they
-  // returned, so a report cannot depend on which spawn finished first.
+  // INVARIANT: Each side is its own revision range and cannot be batched into one invocation without
+  // losing which side a commit came from, so the cost is bounded by running them a few at a time
+  // rather than one at a time. The results are recorded in the order the sides were listed, never
+  // the order they returned, so a report cannot depend on which spawn finished first. Which
+  // revisions make a side is `mergeSideRevisions`, shared with the autonomy reading so the octopus
+  // rule has one home.
   const sides = merges.flatMap((merge) =>
-    merge.parents.slice(1).map((side, index) => ({
+    mergeSideRevisions(merge).map((revisions, index) => ({
       branch: `${merge.hash}:${index + 1}`,
-      revisions: [side, ...merge.parents.filter((parent) => parent !== side).map((p) => `^${p}`)],
+      revisions,
     })),
   )
 
@@ -449,18 +552,4 @@ async function inBoundedParallel<Input, Output>(
 function calendarDay(authorDate: string): string | null {
   const match = /^(\d{4}-\d{2}-\d{2})/.exec(authorDate.trim())
   return match?.[1] ?? null
-}
-
-// SAFETY: callers guarantee a non-empty sample, and an even count yields a half-integer median.
-// A default of zero would publish the smallest bucket from a sample nobody took — a practice gap
-// invented out of an empty list, which is the one outcome this project forbids outright.
-function median(values: readonly number[]): number {
-  const sorted = [...values].sort((left, right) => left - right)
-  const middle = Math.floor(sorted.length / 2)
-  const upper = sorted[middle]
-  const lower = sorted.length % 2 === 1 ? upper : sorted[middle - 1]
-  if (upper === undefined || lower === undefined) {
-    throw new RangeError('A median needs a non-empty sample.')
-  }
-  return (lower + upper) / 2
 }

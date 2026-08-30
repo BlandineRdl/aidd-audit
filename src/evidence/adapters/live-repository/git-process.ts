@@ -99,6 +99,34 @@ export function runGit(cwd: string, args: readonly string[], signal: AbortSignal
   })
 }
 
+// INVARIANT: The instant of the most recent commit anywhere reachable from HEAD, which is where
+// every collector's window ends. It is a fact about the subject and not about one source's unit of
+// delivery, so a forge collector and a local one measure the same period and stay interchangeable
+// behind their port. Taken over everything reachable rather than at HEAD's own date, so a merge
+// landing an older branch cannot move the end of the window backwards. `null` is a history that
+// could not be read.
+export async function mostRecentCommitDate(
+  path: string,
+  signal: AbortSignal,
+): Promise<number | null> {
+  let stdout: string
+  try {
+    stdout = await runGit(path, ['log', '--format=%aI', 'HEAD'], signal)
+  } catch (error) {
+    if (signal.aborted) throw error
+    return null
+  }
+
+  let mostRecent: number | null = null
+  for (const line of stdout.split('\n')) {
+    if (line.trim() === '') continue
+    const instant = Date.parse(line.trim())
+    if (!Number.isFinite(instant)) continue
+    if (mostRecent === null || instant > mostRecent) mostRecent = instant
+  }
+  return mostRecent
+}
+
 // SAFETY: both halves matter. Outside a work tree there is no tracked tree and no history; inside
 // one but below the root, reading the enclosing checkout would attribute that repository's evidence
 // to a directory that is a different subject.

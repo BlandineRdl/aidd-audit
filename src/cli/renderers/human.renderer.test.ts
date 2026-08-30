@@ -563,3 +563,90 @@ describe('11. every axis names what was observed against what its level required
     expect(axisDetail(proven, 'Harness')).toContain('prompts, loops')
   })
 })
+
+describe('12. what the subject reached is reported beneath what it holds, never instead', () => {
+  const blue = levelReport({ id: 'blue', rank: 2, label: 'Blue' })
+  const copper = levelReport({ id: 'copper', rank: 4, label: 'Copper' })
+
+  const withDemonstrated = (level = copper, proven = blue) =>
+    renderHumanReport(
+      assessmentReport({
+        proven,
+        levels: [proven, level],
+        demonstrated: {
+          level,
+          axes: [
+            { axis: 'size', observed: 'L', share: 0.398, unit: 'DELIVERIES' },
+            { axis: 'parallelism', observed: 3, share: 0.4, unit: 'ACTIVE_DAYS' },
+          ],
+        },
+      }),
+    )
+
+  const demonstratedParagraph = (output: string) =>
+    output.split('\n\n').find((paragraph) => paragraph.startsWith('Demonstrated:'))
+
+  it('names the demonstrated level only after the proven one', () => {
+    const output = withDemonstrated()
+
+    // INVARIANT: a reader quoting the first level they meet must quote the one the subject holds.
+    expect(output.indexOf('Proven level:')).toBeLessThan(output.indexOf('Demonstrated:'))
+  })
+
+  it('never states a demonstrated value without the share that earned it', () => {
+    const paragraph = demonstratedParagraph(withDemonstrated()) ?? ''
+    const [level, ...axes] = paragraph.split('\n')
+
+    // INVARIANT: the clause most likely to be dropped in a later edit, so it is asserted per line
+    // rather than once for the paragraph — the level line included. That line carries no share of
+    // its own, so it must not read as a finished sentence: it ends in a colon and is followed by at
+    // least one line that does carry one.
+    expect(level).toMatch(/reached on:$/)
+    expect(axes.length).toBeGreaterThan(0)
+    for (const line of axes) {
+      expect(line).toMatch(/reached on \d+% of /)
+    }
+  })
+
+  it('names what each share counts, because the two axes do not count the same occasions', () => {
+    const paragraph = demonstratedParagraph(withDemonstrated()) ?? ''
+
+    expect(paragraph).toContain('reached on 40% of delivered changes')
+    expect(paragraph).toContain('reached on 40% of active days')
+  })
+
+  it('renders the share as a whole percentage, never as a fraction', () => {
+    const paragraph = demonstratedParagraph(withDemonstrated()) ?? ''
+
+    expect(paragraph).not.toContain('0.398')
+    expect(paragraph).toContain('40%')
+  })
+
+  it('says nothing at all when no level could be established at all', () => {
+    const output = renderHumanReport(
+      assessmentReport({
+        proven: null,
+        levels: [copper],
+        demonstrated: {
+          level: copper,
+          axes: [{ axis: 'parallelism', observed: 3, share: 0.44, unit: 'ACTIVE_DAYS' }],
+        },
+      }),
+    )
+
+    // INVARIANT: no ceiling without a floor. Printed here it would be the only level in a document
+    // that says the subject could not be classified, handing a rank-4 label to a subject the tool
+    // declined to place — the "quoted alone" failure this section exists to prevent.
+    expect(output).toContain('could not be established')
+    expect(output).not.toContain('Demonstrated:')
+  })
+
+  it('says nothing at all when the subject demonstrated no more than it holds', () => {
+    // INVARIANT: the ordinary case. Every bundle and every source recording a median without its
+    // distribution lands here, and must read exactly as it did before this section existed.
+    expect(withDemonstrated(blue, blue)).not.toContain('Demonstrated:')
+    expect(renderHumanReport(assessmentReport({ demonstrated: null }))).not.toContain(
+      'Demonstrated:',
+    )
+  })
+})

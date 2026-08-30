@@ -38,19 +38,30 @@ function evidenceOf(overrides: Partial<Record<AxisId, Reading | 'absent'>> = {})
       reading.status === 'CONFIRMED'
         ? {
             axis,
+            reading: 'SUSTAINED' as const,
             status: reading.status,
             value: reading.value,
+            demonstration: null,
             observations: [
               {
                 axis,
+                reading: 'SUSTAINED' as const,
                 value: reading.value,
-                kind: 'OBSERVED',
+                kind: 'OBSERVED' as const,
                 collector: 'fixture-collector',
                 basis: 'fixture',
+                demonstration: null,
               },
             ],
           }
-        : { axis, status: reading.status, value: null, observations: [] },
+        : {
+            axis,
+            reading: 'SUSTAINED' as const,
+            status: reading.status,
+            value: null,
+            demonstration: null,
+            observations: [],
+          },
     )
 }
 
@@ -205,11 +216,15 @@ describe('coverage is derived from the axes requested and the evidence returned'
       ...evidenceOf({ size: 'absent' }),
       {
         axis: 'size',
+        reading: 'SUSTAINED',
         status: 'CLAIMED',
         value: null,
+        demonstration: null,
         observations: [
           {
             axis: 'size',
+            reading: 'SUSTAINED',
+            demonstration: null,
             value: 'M',
             kind: 'DECLARED',
             collector: 'docs-collector',
@@ -271,9 +286,112 @@ describe('evidence the model cannot rank is rejected, never dropped', () => {
   it('refuses evidence for an axis the model does not declare, naming that axis', () => {
     const offAxis: Evidence[] = [
       ...evidenceOf(),
-      { axis: 'telepathy', status: 'CONFIRMED', value: 'L', observations: [] },
+      {
+        axis: 'telepathy',
+        reading: 'SUSTAINED',
+        status: 'CONFIRMED',
+        value: 'L',
+        demonstration: null,
+        observations: [],
+      },
     ]
     expect(() => compose(offAxis)).toThrow(UndeclaredAxisError)
     expect(() => compose(offAxis)).toThrow(/telepathy/)
+  })
+})
+
+describe('what the subject reached is composed beside what it sustains', () => {
+  const demonstrated = (axis: AxisId, value: ObservedValue, share: number): Evidence => ({
+    axis,
+    reading: 'DEMONSTRATED',
+    status: 'CONFIRMED',
+    value,
+    demonstration: { share, unit: 'ACTIVE_DAYS' },
+    observations: [
+      {
+        axis,
+        reading: 'DEMONSTRATED',
+        value,
+        kind: 'OBSERVED',
+        collector: 'fixture-collector',
+        basis: 'fixture',
+        demonstration: { share, unit: 'ACTIVE_DAYS' },
+      },
+    ],
+  })
+
+  it('reports nothing at all when no collector demonstrated anything', () => {
+    expect(compose(evidenceOf()).demonstrated).toBeNull()
+  })
+
+  it('reaches a level the sustained reading does not, from the axis that carried it', () => {
+    const report = compose([
+      ...evidenceOf({ parallelism: confirmed(1) }),
+      demonstrated('parallelism', 3, 0.42),
+    ])
+
+    // INVARIANT: the second run is the engine asked again, not a rule of its own. Sustained puts
+    // this subject at `low`; a demonstrated parallelism of 3 carries it to `high` while every other
+    // axis falls back to its habitual value.
+    expect(report.proven?.id).toBe('low')
+    expect(report.demonstrated?.level?.id).toBe('high')
+    expect(report.demonstrated?.axes).toEqual([
+      { axis: 'parallelism', observed: 3, share: 0.42, unit: 'ACTIVE_DAYS' },
+    ])
+  })
+
+  it('publishes the level and never the requirements beneath it', () => {
+    const report = compose([
+      ...evidenceOf({ parallelism: confirmed(1) }),
+      demonstrated('parallelism', 3, 0.42),
+    ])
+
+    // INVARIANT: a requirement report pairs a threshold with the value the *sustained* reading
+    // resolved. Publishing one here stated `threshold: 3, observed: 1, outcome: MET` on one line —
+    // a document contradicting itself, and the reason this shape carries no `axes`.
+    expect(report.demonstrated?.level).toEqual({
+      id: 'high',
+      rank: 2,
+      label: expect.any(String),
+      outcome: 'MET',
+    })
+    expect(report.demonstrated?.level).not.toHaveProperty('axes')
+  })
+
+  it('never falls below the level the subject sustains', () => {
+    const report = compose([...evidenceOf(), demonstrated('parallelism', 1, 0.4)])
+
+    // INVARIANT: a share reading under the median says the distribution leans low, so the habitual
+    // figure is already the honest answer; publishing less would read as a capability lost.
+    expect(report.proven?.id).toBe('high')
+    expect(report.demonstrated?.level?.id).toBe('high')
+  })
+
+  it('drops a demonstrated value that arrived without the share that earned it', () => {
+    const shareless: Evidence = {
+      axis: 'parallelism',
+      reading: 'DEMONSTRATED',
+      status: 'CONFIRMED',
+      value: 3,
+      demonstration: null,
+      observations: [],
+    }
+
+    // INVARIANT: a demonstrated value the reader cannot weigh is the maximum this reading exists to
+    // avoid. Dropping it from `axes` alone would leave a level named with no frequency under it, so
+    // the whole block goes: `level` and `axes` can never disagree about whether anything was shown.
+    expect(compose([...evidenceOf(), shareless]).demonstrated).toBeNull()
+  })
+
+  it('composes an axis demonstrated but never sustained, rather than failing on it', () => {
+    // INVARIANT: a bundle may record a distribution and no median. The demonstrated run then holds a
+    // CONFIRMED value where the sustained one holds UNKNOWN, which must compose rather than throw.
+    const report = compose([
+      ...evidenceOf({ parallelism: 'absent' }),
+      demonstrated('parallelism', 3, 0.42),
+    ])
+
+    expect(report.demonstrated?.level?.id).toBe('high')
+    expect(report.proven).toBeNull()
   })
 })

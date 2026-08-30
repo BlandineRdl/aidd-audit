@@ -1,5 +1,8 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { type DemonstratedValue, demonstratedCountFrom } from '../delivery-sample.js'
+import { InconsistentRecordError } from './inconsistent-record.error.js'
+import { interventionFor } from '../intervention-scale.js'
 import { bucketForFiles, bucketForLines, lowerBucket } from '../size-buckets.js'
 
 // INVARIANT: The delivery record a bundle carries, read from `git-activity.json`. A bundle
@@ -10,6 +13,10 @@ import { bucketForFiles, bucketForLines, lowerBucket } from '../size-buckets.js'
 // nobody saw.
 export interface RecordedActivity {
   readonly sizeBucket: string | null
+  // INVARIANT: `null` unless the record carries `parallelism.days_at_concurrency`. A bundle written
+  // before that field existed answers the habitual question alone rather than gaining a reading it
+  // never recorded.
+  readonly demonstratedParallelism: DemonstratedValue<number> | null
   readonly intervention: string | null
   readonly parallelism: number | null
   // `false` is a commit record read and holding no AI attribution; `null` is one not read.
@@ -20,26 +27,11 @@ const ACTIVITY_FILE = 'git-activity.json'
 
 const NOTHING_RECORDED: RecordedActivity = {
   sizeBucket: null,
+  demonstratedParallelism: null,
   intervention: null,
   parallelism: null,
   aiAttribution: null,
 }
-
-// INVARIANT: A change opened and never corrected. At this share the subject is granted the autonomy
-// the corrective-commit median alone cannot express.
-const ZERO_TOUCH_SHARE_FOR_AUTONOMY = 0.9
-
-// LIMITATION: The two cut points between the three corrected degrees of `intervention`. **Chosen,
-// not measured**, on the same footing as `git-history.ts`'s sample floors: no distribution of
-// corrective commits was consulted, and the four reference profiles are fixtures rather than a
-// corpus. They sit on half-integers because the record publishes a median, which is a half-integer
-// whenever the sample is even — a boundary on a whole number would put a median of exactly 2 and a
-// median of 2 reached by rounding on opposite sides of a line nobody controls. The cost is
-// asymmetric in the usual direction: too low credits a practice with autonomy it has not shown,
-// which is a level stated confidently and wrongly; too high grades a real practice down, which the
-// report names as a practice gap. Move either only from an observed distribution.
-const CORRECTIONS_FOR_MOST_CHANGES = 2.5
-const CORRECTIONS_FOR_SOME_CHANGES = 1.5
 
 export async function readRecordedActivity(bundlePath: string): Promise<RecordedActivity> {
   const document = await readJsonFile(join(bundlePath, ACTIVITY_FILE))
@@ -52,6 +44,7 @@ export async function readRecordedActivity(bundlePath: string): Promise<Recorded
     sizeBucket: readSizeBucket(pullRequests, total),
     intervention: readIntervention(pullRequests, total),
     parallelism: numberAt(objectAt(document, 'parallelism'), 'median_concurrent_branches'),
+    demonstratedParallelism: readDemonstratedParallelism(objectAt(document, 'parallelism')),
     aiAttribution: readAiAttribution(objectAt(document, 'commits')),
   }
 }
@@ -72,16 +65,66 @@ function readIntervention(pullRequests: unknown, total: number | null): string |
   const corrections = numberAt(pullRequests, 'median_correction_commits_after_open')
   if (corrections === null) return null
 
-  if (isAutonomous(pullRequests, total)) return 'never-once-framed'
-  if (corrections >= CORRECTIONS_FOR_MOST_CHANGES) return 'after-the-fact-most'
-  if (corrections >= CORRECTIONS_FOR_SOME_CHANGES) return 'after-the-fact-some'
-  return 'key-steps'
+  return interventionFor(corrections, zeroTouchShare(pullRequests, total))
 }
 
-function isAutonomous(pullRequests: unknown, total: number | null): boolean {
+// INVARIANT: `parallelism.days_at_concurrency` maps a branch count to the number of active days that
+// carried it, which is the distribution behind the recorded median. It goes through the same rule
+// the forge collector applies, so the two collectors cannot answer this question differently.
+//
+// SAFETY: a record whose distribution does not support its own recorded median is refused **by
+// name**, not dropped. Dropping it would be indistinguishable from a bundle that recorded no
+// distribution at all, and the reader would never learn the record was wrong. Throwing reaches
+// `provenance` as `FAILED` with the two numbers in the message, which is the only channel that does.
+function readDemonstratedParallelism(parallelism: unknown): DemonstratedValue<number> | null {
+  const days = objectAt(parallelism, 'days_at_concurrency')
+  if (typeof days !== 'object' || days === null || Array.isArray(days)) return null
+
+  const daysAtConcurrency = new Map<number, number>()
+  for (const [concurrency, activeDays] of Object.entries(days as Record<string, unknown>)) {
+    const branches = Number(concurrency)
+    if (!Number.isInteger(branches) || branches < 0) return null
+    if (typeof activeDays !== 'number' || !Number.isInteger(activeDays) || activeDays < 0) {
+      return null
+    }
+    if (activeDays > 0) daysAtConcurrency.set(branches, activeDays)
+  }
+  if (daysAtConcurrency.size === 0) return null
+
+  const recorded = numberAt(parallelism, 'median_concurrent_branches')
+  const fromDistribution = medianOfCounts(daysAtConcurrency)
+  if (recorded !== null && fromDistribution !== recorded) {
+    throw new InconsistentRecordError(
+      `parallelism records a median of ${recorded}, and its days_at_concurrency yields ${fromDistribution}.`,
+    )
+  }
+
+  return demonstratedCountFrom(daysAtConcurrency)
+}
+
+// The median of a distribution held as counts, without expanding it into one entry per occasion.
+function medianOfCounts(occurrencesByCount: ReadonlyMap<number, number>): number {
+  const ordered = [...occurrencesByCount.entries()].sort(([left], [right]) => left - right)
+  const total = ordered.reduce((sum, [, occurrences]) => sum + occurrences, 0)
+
+  const at = (rank: number): number => {
+    let seen = 0
+    for (const [count, occurrences] of ordered) {
+      seen += occurrences
+      if (seen > rank) return count
+    }
+    return ordered[ordered.length - 1]?.[0] ?? 0
+  }
+
+  const middle = Math.floor(total / 2)
+  return total % 2 === 1 ? at(middle) : (at(middle - 1) + at(middle)) / 2
+}
+
+// `null` is a record that did not carry the count, never a share of zero.
+function zeroTouchShare(pullRequests: unknown, total: number | null): number | null {
   const untouched = numberAt(pullRequests, 'merged_without_human_edit_after_open')
-  if (untouched === null || total === null || total <= 0) return false
-  return untouched / total >= ZERO_TOUCH_SHARE_FOR_AUTONOMY
+  if (untouched === null || total === null || total <= 0) return null
+  return untouched / total
 }
 
 function readAiAttribution(commits: unknown): boolean | null {

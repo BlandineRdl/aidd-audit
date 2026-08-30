@@ -96,6 +96,7 @@ const validReport: AssessmentReport = {
   subject: { path: '/repo/example' },
   proven: provenLevel,
   next: null,
+  demonstrated: null,
   levels: [provenLevel],
   blocking: [],
   coverage: { axesRequested: 3, axesObserved: 3, axesConfirmed: 3 },
