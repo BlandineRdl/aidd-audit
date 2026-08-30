@@ -10,8 +10,9 @@ Leur niveau est donné par rapport à la grille.
 
 ## Qui ils sont
 
-Chaque dossier est spécifié par **deux** niveaux : celui qu'il tient d'habitude, et celui qu'il a
-démontré assez souvent pour que ça compte. Les deux sont épinglés par `tests/cli/reference-profiles.test.ts`.
+Un dossier reçoit un niveau seulement lorsque ses preuves couvrent les quatre axes. Lorsqu'une
+distribution est disponible, le niveau qu'il a démontré assez souvent pour que ça compte est aussi
+épinglé par `tests/cli/reference-profiles.test.ts`.
 
 | Dossier | Tenu | Démontré | Ce qui rend le dossier particulier |
 | :--- | :--- | :--- | :--- |
@@ -19,11 +20,18 @@ démontré assez souvent pour que ça compte. Les deux sont épinglés par `test
 | `bohort` | 🔹 **Blue** | 🔹 Blue | Le dossier le plus complet |
 | `leodagan` | 🟢 **Green** | 🥉 **Copper** | Pas de session de travail. Le seul dont les deux lectures diffèrent |
 | `arthur` | 🥉 **Copper** | 🥉 Copper | Ne dit rien de lui-même. Tout est dans ce qu'il a mis en place |
+| `lancelot` | 🔺 **Red** | — | Un dossier très fourni, mais des reprises humaines après coup sur la majorité des changements |
+| `venec` | — | — | Une seule session : le harness de prompts est visible, mais les trois autres axes restent inconnus |
 
 **L'écart de `leodagan` n'est pas une coquille, c'est son second rôle.** Ses journées enregistrées
 portent trois chantiers assez souvent pour atteindre Copper sur l'axe que sa médiane laisse à un.
 C'est la seule fixture qui exerce la lecture « démontré » depuis un bundle jusqu'au contrat publié ;
 sans elle ce chemin partirait sans preuve.
+
+**L'absence de niveau de `venec` n'est pas White.** Une preuve absente n'est pas une pratique
+absente : sans taille livrée, intervention ni parallélisme observés, aucun niveau ne peut être
+attribué. `lancelot`, à l'inverse, atteint Red sur les quatre axes ; ses nombreux fichiers ne
+compensent ni les corrections tardives ni son parallélisme médian d'un chantier.
 
 ---
 

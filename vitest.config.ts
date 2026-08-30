@@ -13,5 +13,8 @@ export default defineConfig({
     exclude: ['node_modules/**', 'dist/**', 'profiles/**'],
     // dist/ is shared and rebuilt with clean: true, so no suite may build it.
     globalSetup: ['tests/build-cli-bundle.test-setup.ts'],
+    // SAFETY: Several suites synchronously spawn the CLI and create temporary Git repositories.
+    // Running them together causes resource contention, which turns correct tests into timeouts.
+    fileParallelism: false,
   },
 })

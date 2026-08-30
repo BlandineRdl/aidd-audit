@@ -1,0 +1,59 @@
+{
+  "component": {
+    "key": "fin:ledger",
+    "name": "ledger",
+    "qualifier": "TRK",
+    "language": "go",
+    "measures": [
+      {
+        "metric": "ncloc",
+        "value": "26925"
+      },
+      {
+        "metric": "files",
+        "value": "231"
+      },
+      {
+        "metric": "duplicated_lines_density",
+        "value": "6.1"
+      },
+      {
+        "metric": "complexity",
+        "value": "693"
+      },
+      {
+        "metric": "cognitive_complexity",
+        "value": "770"
+      },
+      {
+        "metric": "coverage",
+        "value": "65.0"
+      },
+      {
+        "metric": "branch_coverage",
+        "value": "49.0"
+      },
+      {
+        "metric": "tests",
+        "value": "972"
+      },
+      {
+        "metric": "uncovered_files",
+        "value": "69"
+      },
+      {
+        "metric": "code_smells",
+        "value": "103"
+      },
+      {
+        "metric": "bugs",
+        "value": "0"
+      },
+      {
+        "metric": "sqale_index",
+        "value": "1758"
+      }
+    ]
+  },
+  "analysedAt": "2026-07-14T23:41:27+0000"
+}

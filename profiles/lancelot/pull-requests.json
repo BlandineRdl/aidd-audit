@@ -1,0 +1,266 @@
+[
+  {
+    "number": 931,
+    "title": "Log the ledger version on each write",
+    "state": "open",
+    "draft": false,
+    "merged": false,
+    "created_at": "2026-07-13T22:52:00Z",
+    "merged_at": null,
+    "closed_at": null,
+    "head": {
+      "ref": "feat/931"
+    },
+    "base": {
+      "ref": "main"
+    },
+    "changed_files": 1,
+    "additions": 2,
+    "deletions": 0,
+    "commits": 7,
+    "review_comments": 3,
+    "body": null
+  },
+  {
+    "number": 929,
+    "title": "Split the balance read model",
+    "state": "closed",
+    "draft": false,
+    "merged": true,
+    "created_at": "2026-07-09T06:28:00Z",
+    "merged_at": "2026-07-13T12:45:00Z",
+    "closed_at": "2026-07-13T12:45:00Z",
+    "head": {
+      "ref": "feat/929"
+    },
+    "base": {
+      "ref": "main"
+    },
+    "changed_files": 22,
+    "additions": 522,
+    "deletions": 272,
+    "commits": 18,
+    "review_comments": 5,
+    "body": null
+  },
+  {
+    "number": 925,
+    "title": "Return a typed error on insufficient funds",
+    "state": "closed",
+    "draft": false,
+    "merged": true,
+    "created_at": "2026-07-08T08:16:00Z",
+    "merged_at": "2026-07-08T20:20:00Z",
+    "closed_at": "2026-07-08T20:20:00Z",
+    "head": {
+      "ref": "feat/925"
+    },
+    "base": {
+      "ref": "main"
+    },
+    "changed_files": 1,
+    "additions": 5,
+    "deletions": 2,
+    "commits": 5,
+    "review_comments": 2,
+    "body": null
+  },
+  {
+    "number": 920,
+    "title": "Move the ledger writes into a single transaction",
+    "state": "closed",
+    "draft": false,
+    "merged": true,
+    "created_at": "2026-07-03T22:27:00Z",
+    "merged_at": "2026-07-07T21:11:00Z",
+    "closed_at": "2026-07-07T21:11:00Z",
+    "head": {
+      "ref": "feat/920"
+    },
+    "base": {
+      "ref": "main"
+    },
+    "changed_files": 37,
+    "additions": 947,
+    "deletions": 465,
+    "commits": 9,
+    "review_comments": 9,
+    "body": null
+  },
+  {
+    "number": 912,
+    "title": "Idempotent movement ledger",
+    "state": "closed",
+    "draft": false,
+    "merged": true,
+    "created_at": "2026-07-01T02:28:00Z",
+    "merged_at": "2026-07-03T09:30:00Z",
+    "closed_at": "2026-07-03T09:30:00Z",
+    "head": {
+      "ref": "feat/912"
+    },
+    "base": {
+      "ref": "main"
+    },
+    "changed_files": 7,
+    "additions": 208,
+    "deletions": 131,
+    "commits": 9,
+    "review_comments": 3,
+    "body": "**Branch** `fix/ledger-idempotence` · **Files** 7 · **Lines** +284 −96 · **Commits** 6\n\n## Why\n\nSince the move to the event bus, the consumer replays unacknowledged messages.\nThree accounts were credited twice last week.\n\n## What was done\n\nFraming written down before starting the assistant: unique constraint on\n`event_id`, dedicated error for a replay, acknowledgement on the consumer side.\n\nThe assistant produced the package skeleton and the validation test table,\nwhich is most of the lines. Two points were taken back by hand:\n\n1. **The existence check protects nothing.** The first version did `Exists`\n   then `Insert` believing that was enough. Two concurrent consumers both get\n   through. The database constraint is what settles it, and the code has to\n   catch `23505` to say so. The comment in `Record` explains why the check\n   stays anyway.\n2. **`Cents` was a `float64`.** On an accounting ledger, no.\n\n## Review thread\n\n> **Reviewer** — `TestUniqueViolationCountsAsReplay` is missing. It is the only\n> path that matters in production.\n>\n> **Author** — True. Added, with a fake store returning an error carrying\n> `SQLState` `23505`.\n\n## Still to do\n\n`AGENTS.md` still describes the synchronous monolith and the three packages\n`api` / `store` / `billing`. None of that has matched reality since the\ndecoupling. Opened as `#918`, not picked up yet."
+  },
+  {
+    "number": 906,
+    "title": "Add a currency column to movements",
+    "state": "closed",
+    "draft": false,
+    "merged": true,
+    "created_at": "2026-06-28T03:36:00Z",
+    "merged_at": "2026-06-30T23:04:00Z",
+    "closed_at": "2026-06-30T23:04:00Z",
+    "head": {
+      "ref": "feat/906"
+    },
+    "base": {
+      "ref": "main"
+    },
+    "changed_files": 4,
+    "additions": 124,
+    "deletions": 45,
+    "commits": 12,
+    "review_comments": 9,
+    "body": null
+  },
+  {
+    "number": 899,
+    "title": "Paginate the movement history endpoint",
+    "state": "closed",
+    "draft": false,
+    "merged": true,
+    "created_at": "2026-06-24T15:01:00Z",
+    "merged_at": "2026-06-27T17:33:00Z",
+    "closed_at": "2026-06-27T17:33:00Z",
+    "head": {
+      "ref": "feat/899"
+    },
+    "base": {
+      "ref": "main"
+    },
+    "changed_files": 10,
+    "additions": 232,
+    "deletions": 62,
+    "commits": 15,
+    "review_comments": 5,
+    "body": null
+  },
+  {
+    "number": 896,
+    "title": "Backfill the reconciliation table",
+    "state": "closed",
+    "draft": false,
+    "merged": true,
+    "created_at": "2026-06-21T22:20:00Z",
+    "merged_at": "2026-06-24T11:13:00Z",
+    "closed_at": "2026-06-24T11:13:00Z",
+    "head": {
+      "ref": "feat/896"
+    },
+    "base": {
+      "ref": "main"
+    },
+    "changed_files": 10,
+    "additions": 226,
+    "deletions": 141,
+    "commits": 9,
+    "review_comments": 7,
+    "body": null
+  },
+  {
+    "number": 894,
+    "title": "Reconcile balances nightly",
+    "state": "closed",
+    "draft": false,
+    "merged": true,
+    "created_at": "2026-06-19T20:18:00Z",
+    "merged_at": "2026-06-21T15:55:00Z",
+    "closed_at": "2026-06-21T15:55:00Z",
+    "head": {
+      "ref": "feat/894"
+    },
+    "base": {
+      "ref": "main"
+    },
+    "changed_files": 11,
+    "additions": 291,
+    "deletions": 81,
+    "commits": 12,
+    "review_comments": 2,
+    "body": null
+  },
+  {
+    "number": 888,
+    "title": "Fix a race on concurrent debits",
+    "state": "closed",
+    "draft": false,
+    "merged": true,
+    "created_at": "2026-06-18T11:16:00Z",
+    "merged_at": "2026-06-19T06:32:00Z",
+    "closed_at": "2026-06-19T06:32:00Z",
+    "head": {
+      "ref": "feat/888"
+    },
+    "base": {
+      "ref": "main"
+    },
+    "changed_files": 2,
+    "additions": 57,
+    "deletions": 37,
+    "commits": 9,
+    "review_comments": 5,
+    "body": null
+  },
+  {
+    "number": 882,
+    "title": "Add a unique constraint on the movement key",
+    "state": "closed",
+    "draft": false,
+    "merged": true,
+    "created_at": "2026-06-17T00:27:00Z",
+    "merged_at": "2026-06-17T20:12:00Z",
+    "closed_at": "2026-06-17T20:12:00Z",
+    "head": {
+      "ref": "feat/882"
+    },
+    "base": {
+      "ref": "main"
+    },
+    "changed_files": 1,
+    "additions": 31,
+    "deletions": 22,
+    "commits": 5,
+    "review_comments": 4,
+    "body": null
+  },
+  {
+    "number": 875,
+    "title": "Retry the settlement webhook with backoff",
+    "state": "closed",
+    "draft": false,
+    "merged": true,
+    "created_at": "2026-06-13T14:55:00Z",
+    "merged_at": "2026-06-16T10:17:00Z",
+    "closed_at": "2026-06-16T10:17:00Z",
+    "head": {
+      "ref": "feat/875"
+    },
+    "base": {
+      "ref": "main"
+    },
+    "changed_files": 8,
+    "additions": 300,
+    "deletions": 66,
+    "commits": 9,
+    "review_comments": 5,
+    "body": null
+  }
+]
