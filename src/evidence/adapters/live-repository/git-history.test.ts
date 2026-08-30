@@ -1,10 +1,10 @@
 import { execFile } from 'node:child_process'
-import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
+import { cp, mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { promisify } from 'node:util'
 import { gitEnvironment } from './git-process.js'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { hasAiAttributionTrailer, readGitDerivedMetrics } from './git-history.js'
 
 // Integration, against real temporary Git repositories: Git is the boundary under test.
@@ -12,11 +12,11 @@ import { hasAiAttributionTrailer, readGitDerivedMetrics } from './git-history.js
 const run = promisify(execFile)
 
 const NEVER_ABORTED = new AbortController().signal
-const A_LONG_TIME = 120_000
+const A_LONG_TIME = 30_000
 
 const workspaces: string[] = []
 
-afterEach(async () => {
+afterAll(async () => {
   await Promise.all(workspaces.splice(0).map((path) => rm(path, { recursive: true, force: true })))
 })
 
@@ -38,7 +38,18 @@ async function emptyDirectory(): Promise<string> {
   return path
 }
 
-async function initRepository(): Promise<string> {
+// INVARIANT: `git init` and the three configs behind it are four processes, and this file builds
+// some seventy repositories out of them. The template pays for them once and every repository after
+// it is a copy of a pristine `.git`, which holds no absolute path and is therefore the same
+// repository those four commands would have produced.
+let template: Promise<string> | undefined
+
+function pristineRepository(): Promise<string> {
+  if (template === undefined) template = buildPristineRepository()
+  return template
+}
+
+async function buildPristineRepository(): Promise<string> {
   const repository = await emptyDirectory()
   await git(repository, ['-c', 'init.defaultBranch=main', 'init', '-q'])
   await git(repository, ['config', 'user.email', 'dev@example.com'])
@@ -46,6 +57,59 @@ async function initRepository(): Promise<string> {
   await git(repository, ['config', 'commit.gpgsign', 'false'])
   return repository
 }
+
+async function initRepository(): Promise<string> {
+  const repository = await emptyDirectory()
+  await cp(await pristineRepository(), repository, { recursive: true })
+  return repository
+}
+
+// INVARIANT: Every history this file reads is built once, by a named builder, and the builders run
+// together instead of one test at a time — building them is `git` process time, and nothing about
+// it is serial. A builder's promise is memoised, so two tests naming the same history share the one
+// repository. Both functions under test only read, which is what makes sharing safe; a test that
+// writes to its fixture takes `aCopyOf` it instead.
+const builders: (() => Promise<unknown>)[] = []
+
+function aFixture<T>(build: () => Promise<T>): () => Promise<T> {
+  let started: Promise<T> | undefined
+  const start = (): Promise<T> => {
+    if (started === undefined) started = build()
+    return started
+  }
+  builders.push(start)
+  return start
+}
+
+// A fixture that is one repository, which is nearly all of them.
+function aRepository(build: () => Promise<string>): () => Promise<string> {
+  return aFixture(build)
+}
+
+async function aCopyOf(fixture: () => Promise<string>): Promise<string> {
+  const copy = await emptyDirectory()
+  await cp(await fixture(), copy, { recursive: true })
+  return copy
+}
+
+// SAFETY: bounded. Seventy builders released at once would put seventy `git` processes on the
+// machine, and the rejection is swallowed here alone: the memoised promise a test awaits is the
+// same one, so the test that needs a repository still fails with the reason it could not be built.
+const AT_ONCE = 8
+
+beforeAll(async () => {
+  // Every builder copies the template, so it exists before any of them looks for it.
+  await pristineRepository()
+
+  const queue = [...builders]
+  await Promise.all(
+    Array.from({ length: AT_ONCE }, async () => {
+      for (let start = queue.shift(); start !== undefined; start = queue.shift()) {
+        await start().catch(() => undefined)
+      }
+    }),
+  )
+}, A_LONG_TIME)
 
 function linesOf(count: number): string {
   return `${Array.from({ length: count }, (_, index) => `line ${index}`).join('\n')}\n`
@@ -153,11 +217,20 @@ function fileSizesTotalling(count: number, total: number): readonly number[] {
 
 const DAY = (day: number): string => `2026-01-${String(day).padStart(2, '0')}T12:00:00+00:00`
 
+// The two histories both describes below ask for. Everything else is named where it is used.
+const NO_COMMIT_YET = aRepository(initRepository)
+
+const ONE_ORDINARY_COMMIT = aRepository(async () => {
+  const repository = await initRepository()
+  await commitOnMainline(repository, { 'a.txt': 'a\n' }, 'chore: first', DAY(1))
+  return repository
+})
+
 describe('readGitDerivedMetrics', () => {
   it(
     'recovers nothing from a repository that has no commit yet',
     async () => {
-      const repository = await initRepository()
+      const repository = await NO_COMMIT_YET()
 
       await expect(readGitDerivedMetrics(repository, NEVER_ABORTED)).resolves.toEqual({
         sizeBucket: null,
@@ -168,15 +241,20 @@ describe('readGitDerivedMetrics', () => {
     A_LONG_TIME,
   )
 
+  const A_TRUNCATED_HISTORY = aFixture(async () => {
+    const origin = await repositoryWithABaseCommit(DAY(1))
+    for (let index = 1; index <= 10; index += 1) {
+      await deliverChange(origin, `change-${index}`, DAY(index + 1), [10])
+    }
+    const truncated = await emptyDirectory()
+    await git(truncated, ['clone', '-q', '--depth', '8', `file://${origin}`, '.'])
+    return { origin, truncated }
+  })
+
   it(
     'recovers nothing from a truncated history, even one holding enough merges to qualify',
     async () => {
-      const origin = await repositoryWithABaseCommit(DAY(1))
-      for (let index = 1; index <= 10; index += 1) {
-        await deliverChange(origin, `change-${index}`, DAY(index + 1), [10])
-      }
-      const truncated = await emptyDirectory()
-      await git(truncated, ['clone', '-q', '--depth', '8', `file://${origin}`, '.'])
+      const { origin, truncated } = await A_TRUNCATED_HISTORY()
 
       expect((await git(truncated, ['rev-parse', '--is-shallow-repository'])).trim()).toBe('true')
       const visibleMerges = (await git(truncated, ['log', '--first-parent', '--format=%P', 'HEAD']))
@@ -197,18 +275,23 @@ describe('readGitDerivedMetrics', () => {
     A_LONG_TIME,
   )
 
+  const NO_MERGE_AT_ALL = aRepository(async () => {
+    const repository = await repositoryWithABaseCommit(DAY(1))
+    for (let index = 1; index <= 12; index += 1) {
+      await commitOnMainline(
+        repository,
+        { [`file-${index}.txt`]: linesOf(200) },
+        `commit ${index}`,
+        DAY(index + 1),
+      )
+    }
+    return repository
+  })
+
   it(
     'recovers nothing from a history without a merge, however many commits it holds',
     async () => {
-      const repository = await repositoryWithABaseCommit(DAY(1))
-      for (let index = 1; index <= 12; index += 1) {
-        await commitOnMainline(
-          repository,
-          { [`file-${index}.txt`]: linesOf(200) },
-          `commit ${index}`,
-          DAY(index + 1),
-        )
-      }
+      const repository = await NO_MERGE_AT_ALL()
 
       await expect(readGitDerivedMetrics(repository, NEVER_ABORTED)).resolves.toEqual({
         sizeBucket: null,
@@ -219,17 +302,24 @@ describe('readGitDerivedMetrics', () => {
     A_LONG_TIME,
   )
 
+  function smallDeliveries(count: number): () => Promise<string> {
+    return aRepository(async () => {
+      const repository = await repositoryWithABaseCommit(DAY(1))
+      for (let index = 1; index <= count; index += 1) {
+        await deliverChange(repository, `change-${index}`, DAY(index + 1), [10])
+      }
+      return repository
+    })
+  }
+
+  const FOUR_SMALL_DELIVERIES = smallDeliveries(4)
+  const FIVE_SMALL_DELIVERIES = smallDeliveries(5)
+
   it(
     'reports no size from four delivered changes, and a bucket from five',
     async () => {
-      const four = await repositoryWithABaseCommit(DAY(1))
-      for (let index = 1; index <= 4; index += 1) {
-        await deliverChange(four, `change-${index}`, DAY(index + 1), [10])
-      }
-      const five = await repositoryWithABaseCommit(DAY(1))
-      for (let index = 1; index <= 5; index += 1) {
-        await deliverChange(five, `change-${index}`, DAY(index + 1), [10])
-      }
+      const four = await FOUR_SMALL_DELIVERIES()
+      const five = await FIVE_SMALL_DELIVERIES()
 
       await expect(readGitDerivedMetrics(four, NEVER_ABORTED)).resolves.toMatchObject({
         sizeBucket: null,
@@ -241,14 +331,19 @@ describe('readGitDerivedMetrics', () => {
     A_LONG_TIME,
   )
 
+  const ONE_LONG_FILE_PER_CHANGE = aRepository(async () => {
+    const repository = await repositoryWithABaseCommit(DAY(1))
+    for (let index = 1; index <= 5; index += 1) {
+      // One file of 1200 lines: XL by lines, S by files.
+      await deliverChange(repository, `change-${index}`, DAY(index + 1), [1200])
+    }
+    return repository
+  })
+
   it(
     'reports the lower bucket when lines and files disagree',
     async () => {
-      const repository = await repositoryWithABaseCommit(DAY(1))
-      for (let index = 1; index <= 5; index += 1) {
-        // One file of 1200 lines: XL by lines, S by files.
-        await deliverChange(repository, `change-${index}`, DAY(index + 1), [1200])
-      }
+      const repository = await ONE_LONG_FILE_PER_CHANGE()
 
       await expect(readGitDerivedMetrics(repository, NEVER_ABORTED)).resolves.toMatchObject({
         sizeBucket: 'S',
@@ -257,21 +352,26 @@ describe('readGitDerivedMetrics', () => {
     A_LONG_TIME,
   )
 
+  // INVARIANT: six changes of 30 files each: XL by files. Three of 999 lines and three of 1000
+  // give a median of 999.5, which the half-open bound puts in L, never XL.
+  const A_HALF_INTEGER_MEDIAN = aRepository(async () => {
+    const repository = await repositoryWithABaseCommit(DAY(1))
+    const lineTotals = [999, 999, 999, 1000, 1000, 1000]
+    for (const [index, total] of lineTotals.entries()) {
+      await deliverChange(
+        repository,
+        `change-${index + 1}`,
+        DAY(index + 2),
+        fileSizesTotalling(30, total),
+      )
+    }
+    return repository
+  })
+
   it(
     'lands a half-integer median in exactly one bucket',
     async () => {
-      const repository = await repositoryWithABaseCommit(DAY(1))
-      // INVARIANT: six changes of 30 files each: XL by files. Three of 999 lines and three of 1000
-      // give a median of 999.5, which the half-open bound puts in L, never XL.
-      const lineTotals = [999, 999, 999, 1000, 1000, 1000]
-      for (const [index, total] of lineTotals.entries()) {
-        await deliverChange(
-          repository,
-          `change-${index + 1}`,
-          DAY(index + 2),
-          fileSizesTotalling(30, total),
-        )
-      }
+      const repository = await A_HALF_INTEGER_MEDIAN()
 
       await expect(readGitDerivedMetrics(repository, NEVER_ABORTED)).resolves.toMatchObject({
         sizeBucket: 'L',
@@ -294,45 +394,59 @@ describe('readGitDerivedMetrics', () => {
     { files: 25, lines: 1000, bucket: 'XL' },
   ] as const
 
-  it.each(SIZE_TABLE)(
-    'buckets a median delivered change of $files files and $lines lines as $bucket',
-    async ({ files, lines, bucket }) => {
+  // One repository per row, built alongside every other fixture rather than nine times in a row.
+  const SIZE_ROWS = SIZE_TABLE.map((row) => ({
+    ...row,
+    repository: aRepository(async () => {
       const repository = await repositoryWithABaseCommit(DAY(1))
       for (let index = 1; index <= 5; index += 1) {
         await deliverChange(
           repository,
           `change-${index}`,
           DAY(index + 1),
-          fileSizesTotalling(files, lines),
+          fileSizesTotalling(row.files, row.lines),
         )
       }
+      return repository
+    }),
+  }))
 
-      await expect(readGitDerivedMetrics(repository, NEVER_ABORTED)).resolves.toMatchObject({
-        sizeBucket: bucket,
-      })
+  it.each(SIZE_ROWS)(
+    'buckets a median delivered change of $files files and $lines lines as $bucket',
+    async ({ bucket, repository }) => {
+      await expect(readGitDerivedMetrics(await repository(), NEVER_ABORTED)).resolves.toMatchObject(
+        {
+          sizeBucket: bucket,
+        },
+      )
     },
     A_LONG_TIME,
   )
 
+  const DELIVERIES_THAT_ONLY_DELETE = aRepository(async () => {
+    const repository = await initRepository()
+    const doomed: Record<string, string> = {}
+    for (let index = 0; index < 25; index += 1) {
+      doomed[`doomed/file-${index}.txt`] = linesOf(30)
+    }
+    await commitOnMainline(repository, doomed, 'base', DAY(1))
+
+    for (let index = 0; index < 5; index += 1) {
+      // Five files of thirty lines: M on both scales. Summing additions alone reads 0, and S.
+      await deliverDeletion(
+        repository,
+        `removal-${index}`,
+        DAY(index + 2),
+        Array.from({ length: 5 }, (_, file) => `doomed/file-${index * 5 + file}.txt`),
+      )
+    }
+    return repository
+  })
+
   it(
     'counts deleted lines as lines changed, not as an empty change',
     async () => {
-      const repository = await initRepository()
-      const doomed: Record<string, string> = {}
-      for (let index = 0; index < 25; index += 1) {
-        doomed[`doomed/file-${index}.txt`] = linesOf(30)
-      }
-      await commitOnMainline(repository, doomed, 'base', DAY(1))
-
-      for (let index = 0; index < 5; index += 1) {
-        // Five files of thirty lines: M on both scales. Summing additions alone reads 0, and S.
-        await deliverDeletion(
-          repository,
-          `removal-${index}`,
-          DAY(index + 2),
-          Array.from({ length: 5 }, (_, file) => `doomed/file-${index * 5 + file}.txt`),
-        )
-      }
+      const repository = await DELIVERIES_THAT_ONLY_DELETE()
 
       await expect(readGitDerivedMetrics(repository, NEVER_ABORTED)).resolves.toMatchObject({
         sizeBucket: 'M',
@@ -346,14 +460,25 @@ describe('readGitDerivedMetrics', () => {
   const A_SECOND_TOO_OLD = '2026-01-01T11:59:59+00:00'
   const MOST_RECENT_COMMIT = '2026-06-30T12:00:00+00:00'
 
-  it(
-    'counts a delivered change dated exactly 180 days before the most recent commit',
-    async () => {
+  // The same five changes either side of the bound, the oldest one second apart between them.
+  function fiveChangesWithTheOldestDated(date: string): () => Promise<string> {
+    return aRepository(async () => {
       const repository = await repositoryWithABaseCommit('2025-12-31T12:00:00+00:00')
-      await deliverChange(repository, 'oldest', OLDEST_INSIDE_THE_WINDOW, [10])
+      await deliverChange(repository, 'oldest', date, [10])
       for (let index = 1; index <= 4; index += 1) {
         await deliverChange(repository, `recent-${index}`, MOST_RECENT_COMMIT, [10])
       }
+      return repository
+    })
+  }
+
+  const THE_OLDEST_ON_THE_BOUND = fiveChangesWithTheOldestDated(OLDEST_INSIDE_THE_WINDOW)
+  const THE_OLDEST_A_SECOND_OUT = fiveChangesWithTheOldestDated(A_SECOND_TOO_OLD)
+
+  it(
+    'counts a delivered change dated exactly 180 days before the most recent commit',
+    async () => {
+      const repository = await THE_OLDEST_ON_THE_BOUND()
 
       // INVARIANT: the fifth change is the one sitting exactly on the bound: a window shorter by a
       // day, or one excluding its own edge, leaves four, and four is not a habit.
@@ -367,11 +492,7 @@ describe('readGitDerivedMetrics', () => {
   it(
     'excludes a delivered change dated one second before that bound',
     async () => {
-      const repository = await repositoryWithABaseCommit('2025-12-31T12:00:00+00:00')
-      await deliverChange(repository, 'oldest', A_SECOND_TOO_OLD, [10])
-      for (let index = 1; index <= 4; index += 1) {
-        await deliverChange(repository, `recent-${index}`, MOST_RECENT_COMMIT, [10])
-      }
+      const repository = await THE_OLDEST_A_SECOND_OUT()
 
       // The same five changes, the oldest moved back one second. A longer window answers 'S'.
       await expect(readGitDerivedMetrics(repository, NEVER_ABORTED)).resolves.toMatchObject({
@@ -381,19 +502,24 @@ describe('readGitDerivedMetrics', () => {
     A_LONG_TIME,
   )
 
+  const EVERY_COMMIT_YEARS_OLD = aRepository(async () => {
+    const repository = await initRepository()
+    await commitOnMainline(
+      repository,
+      { 'README.md': 'base\n' },
+      'base',
+      '2019-02-28T12:00:00+00:00',
+    )
+    for (let index = 1; index <= 5; index += 1) {
+      await deliverChange(repository, `change-${index}`, `2019-03-0${index}T12:00:00+00:00`, [10])
+    }
+    return repository
+  })
+
   it(
     'still measures a repository whose every commit is years old',
     async () => {
-      const repository = await initRepository()
-      await commitOnMainline(
-        repository,
-        { 'README.md': 'base\n' },
-        'base',
-        '2019-02-28T12:00:00+00:00',
-      )
-      for (let index = 1; index <= 5; index += 1) {
-        await deliverChange(repository, `change-${index}`, `2019-03-0${index}T12:00:00+00:00`, [10])
-      }
+      const repository = await EVERY_COMMIT_YEARS_OLD()
 
       const metrics = await readGitDerivedMetrics(repository, NEVER_ABORTED)
 
@@ -403,30 +529,35 @@ describe('readGitDerivedMetrics', () => {
     A_LONG_TIME,
   )
 
+  const HEAD_IS_NOT_THE_MOST_RECENT_COMMIT = aRepository(async () => {
+    const repository = await repositoryWithABaseCommit('2025-06-01T12:00:00+00:00')
+    // Outside a window ending on the 20th of January, inside one ending on the 5th.
+    for (let index = 1; index <= 5; index += 1) {
+      await deliverChange(
+        repository,
+        `old-${index}`,
+        '2025-07-15T12:00:00+00:00',
+        fileSizesTotalling(30, 1200),
+      )
+    }
+    for (let index = 1; index <= 4; index += 1) {
+      await deliverChange(repository, `recent-${index}`, '2026-01-05T12:00:00+00:00', [10])
+    }
+    // Worked on the 20th, landed on the 5th: HEAD is not the most recent commit.
+    await deliverChange(
+      repository,
+      'late-branch',
+      '2026-01-20T12:00:00+00:00',
+      [10],
+      '2026-01-05T12:00:00+00:00',
+    )
+    return repository
+  })
+
   it(
     'ends the window at the most recent commit reachable, not at the one HEAD points to',
     async () => {
-      const repository = await repositoryWithABaseCommit('2025-06-01T12:00:00+00:00')
-      // Outside a window ending on the 20th of January, inside one ending on the 5th.
-      for (let index = 1; index <= 5; index += 1) {
-        await deliverChange(
-          repository,
-          `old-${index}`,
-          '2025-07-15T12:00:00+00:00',
-          fileSizesTotalling(30, 1200),
-        )
-      }
-      for (let index = 1; index <= 4; index += 1) {
-        await deliverChange(repository, `recent-${index}`, '2026-01-05T12:00:00+00:00', [10])
-      }
-      // Worked on the 20th, landed on the 5th: HEAD is not the most recent commit.
-      await deliverChange(
-        repository,
-        'late-branch',
-        '2026-01-20T12:00:00+00:00',
-        [10],
-        '2026-01-05T12:00:00+00:00',
-      )
+      const repository = await HEAD_IS_NOT_THE_MOST_RECENT_COMMIT()
 
       // INVARIANT: the window then holds the five recent changes alone: S. Ending it at HEAD's own
       // date pulls in the five XL ones and answers L.
@@ -437,17 +568,22 @@ describe('readGitDerivedMetrics', () => {
     A_LONG_TIME,
   )
 
+  const ONE_BUSY_DAY_AMONG_QUIET_ONES = aRepository(async () => {
+    const repository = await initRepository()
+    await commitOnMainline(repository, { 'a.txt': 'a\n' }, 'first', DAY(1))
+    await commitOnMainline(repository, { 'b.txt': 'b\n' }, 'second', DAY(2))
+    for (const branch of ['spike-1', 'spike-2', 'spike-3', 'spike-4']) {
+      await deliverChange(repository, branch, DAY(3), [1])
+    }
+    await commitOnMainline(repository, { 'c.txt': 'c\n' }, 'fourth', DAY(4))
+    await commitOnMainline(repository, { 'd.txt': 'd\n' }, 'fifth', DAY(5))
+    return repository
+  })
+
   it(
     'reports the median branches per day rather than the busiest day',
     async () => {
-      const repository = await initRepository()
-      await commitOnMainline(repository, { 'a.txt': 'a\n' }, 'first', DAY(1))
-      await commitOnMainline(repository, { 'b.txt': 'b\n' }, 'second', DAY(2))
-      for (const branch of ['spike-1', 'spike-2', 'spike-3', 'spike-4']) {
-        await deliverChange(repository, branch, DAY(3), [1])
-      }
-      await commitOnMainline(repository, { 'c.txt': 'c\n' }, 'fourth', DAY(4))
-      await commitOnMainline(repository, { 'd.txt': 'd\n' }, 'fifth', DAY(5))
+      const repository = await ONE_BUSY_DAY_AMONG_QUIET_ONES()
 
       // Days hold 1, 1, 4, 1 and 1 branches: the median is 1, the peak is 4.
       await expect(readGitDerivedMetrics(repository, NEVER_ABORTED)).resolves.toMatchObject({
@@ -457,17 +593,24 @@ describe('readGitDerivedMetrics', () => {
     A_LONG_TIME,
   )
 
+  function fiveDeliveriesOnDays(days: readonly number[]): () => Promise<string> {
+    return aRepository(async () => {
+      const repository = await repositoryWithABaseCommit(DAY(1))
+      for (const [index, day] of days.entries()) {
+        await deliverChange(repository, `change-${index}`, DAY(day), [10])
+      }
+      return repository
+    })
+  }
+
+  const FOUR_ACTIVE_DAYS = fiveDeliveriesOnDays([2, 2, 3, 3, 4])
+  const FIVE_ACTIVE_DAYS = fiveDeliveriesOnDays([2, 3, 4, 5, 5])
+
   it(
     'reports no parallelism from four active days, and a median from five',
     async () => {
-      const four = await repositoryWithABaseCommit(DAY(1))
-      for (const [index, day] of [2, 2, 3, 3, 4].entries()) {
-        await deliverChange(four, `change-${index}`, DAY(day), [10])
-      }
-      const five = await repositoryWithABaseCommit(DAY(1))
-      for (const [index, day] of [2, 3, 4, 5, 5].entries()) {
-        await deliverChange(five, `change-${index}`, DAY(day), [10])
-      }
+      const four = await FOUR_ACTIVE_DAYS()
+      const five = await FIVE_ACTIVE_DAYS()
 
       // Both hold five delivered changes, so the day count alone separates them.
       await expect(readGitDerivedMetrics(four, NEVER_ABORTED)).resolves.toEqual({
@@ -484,17 +627,22 @@ describe('readGitDerivedMetrics', () => {
     A_LONG_TIME,
   )
 
+  const BUSY_DAYS_OUTSIDE_THE_WINDOW = aRepository(async () => {
+    const repository = await repositoryWithABaseCommit(DAY(1))
+    for (const day of [1, 2, 3, 4, 5]) {
+      await deliverChange(repository, `old-a-${day}`, DAY(day), [1])
+      await deliverChange(repository, `old-b-${day}`, DAY(day), [1])
+    }
+    for (const day of [5, 6, 7, 8, 9]) {
+      await deliverChange(repository, `recent-${day}`, `2026-07-0${day}T12:00:00+00:00`, [1])
+    }
+    return repository
+  })
+
   it(
     'measures parallelism over the same window as size',
     async () => {
-      const repository = await repositoryWithABaseCommit(DAY(1))
-      for (const day of [1, 2, 3, 4, 5]) {
-        await deliverChange(repository, `old-a-${day}`, DAY(day), [1])
-        await deliverChange(repository, `old-b-${day}`, DAY(day), [1])
-      }
-      for (const day of [5, 6, 7, 8, 9]) {
-        await deliverChange(repository, `recent-${day}`, `2026-07-0${day}T12:00:00+00:00`, [1])
-      }
+      const repository = await BUSY_DAYS_OUTSIDE_THE_WINDOW()
 
       // INVARIANT: only the quiet days fall in the window: one branch each, median 1. The whole
       // history would find five busier days at two branches and answer 1.5.
@@ -507,10 +655,10 @@ describe('readGitDerivedMetrics', () => {
     A_LONG_TIME,
   )
 
-  it('counts a merge side as one branch, and the mainline it landed on as another', async () => {
-    // INVARIANT: the one fixture where a branch as a *merge side* and a branch as any parent
-    // diverge: the mainline advances after the branch point, so the sides see the mainline and one
-    // topic each day, while taking every parent re-counts that mainline commit as a branch.
+  // INVARIANT: the one fixture where a branch as a *merge side* and a branch as any parent
+  // diverge: the mainline advances after the branch point, so the sides see the mainline and one
+  // topic each day, while taking every parent re-counts that mainline commit as a branch.
+  const A_MAINLINE_ADVANCING_UNDER_ITS_BRANCHES = aRepository(async () => {
     const repository = await repositoryWithABaseCommit('2026-03-01T09:00:00+00:00')
 
     for (let day = 1; day <= 6; day += 1) {
@@ -525,26 +673,31 @@ describe('readGitDerivedMetrics', () => {
         date,
       )
     }
+    return repository
+  })
+
+  it('counts a merge side as one branch, and the mainline it landed on as another', async () => {
+    const repository = await A_MAINLINE_ADVANCING_UNDER_ITS_BRANCHES()
 
     const metrics = await readGitDerivedMetrics(repository, NEVER_ABORTED)
 
     expect(metrics.parallelism).toBe(2)
   })
 
+  const TWO_DAYS_THAT_SAW_ONLY_A_MERGE = aRepository(async () => {
+    const repository = await repositoryWithABaseCommit(DAY(1))
+    for (const day of [2, 3, 4]) {
+      await commitOnMainline(repository, { [`file-${day}.txt`]: 'x\n' }, `commit ${day}`, DAY(day))
+    }
+    await deliverChange(repository, 'branch-a', DAY(2), [1], DAY(20))
+    await deliverChange(repository, 'branch-b', DAY(3), [1], DAY(21))
+    return repository
+  })
+
   it(
     'does not count the day a branch landed as a day of mainline work',
     async () => {
-      const repository = await repositoryWithABaseCommit(DAY(1))
-      for (const day of [2, 3, 4]) {
-        await commitOnMainline(
-          repository,
-          { [`file-${day}.txt`]: 'x\n' },
-          `commit ${day}`,
-          DAY(day),
-        )
-      }
-      await deliverChange(repository, 'branch-a', DAY(2), [1], DAY(20))
-      await deliverChange(repository, 'branch-b', DAY(3), [1], DAY(21))
+      const repository = await TWO_DAYS_THAT_SAW_ONLY_A_MERGE()
 
       // The 20th and the 21st saw only a merge. Counting those would make six active days.
       await expect(readGitDerivedMetrics(repository, NEVER_ABORTED)).resolves.toMatchObject({
@@ -554,22 +707,27 @@ describe('readGitDerivedMetrics', () => {
     A_LONG_TIME,
   )
 
+  // INVARIANT: each pair opens and closes one calendar day in its author's own offset, and the
+  // two offsets are far enough apart that no single reader's timezone leaves both intact.
+  const DAYS_OPENED_AND_CLOSED_IN_TWO_OFFSETS = aRepository(async () => {
+    const repository = await repositoryWithABaseCommit('2026-03-01T12:00:00+00:00')
+    await deliverChange(repository, 'a-branch', '2026-03-01T12:00:00+00:00', [1])
+    await commitOnMainline(repository, { 'b.txt': 'b\n' }, 'second', '2026-03-02T12:00:00+00:00')
+    for (const [index, date] of [
+      '2026-03-10T00:00:00+05:30',
+      '2026-03-10T23:59:00+05:30',
+      '2026-03-12T00:00:00-03:00',
+      '2026-03-12T23:59:00-03:00',
+    ].entries()) {
+      await commitOnMainline(repository, { [`edge-${index}.txt`]: 'x\n' }, `edge ${index}`, date)
+    }
+    return repository
+  })
+
   it(
     "reads a calendar day as the author's own, whatever timezone the reader is in",
     async () => {
-      const repository = await repositoryWithABaseCommit('2026-03-01T12:00:00+00:00')
-      await deliverChange(repository, 'a-branch', '2026-03-01T12:00:00+00:00', [1])
-      await commitOnMainline(repository, { 'b.txt': 'b\n' }, 'second', '2026-03-02T12:00:00+00:00')
-      // INVARIANT: each pair opens and closes one calendar day in its author's own offset, and the
-      // two offsets are far enough apart that no single reader's timezone leaves both intact.
-      for (const [index, date] of [
-        '2026-03-10T00:00:00+05:30',
-        '2026-03-10T23:59:00+05:30',
-        '2026-03-12T00:00:00-03:00',
-        '2026-03-12T23:59:00-03:00',
-      ].entries()) {
-        await commitOnMainline(repository, { [`edge-${index}.txt`]: 'x\n' }, `edge ${index}`, date)
-      }
+      const repository = await DAYS_OPENED_AND_CLOSED_IN_TWO_OFFSETS()
 
       // Four days of work; recomputing them in the reader's timezone finds five or six.
       await expect(readGitDerivedMetrics(repository, NEVER_ABORTED)).resolves.toMatchObject({
@@ -582,7 +740,7 @@ describe('readGitDerivedMetrics', () => {
   it(
     'rejects rather than resolving when the signal is already aborted',
     async () => {
-      const repository = await repositoryWithABaseCommit(DAY(1))
+      const repository = await ONE_ORDINARY_COMMIT()
 
       await expect(readGitDerivedMetrics(repository, AbortSignal.abort())).rejects.toThrow(/abort/i)
     },
@@ -594,26 +752,31 @@ describe('readGitDerivedMetrics, when merges are not the delivery record', () =>
   // INVARIANT: `mainlineCommits` non-merge commits on the first-parent walk, beside `merges`
   // delivered changes. The base commit counts among the non-merge ones, so the caller asks for the
   // total it wants on that side, and the share under test is `merges / (merges + mainlineCommits)`.
-  async function repositoryMixing(merges: number, mainlineCommits: number): Promise<string> {
-    const repository = await repositoryWithABaseCommit(DAY(1))
-    for (let index = 1; index <= merges; index += 1) {
-      await deliverChange(repository, `change-${index}`, DAY(index + 1), [10])
-    }
-    for (let index = 1; index < mainlineCommits; index += 1) {
-      await commitOnMainline(
-        repository,
-        { [`direct-${index}.txt`]: linesOf(10) },
-        `direct ${index}`,
-        DAY(index + merges + 1),
-      )
-    }
-    return repository
+  function repositoryMixing(merges: number, mainlineCommits: number): () => Promise<string> {
+    return aRepository(async () => {
+      const repository = await repositoryWithABaseCommit(DAY(1))
+      for (let index = 1; index <= merges; index += 1) {
+        await deliverChange(repository, `change-${index}`, DAY(index + 1), [10])
+      }
+      for (let index = 1; index < mainlineCommits; index += 1) {
+        await commitOnMainline(
+          repository,
+          { [`direct-${index}.txt`]: linesOf(10) },
+          `direct ${index}`,
+          DAY(index + merges + 1),
+        )
+      }
+      return repository
+    })
   }
+
+  const MERGES_EXACTLY_A_QUARTER = repositoryMixing(5, 15)
+  const MERGES_JUST_UNDER_A_QUARTER = repositoryMixing(5, 16)
 
   it(
     'keeps both branch-derived axes when merges are exactly a quarter of what landed',
     async () => {
-      const repository = await repositoryMixing(5, 15)
+      const repository = await MERGES_EXACTLY_A_QUARTER()
 
       await expect(readGitDerivedMetrics(repository, NEVER_ABORTED)).resolves.toMatchObject({
         sizeBucket: 'S',
@@ -626,7 +789,7 @@ describe('readGitDerivedMetrics, when merges are not the delivery record', () =>
   it(
     'withholds both branch-derived axes when merges fall just under a quarter',
     async () => {
-      const repository = await repositoryMixing(5, 16)
+      const repository = await MERGES_JUST_UNDER_A_QUARTER()
 
       // INVARIANT: a median drawn from a minority of what was delivered is not a measurement. The
       // axes go unobserved, which is an evidence gap, never a practice gap published low.
@@ -638,23 +801,26 @@ describe('readGitDerivedMetrics, when merges are not the delivery record', () =>
     A_LONG_TIME,
   )
 
+  const AGENT_MERGES_IN_A_MINORITY = aRepository(async () => {
+    const repository = await repositoryWithABaseCommit(DAY(1))
+    for (let index = 1; index <= 5; index += 1) {
+      await deliverChangeAuthoredBy(repository, `change-${index}`, DAY(index + 1), [AGENT_TRAILER])
+    }
+    for (let index = 1; index <= 15; index += 1) {
+      await commitOnMainline(
+        repository,
+        { [`direct-${index}.txt`]: linesOf(10) },
+        `direct ${index}`,
+        DAY(index + 7),
+      )
+    }
+    return repository
+  })
+
   it(
     'withholds intervention too from a history whose merges are a minority',
     async () => {
-      const repository = await repositoryWithABaseCommit(DAY(1))
-      for (let index = 1; index <= 5; index += 1) {
-        await deliverChangeAuthoredBy(repository, `change-${index}`, DAY(index + 1), [
-          AGENT_TRAILER,
-        ])
-      }
-      for (let index = 1; index <= 15; index += 1) {
-        await commitOnMainline(
-          repository,
-          { [`direct-${index}.txt`]: linesOf(10) },
-          `direct ${index}`,
-          DAY(index + 7),
-        )
-      }
+      const repository = await AGENT_MERGES_IN_A_MINORITY()
 
       // INVARIANT: all five merges here are agent-authored, so the autonomy share is 1.0 and the
       // top rank would be granted — from five deliveries out of twenty-one landings. A squashed
@@ -671,16 +837,39 @@ describe('readGitDerivedMetrics, when merges are not the delivery record', () =>
 })
 
 describe('readGitDerivedMetrics, on the intervention axis', () => {
+  // One entry per delivered change, holding the trailers its commits carry.
+  type Trailers = readonly (string | null)[]
+
+  function deliveriesAuthoredBy(perChange: readonly Trailers[]): () => Promise<string> {
+    return aRepository(async () => {
+      const repository = await repositoryWithABaseCommit(DAY(1))
+      for (const [index, trailers] of perChange.entries()) {
+        await deliverChangeAuthoredBy(repository, `change-${index + 1}`, DAY(index + 2), trailers)
+      }
+      return repository
+    })
+  }
+
+  function repeated(count: number, trailers: Trailers): readonly Trailers[] {
+    return Array.from({ length: count }, () => trailers)
+  }
+
+  const EVERY_COMMIT_AN_AGENT_S = deliveriesAuthoredBy(repeated(5, [AGENT_TRAILER, AGENT_TRAILER]))
+  const NOTHING_ATTRIBUTED = deliveriesAuthoredBy(repeated(8, [null]))
+  const ONE_HUMAN_COMMIT_PER_CHANGE = deliveriesAuthoredBy(repeated(5, [AGENT_TRAILER, null]))
+  const NINE_CHANGES_IN_TEN = deliveriesAuthoredBy(
+    Array.from({ length: 10 }, (_, index) => [index === 0 ? null : AGENT_TRAILER]),
+  )
+  const EIGHT_CHANGES_IN_TEN = deliveriesAuthoredBy(
+    Array.from({ length: 10 }, (_, index) => [index <= 1 ? null : AGENT_TRAILER]),
+  )
+  const FOUR_AGENT_DELIVERIES = deliveriesAuthoredBy(repeated(4, [AGENT_TRAILER]))
+  const FIVE_AGENT_DELIVERIES = deliveriesAuthoredBy(repeated(5, [AGENT_TRAILER]))
+
   it(
     'grants autonomy to a history whose delivered changes hold no human commit',
     async () => {
-      const repository = await repositoryWithABaseCommit(DAY(1))
-      for (let index = 1; index <= 5; index += 1) {
-        await deliverChangeAuthoredBy(repository, `change-${index}`, DAY(index + 1), [
-          AGENT_TRAILER,
-          AGENT_TRAILER,
-        ])
-      }
+      const repository = await EVERY_COMMIT_AN_AGENT_S()
 
       await expect(readGitDerivedMetrics(repository, NEVER_ABORTED)).resolves.toMatchObject({
         intervention: 'never-once-framed',
@@ -692,10 +881,7 @@ describe('readGitDerivedMetrics, on the intervention axis', () => {
   it(
     'reports no intervention at all, never a low one, when nothing was authored by an agent',
     async () => {
-      const repository = await repositoryWithABaseCommit(DAY(1))
-      for (let index = 1; index <= 8; index += 1) {
-        await deliverChangeAuthoredBy(repository, `change-${index}`, DAY(index + 1), [null])
-      }
+      const repository = await NOTHING_ATTRIBUTED()
 
       // INVARIANT: the absence of a trailer is not evidence of a human. A value here would be a
       // practice gap nobody observed; withholding it is the evidence gap the situation is.
@@ -709,13 +895,7 @@ describe('readGitDerivedMetrics, on the intervention axis', () => {
   it(
     'withholds autonomy from a change carrying one human commit beside its agent ones',
     async () => {
-      const repository = await repositoryWithABaseCommit(DAY(1))
-      for (let index = 1; index <= 5; index += 1) {
-        await deliverChangeAuthoredBy(repository, `change-${index}`, DAY(index + 1), [
-          AGENT_TRAILER,
-          null,
-        ])
-      }
+      const repository = await ONE_HUMAN_COMMIT_PER_CHANGE()
 
       await expect(readGitDerivedMetrics(repository, NEVER_ABORTED)).resolves.toMatchObject({
         intervention: null,
@@ -727,18 +907,8 @@ describe('readGitDerivedMetrics, on the intervention axis', () => {
   it(
     'grants autonomy at nine changes in ten, and withholds it at eight',
     async () => {
-      const nine = await repositoryWithABaseCommit(DAY(1))
-      for (let index = 1; index <= 10; index += 1) {
-        await deliverChangeAuthoredBy(nine, `change-${index}`, DAY(index + 1), [
-          index === 1 ? null : AGENT_TRAILER,
-        ])
-      }
-      const eight = await repositoryWithABaseCommit(DAY(1))
-      for (let index = 1; index <= 10; index += 1) {
-        await deliverChangeAuthoredBy(eight, `change-${index}`, DAY(index + 1), [
-          index <= 2 ? null : AGENT_TRAILER,
-        ])
-      }
+      const nine = await NINE_CHANGES_IN_TEN()
+      const eight = await EIGHT_CHANGES_IN_TEN()
 
       await expect(readGitDerivedMetrics(nine, NEVER_ABORTED)).resolves.toMatchObject({
         intervention: 'never-once-framed',
@@ -753,14 +923,8 @@ describe('readGitDerivedMetrics, on the intervention axis', () => {
   it(
     'reports no autonomy from four agent-authored changes, and grants it from five',
     async () => {
-      const four = await repositoryWithABaseCommit(DAY(1))
-      for (let index = 1; index <= 4; index += 1) {
-        await deliverChangeAuthoredBy(four, `change-${index}`, DAY(index + 1), [AGENT_TRAILER])
-      }
-      const five = await repositoryWithABaseCommit(DAY(1))
-      for (let index = 1; index <= 5; index += 1) {
-        await deliverChangeAuthoredBy(five, `change-${index}`, DAY(index + 1), [AGENT_TRAILER])
-      }
+      const four = await FOUR_AGENT_DELIVERIES()
+      const five = await FIVE_AGENT_DELIVERIES()
 
       await expect(readGitDerivedMetrics(four, NEVER_ABORTED)).resolves.toMatchObject({
         intervention: null,
@@ -775,12 +939,9 @@ describe('readGitDerivedMetrics, on the intervention axis', () => {
   it(
     'does not read a merge that absorbed no commit as one an agent authored',
     async () => {
-      const repository = await repositoryWithABaseCommit(DAY(1))
-      for (let index = 1; index <= 5; index += 1) {
-        await deliverChangeAuthoredBy(repository, `change-${index}`, DAY(index + 1), [
-          AGENT_TRAILER,
-        ])
-      }
+      // A copy, not the shared fixture: this is the one test here that writes to its repository.
+      const repository = await aCopyOf(FIVE_AGENT_DELIVERIES)
+
       await expect(readGitDerivedMetrics(repository, NEVER_ABORTED)).resolves.toMatchObject({
         intervention: 'never-once-framed',
       })
@@ -798,26 +959,31 @@ describe('readGitDerivedMetrics, on the intervention axis', () => {
     A_LONG_TIME,
   )
 
+  const AN_ABANDONED_PRACTICE = aRepository(async () => {
+    const repository = await repositoryWithABaseCommit('2025-01-01T12:00:00+00:00')
+    for (let index = 1; index <= 6; index += 1) {
+      await deliverChangeAuthoredBy(
+        repository,
+        `old-${index}`,
+        `2025-01-${String(index + 1).padStart(2, '0')}T12:00:00+00:00`,
+        [AGENT_TRAILER],
+      )
+    }
+    for (let index = 1; index <= 6; index += 1) {
+      await deliverChangeAuthoredBy(
+        repository,
+        `recent-${index}`,
+        `2026-01-${String(index + 1).padStart(2, '0')}T12:00:00+00:00`,
+        [null],
+      )
+    }
+    return repository
+  })
+
   it(
     'reads autonomy over the same window as size, so an abandoned practice stops counting',
     async () => {
-      const repository = await repositoryWithABaseCommit('2025-01-01T12:00:00+00:00')
-      for (let index = 1; index <= 6; index += 1) {
-        await deliverChangeAuthoredBy(
-          repository,
-          `old-${index}`,
-          `2025-01-${String(index + 1).padStart(2, '0')}T12:00:00+00:00`,
-          [AGENT_TRAILER],
-        )
-      }
-      for (let index = 1; index <= 6; index += 1) {
-        await deliverChangeAuthoredBy(
-          repository,
-          `recent-${index}`,
-          `2026-01-${String(index + 1).padStart(2, '0')}T12:00:00+00:00`,
-          [null],
-        )
-      }
+      const repository = await AN_ABANDONED_PRACTICE()
 
       await expect(readGitDerivedMetrics(repository, NEVER_ABORTED)).resolves.toMatchObject({
         intervention: null,
@@ -828,15 +994,16 @@ describe('readGitDerivedMetrics, on the intervention axis', () => {
 })
 
 describe('hasAiAttributionTrailer', () => {
-  async function repositoryWithTrailer(trailer: string): Promise<string> {
-    const repository = await initRepository()
-    await commitOnMainline(
-      repository,
-      { 'a.txt': 'a\n' },
-      `feat: something\n\nCo-Authored-By: ${trailer}\n`,
-      DAY(1),
-    )
-    return repository
+  function repositoryWithTrailer(trailer: string): () => Promise<string> {
+    return repositoryWithMessage(`feat: something\n\nCo-Authored-By: ${trailer}\n`)
+  }
+
+  function repositoryWithMessage(message: string): () => Promise<string> {
+    return aRepository(async () => {
+      const repository = await initRepository()
+      await commitOnMainline(repository, { 'a.txt': 'a\n' }, message, DAY(1))
+      return repository
+    })
   }
 
   // Every display name here is an ordinary person's, so the address is what has to decide.
@@ -849,12 +1016,15 @@ describe('hasAiAttributionTrailer', () => {
     { address: 'bot@cursor.sh', trailer: 'Jane Doe <bot@cursor.sh>' },
   ] as const
 
-  it.each(A_KNOWN_AGENT_ADDRESS)(
+  it.each(
+    A_KNOWN_AGENT_ADDRESS.map((row) => ({
+      ...row,
+      repository: repositoryWithTrailer(row.trailer),
+    })),
+  )(
     'reads the published agent address $address as AI attribution',
-    async ({ trailer }) => {
-      const repository = await repositoryWithTrailer(trailer)
-
-      await expect(hasAiAttributionTrailer(repository, NEVER_ABORTED)).resolves.toBe(true)
+    async ({ repository }) => {
+      await expect(hasAiAttributionTrailer(await repository(), NEVER_ABORTED)).resolves.toBe(true)
     },
     A_LONG_TIME,
   )
@@ -874,12 +1044,14 @@ describe('hasAiAttributionTrailer', () => {
     'cursor@cursor.sh',
   ] as const
 
-  it.each(AN_AGENT_TOKEN_AT_A_VENDOR_DOMAIN)(
+  it.each(
+    AN_AGENT_TOKEN_AT_A_VENDOR_DOMAIN.map(
+      (address) => [address, repositoryWithTrailer(`Jane Doe <${address}>`)] as const,
+    ),
+  )(
     'reads %s as AI attribution, whoever the trailer says wrote it',
-    async (address) => {
-      const repository = await repositoryWithTrailer(`Jane Doe <${address}>`)
-
-      await expect(hasAiAttributionTrailer(repository, NEVER_ABORTED)).resolves.toBe(true)
+    async (_address, repository) => {
+      await expect(hasAiAttributionTrailer(await repository(), NEVER_ABORTED)).resolves.toBe(true)
     },
     A_LONG_TIME,
   )
@@ -899,12 +1071,14 @@ describe('hasAiAttributionTrailer', () => {
     'Google Gemini',
   ] as const
 
-  it.each(AN_AGENT_DISPLAY_NAME)(
+  it.each(
+    AN_AGENT_DISPLAY_NAME.map(
+      (name) => [name, repositoryWithTrailer(`${name} <helper@example.com>`)] as const,
+    ),
+  )(
     'reads the display name %s as AI attribution, whatever address it carries',
-    async (name) => {
-      const repository = await repositoryWithTrailer(`${name} <helper@example.com>`)
-
-      await expect(hasAiAttributionTrailer(repository, NEVER_ABORTED)).resolves.toBe(true)
+    async (_name, repository) => {
+      await expect(hasAiAttributionTrailer(await repository(), NEVER_ABORTED)).resolves.toBe(true)
     },
     A_LONG_TIME,
   )
@@ -973,13 +1147,12 @@ describe('hasAiAttributionTrailer', () => {
     },
   ] as const
 
-  it.each(NOT_AN_AGENT)(
+  it.each(
+    NOT_AN_AGENT.map((row) => ({ ...row, repository: repositoryWithMessage(`${row.message}\n`) })),
+  )(
     'reads $why as no AI attribution',
-    async ({ message }) => {
-      const repository = await initRepository()
-      await commitOnMainline(repository, { 'a.txt': 'a\n' }, `${message}\n`, DAY(1))
-
-      await expect(hasAiAttributionTrailer(repository, NEVER_ABORTED)).resolves.toBe(false)
+    async ({ repository }) => {
+      await expect(hasAiAttributionTrailer(await repository(), NEVER_ABORTED)).resolves.toBe(false)
     },
     A_LONG_TIME,
   )
@@ -987,7 +1160,7 @@ describe('hasAiAttributionTrailer', () => {
   it(
     'answers null, not false, for a repository that has no commit yet',
     async () => {
-      const repository = await initRepository()
+      const repository = await NO_COMMIT_YET()
 
       // Answering false would publish a harness set missing `prompts`: a practice gap.
       await expect(hasAiAttributionTrailer(repository, NEVER_ABORTED)).resolves.toBeNull()
@@ -998,8 +1171,8 @@ describe('hasAiAttributionTrailer', () => {
   it(
     'answers null, not false, for a history git refuses to read',
     async () => {
-      const repository = await initRepository()
-      await commitOnMainline(repository, { 'a.txt': 'a\n' }, 'chore: first', DAY(1))
+      // A copy: breaking the ref below is a write, and the fixture is shared with the test after it.
+      const repository = await aCopyOf(ONE_ORDINARY_COMMIT)
       await writeFile(join(repository, '.git', 'refs', 'heads', 'main'), `${'0'.repeat(40)}\n`)
 
       // INVARIANT: the fault this fixture has to carry: an ordinary work tree, only the history
@@ -1014,19 +1187,24 @@ describe('hasAiAttributionTrailer', () => {
     A_LONG_TIME,
   )
 
+  const A_TRUNCATED_HISTORY_HOLDING_A_TRAILER = aRepository(async () => {
+    const origin = await initRepository()
+    await commitOnMainline(origin, { 'a.txt': 'a\n' }, 'chore: first', DAY(1))
+    await commitOnMainline(
+      origin,
+      { 'b.txt': 'b\n' },
+      'feat: something\n\nCo-Authored-By: Codex <codex@example.com>\n',
+      DAY(2),
+    )
+    const truncated = await emptyDirectory()
+    await git(truncated, ['clone', '-q', '--depth', '1', `file://${origin}`, '.'])
+    return truncated
+  })
+
   it(
     'still finds a trailer in a truncated history',
     async () => {
-      const origin = await initRepository()
-      await commitOnMainline(origin, { 'a.txt': 'a\n' }, 'chore: first', DAY(1))
-      await commitOnMainline(
-        origin,
-        { 'b.txt': 'b\n' },
-        'feat: something\n\nCo-Authored-By: Codex <codex@example.com>\n',
-        DAY(2),
-      )
-      const truncated = await emptyDirectory()
-      await git(truncated, ['clone', '-q', '--depth', '1', `file://${origin}`, '.'])
+      const truncated = await A_TRUNCATED_HISTORY_HOLDING_A_TRAILER()
 
       expect((await git(truncated, ['rev-parse', '--is-shallow-repository'])).trim()).toBe('true')
       await expect(hasAiAttributionTrailer(truncated, NEVER_ABORTED)).resolves.toBe(true)
@@ -1037,8 +1215,7 @@ describe('hasAiAttributionTrailer', () => {
   it(
     'rejects rather than resolving when the signal is already aborted',
     async () => {
-      const repository = await initRepository()
-      await commitOnMainline(repository, { 'a.txt': 'a\n' }, 'chore: first', DAY(1))
+      const repository = await ONE_ORDINARY_COMMIT()
 
       // Cancellation is not an unreadable history: it costs no axis, it surfaces as TIMED_OUT.
       await expect(hasAiAttributionTrailer(repository, AbortSignal.abort())).rejects.toThrow(

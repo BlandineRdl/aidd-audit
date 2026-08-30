@@ -14,6 +14,7 @@ const BUNDLE = join(REPO_ROOT, 'dist', 'cli.js')
 // and exit 0. That the forge can *answer* is proven where its payloads can be fixed, in
 // `pull-request-history.test.ts`.
 let refusingGh: string | undefined
+const runs = new Map<string, CliRun>()
 
 function directoryHoldingARefusingGh(): string {
   if (refusingGh !== undefined) return refusingGh
@@ -33,7 +34,7 @@ export interface CliRun {
   readonly stderr: string
 }
 
-export function runCli(...args: readonly string[]): CliRun {
+function spawnCli(args: readonly string[]): CliRun {
   const result = spawnSync(process.execPath, [BUNDLE, ...args], {
     cwd: REPO_ROOT,
     encoding: 'utf8',
@@ -48,4 +49,18 @@ export function runCli(...args: readonly string[]): CliRun {
     throw new Error(`aidd-audit was killed by ${result.signal ?? 'an unknown signal'}.`)
   }
   return { status: result.status, stdout: result.stdout, stderr: result.stderr }
+}
+
+export function runCli(...args: readonly string[]): CliRun {
+  const key = JSON.stringify(args)
+  const cached = runs.get(key)
+  if (cached !== undefined) return cached
+
+  const completed = spawnCli(args)
+  runs.set(key, completed)
+  return completed
+}
+
+export function runCliFresh(...args: readonly string[]): CliRun {
+  return spawnCli(args)
 }
