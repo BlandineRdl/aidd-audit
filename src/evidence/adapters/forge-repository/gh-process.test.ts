@@ -60,7 +60,12 @@ describe('runGh', () => {
     async () => {
       await ghRunning('exit 4')
 
-      await expect(runGh(['api'], NEVER_ABORTED)).rejects.toThrow(/no stderr/)
+      // INVARIANT: this message is what `provenance` publishes as the reason a source refused, so a
+      // silent non-zero exit must still carry the spawn's own account of it rather than the
+      // placeholder every empty-stderr failure would otherwise share.
+      const refused = runGh(['api'], NEVER_ABORTED)
+      await expect(refused).rejects.toThrow(/gh api failed/)
+      await expect(refused).rejects.not.toThrow(/no stderr/)
     },
     A_LONG_TIME,
   )
@@ -98,7 +103,11 @@ describe('runGh', () => {
       // window, which reads exactly like a smaller repository.
       await ghRunning('head -c 100000000 /dev/zero | tr "\\0" "x"')
 
-      await expect(runGh(['api'], NEVER_ABORTED)).rejects.toThrow()
+      // INVARIANT: the class and a fragment, never a bare `toThrow()` — that would pass for any
+      // rejection at all, the stub failing to find `tr` included.
+      const overflowing = runGh(['api'], NEVER_ABORTED)
+      await expect(overflowing).rejects.toBeInstanceOf(GhCommandFailedError)
+      await expect(overflowing).rejects.toThrow(/maxBuffer/i)
     },
     A_LONG_TIME,
   )

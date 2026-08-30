@@ -328,7 +328,7 @@ describe('readForgeDerivedMetrics', () => {
   )
 
   it(
-    'grants autonomy when almost no delivery took a commit after it was opened',
+    'never grants autonomy, however many deliveries took no commit after opening',
     async () => {
       await ghAnswering([
         page(
@@ -337,8 +337,13 @@ describe('readForgeDerivedMetrics', () => {
         ),
       ])
 
+      // INVARIANT: every one of these ten is zero-touch, which is what pushing a branch and then
+      // opening the pull request looks like — a workflow habit, present in repositories with no
+      // agent at all. Granting `never-once-framed` from it would hand the scale's top observable
+      // rank to an absence. This source reads no authorship, so it answers the corrective ranks
+      // only, and `key-steps` is the highest it can reach.
       await expect(readForgeDerivedMetrics(SLUG, null, NEVER_ABORTED)).resolves.toMatchObject({
-        intervention: 'never-once-framed',
+        intervention: 'key-steps',
       })
     },
     A_LONG_TIME,

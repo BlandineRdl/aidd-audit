@@ -91,7 +91,7 @@ export async function readForgeDerivedMetrics(
   signal: AbortSignal,
 ): Promise<ForgeDerivedMetrics> {
   const merged = await readMergedPullRequests(slug, signal)
-  if (merged.length === 0) return UNRECOVERABLE
+  if (merged === null || merged.length === 0) return UNRECOVERABLE
 
   const windowEnd =
     subjectActivityEnd ??
@@ -129,14 +129,17 @@ export async function readForgeDerivedMetrics(
   }
 }
 
+// INVARIANT: `null` whenever the walk could not be completed — an unreadable page, or the page cap
+// reached with more still offered. Every caller turns that into an evidence gap, because a partial
+// window is not a smaller repository.
 async function readMergedPullRequests(
   slug: RepositorySlug,
   signal: AbortSignal,
-): Promise<readonly MergedPullRequest[]> {
+): Promise<readonly MergedPullRequest[] | null> {
   const collected: MergedPullRequest[] = []
   let cursor: string | null = null
 
-  for (let page = 0; page < MAXIMUM_PAGES; page += 1) {
+  for (let pageIndex = 0; pageIndex < MAXIMUM_PAGES; pageIndex += 1) {
     const args = [
       'api',
       'graphql',
@@ -151,13 +154,17 @@ async function readMergedPullRequests(
       ...(cursor === null ? [] : ['-F', `after=${cursor}`]),
     ]
 
-    const page_ = readPage(await runGh(args, signal))
-    collected.push(...page_.nodes)
-    if (!page_.hasNextPage || page_.endCursor === null) break
-    cursor = page_.endCursor
+    const page = readPage(await runGh(args, signal))
+    if (page === null) return null
+    collected.push(...page.nodes)
+    if (!page.hasNextPage || page.endCursor === null) return collected
+    cursor = page.endCursor
   }
 
-  return collected
+  // LIMITATION: the walk hit the page cap with the forge still offering more, so the window is
+  // knowingly incomplete. Publishing a median from it would describe part of the period as if it
+  // were the whole, so nothing is published at all.
+  return null
 }
 
 interface Page {
@@ -166,21 +173,22 @@ interface Page {
   readonly endCursor: string | null
 }
 
-const EMPTY_PAGE: Page = { nodes: [], hasNextPage: false, endCursor: null }
-
-// SAFETY: A payload that is not the shape asked for yields an empty page rather than a throw or a
-// partial read. The forge answered something this code cannot interpret, which is an evidence gap.
-function readPage(stdout: string): Page {
+// SAFETY: `null` is a page the forge answered with something this code cannot interpret, and it is
+// distinct from a page that legitimately held nothing. A payload that parsed but carried no
+// connection — `{"data":{"repository":null},"errors":[…]}`, which `gh` returns with exit 0 — used to
+// become an empty page whose `hasNextPage: false` ended the walk, and the metrics were then computed
+// from a knowingly truncated window and published as if it were whole.
+function readPage(stdout: string): Page | null {
   let document: unknown
   try {
     document = JSON.parse(stdout)
   } catch {
-    return EMPTY_PAGE
+    return null
   }
 
   const connection = objectAt(objectAt(objectAt(document, 'data'), 'repository'), 'pullRequests')
   const nodes = objectAt(connection, 'nodes')
-  if (!Array.isArray(nodes)) return EMPTY_PAGE
+  if (!Array.isArray(nodes)) return null
 
   const pageInfo = objectAt(connection, 'pageInfo')
   return {
@@ -269,14 +277,21 @@ function readDemonstratedSize(
 // pull request once the work is finished this counts a correction; on one that opens a draft and
 // keeps working it counts ordinary work, and the two are indistinguishable here. Measuring from the
 // first review would separate them, and needs a subject whose pull requests are reviewed.
+//
+// SAFETY: **the zero-touch route is deliberately not taken here.** `interventionFor` will grant
+// `never-once-framed` — "jamais, une fois la tâche cadrée", the top rank a source can observe and
+// Silver's requirement — when almost no delivery took a commit after opening. Nothing in this file
+// reads authorship, so on the ordinary workflow of pushing a branch and then opening the pull
+// request every delivery is zero-touch, and a repository with no agent involvement at all would be
+// credited with never having been touched by a human. That is granting the scale's top rank from an
+// absence, which is the one thing the conservative rule forbids outright. The live collector reaches
+// the same value only where every absorbed commit is attributed to an agent, and a bundle only from
+// a field that records human edit by name. Passing `null` keeps this source to the three corrective
+// ranks it can actually see.
 function readIntervention(inWindow: readonly MergedPullRequest[]): string | null {
   if (inWindow.length < MINIMUM_DELIVERED_CHANGES) return null
 
-  const untouched = inWindow.filter((request) => request.commitsAfterOpen === 0).length
-  return interventionFor(
-    median(inWindow.map((request) => request.commitsAfterOpen)),
-    untouched / inWindow.length,
-  )
+  return interventionFor(median(inWindow.map((request) => request.commitsAfterOpen)), null)
 }
 
 // INVARIANT: How many distinct pull requests received a commit, on each day one did. This is the

@@ -35,7 +35,11 @@ export function runGh(args: readonly string[], signal: AbortSignal): Promise<str
           return
         }
 
-        reject(new GhCommandFailedError(args, stderr))
+        // SAFETY: an overflowing buffer, a missing binary and a killed child all arrive here with
+        // empty stderr, and `provenance` publishes this message as the reason a source refused. The
+        // spawn's own message is what separates them; without it every one of them reads "no
+        // stderr", which tells a reader nothing about what to fix.
+        reject(new GhCommandFailedError(args, stderr === '' ? error.message : stderr))
       },
     )
   })

@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import type { AxisVocabulary } from '../models/axis.model.js'
 import type { Observation } from '../models/observation.model.js'
 import { FixtureBundleEvidenceCollector } from './fixture-bundle.adapter.js'
+import { InconsistentRecordError } from './fixture-bundle/inconsistent-record.error.js'
 
 const AIDD_VOCABULARY: readonly AxisVocabulary[] = [
   { axis: 'size', kind: 'ordinal', values: ['none', 'S', 'M', 'L', 'XL'] },
@@ -239,11 +240,12 @@ describe('the recorded delivery answers three axes', () => {
       ),
     })
 
-    // INVARIANT: a bundle is a recording, and an inconsistent recording is not evidence. Averaging
-    // the two halves would publish a number neither of them states.
-    const observations = await collectFrom(path)
-    expect(observations.filter((entry) => entry.reading === 'DEMONSTRATED')).toEqual([])
-    expect(valueFor(observations, 'parallelism')).toBe(4)
+    // INVARIANT: named, not dropped. Dropping it would be indistinguishable from a bundle that
+    // recorded no distribution at all, and the reader would never learn the record was wrong. The
+    // rejection carries both numbers, so the message says which halves disagree.
+    await expect(collectFrom(path)).rejects.toBeInstanceOf(InconsistentRecordError)
+    await expect(collectFrom(path)).rejects.toThrow(/median of 4/)
+    await expect(collectFrom(path)).rejects.toThrow(/yields 1/)
   })
 
   it('reports a period that delivered nothing as such, not as a gap', async () => {

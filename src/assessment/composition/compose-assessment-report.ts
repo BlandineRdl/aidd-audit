@@ -79,7 +79,12 @@ function reportDemonstrated(
   proven: LevelResult | null,
   context: ProjectionContext,
 ): DemonstratedReport | null {
-  const observed = demonstrated.filter((entry) => entry.status === 'CONFIRMED')
+  // SAFETY: a confirmed reading whose demonstration was lost carries no share, and a level named
+  // from it would print with no frequency at all — the maximum wearing a habit's clothes. Dropped
+  // here rather than later, so `level` and `axes` cannot disagree about whether anything was shown.
+  const observed = demonstrated.filter(
+    (entry) => entry.status === 'CONFIRMED' && entry.demonstration !== null,
+  )
   if (observed.length === 0) return null
 
   const projection = model.axes.map((axis) => {

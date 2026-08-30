@@ -378,8 +378,9 @@ describe('what the subject reached is composed beside what it sustains', () => {
     }
 
     // INVARIANT: a demonstrated value the reader cannot weigh is the maximum this reading exists to
-    // avoid. It is dropped from `axes` rather than published at a fabricated share.
-    expect(compose([...evidenceOf(), shareless]).demonstrated?.axes).toEqual([])
+    // avoid. Dropping it from `axes` alone would leave a level named with no frequency under it, so
+    // the whole block goes: `level` and `axes` can never disagree about whether anything was shown.
+    expect(compose([...evidenceOf(), shareless]).demonstrated).toBeNull()
   })
 
   it('composes an axis demonstrated but never sustained, rather than failing on it', () => {

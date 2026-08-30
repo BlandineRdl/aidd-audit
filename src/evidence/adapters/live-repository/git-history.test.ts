@@ -639,7 +639,7 @@ describe('readGitDerivedMetrics, when merges are not the delivery record', () =>
   )
 
   it(
-    'still reads intervention from a history whose merges are a minority',
+    'withholds intervention too from a history whose merges are a minority',
     async () => {
       const repository = await repositoryWithABaseCommit(DAY(1))
       for (let index = 1; index <= 5; index += 1) {
@@ -656,11 +656,13 @@ describe('readGitDerivedMetrics, when merges are not the delivery record', () =>
         )
       }
 
-      // INVARIANT: the share governs what the merge graph can say about branch shape. Intervention
-      // reads authorship, which squashing does not erase, so it answers as it always did.
+      // INVARIANT: all five merges here are agent-authored, so the autonomy share is 1.0 and the
+      // top rank would be granted — from five deliveries out of twenty-one landings. A squashed
+      // delivery leaves no side to read, so it cannot contribute; reading the survivors anyway
+      // would grant the scale's top rank from exactly the minority the share guard just rejected.
       await expect(readGitDerivedMetrics(repository, NEVER_ABORTED)).resolves.toEqual({
         sizeBucket: null,
-        intervention: 'never-once-framed',
+        intervention: null,
         parallelism: null,
       })
     },

@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { type DemonstratedValue, demonstratedCountFrom } from '../delivery-sample.js'
+import { InconsistentRecordError } from './inconsistent-record.error.js'
 import { interventionFor } from '../intervention-scale.js'
 import { bucketForFiles, bucketForLines, lowerBucket } from '../size-buckets.js'
 
@@ -71,9 +72,10 @@ function readIntervention(pullRequests: unknown, total: number | null): string |
 // carried it, which is the distribution behind the recorded median. It goes through the same rule
 // the forge collector applies, so the two collectors cannot answer this question differently.
 //
-// SAFETY: a record whose distribution does not support its own recorded median is refused rather
-// than reconciled. A bundle is a recording, and an inconsistent recording is not evidence of
-// anything; averaging the two would publish a number neither half of the record states.
+// SAFETY: a record whose distribution does not support its own recorded median is refused **by
+// name**, not dropped. Dropping it would be indistinguishable from a bundle that recorded no
+// distribution at all, and the reader would never learn the record was wrong. Throwing reaches
+// `provenance` as `FAILED` with the two numbers in the message, which is the only channel that does.
 function readDemonstratedParallelism(parallelism: unknown): DemonstratedValue<number> | null {
   const days = objectAt(parallelism, 'days_at_concurrency')
   if (typeof days !== 'object' || days === null || Array.isArray(days)) return null
@@ -90,7 +92,12 @@ function readDemonstratedParallelism(parallelism: unknown): DemonstratedValue<nu
   if (daysAtConcurrency.size === 0) return null
 
   const recorded = numberAt(parallelism, 'median_concurrent_branches')
-  if (recorded !== null && medianOfCounts(daysAtConcurrency) !== recorded) return null
+  const fromDistribution = medianOfCounts(daysAtConcurrency)
+  if (recorded !== null && fromDistribution !== recorded) {
+    throw new InconsistentRecordError(
+      `parallelism records a median of ${recorded}, and its days_at_concurrency yields ${fromDistribution}.`,
+    )
+  }
 
   return demonstratedCountFrom(daysAtConcurrency)
 }

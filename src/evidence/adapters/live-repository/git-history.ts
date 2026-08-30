@@ -90,8 +90,12 @@ export async function readGitDerivedMetrics(
     (commit) => !isDeliveredChange(commit) && inWindow(commit.authorDate),
   )
 
-  // SAFETY: Both branch-derived axes stand or fall together, because they read the same graph. The
-  // intervention axis is deliberately outside: it reads authorship, which squashing does not erase.
+  // SAFETY: All three axes stand or fall together, because all three read the merge graph.
+  // `readAutonomy` reads the authorship of the commits a merge absorbed, and a squash absorbs
+  // nothing: a squashed delivery is not among `deliveredInWindow` at all, so it neither contributes
+  // to the share nor counts against it, while the same landing does sit in the denominator that
+  // decides whether merges are the delivery record. Reading it anyway would grant the scale's top
+  // rank from the very minority the guard below just decided is not the record.
   const readsBranchShape = mergesCarryTheDeliveries(
     deliveredInWindow.length,
     landedDirectlyInWindow.length,
@@ -99,7 +103,7 @@ export async function readGitDerivedMetrics(
 
   const sizeBucket = readsBranchShape ? await readSizeBucket(path, deliveredInWindow, signal) : null
 
-  const intervention = await readAutonomy(path, deliveredInWindow, signal)
+  const intervention = readsBranchShape ? await readAutonomy(path, deliveredInWindow, signal) : null
 
   const parallelism = readsBranchShape
     ? await readParallelism(path, walk, merges, inWindow, signal)

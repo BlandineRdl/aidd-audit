@@ -54,10 +54,20 @@ function renderProvenSection(report: AssessmentReport): string {
 function renderDemonstratedSection(report: AssessmentReport): string {
   const { demonstrated, proven } = report
   if (demonstrated === null || demonstrated.level === null) return ''
-  if (proven !== null && demonstrated.level.rank <= proven.rank) return ''
 
+  // SAFETY: no ceiling without a floor. With `proven` null this section would print the only level
+  // in the document, on a page that says in the same breath that the subject could not be
+  // classified and that the axis was never observed — handing a rank-4 label to a subject the tool
+  // declined to place. A demonstrated level says "further than usual"; with no usual, it says
+  // nothing that can be read safely.
+  if (proven === null) return ''
+  if (demonstrated.level.rank <= proven.rank) return ''
+
+  // SAFETY: the level line ends in a colon and never stands alone. A reader who takes only the first
+  // line of a paragraph must not come away with a bare rank: the sentence is unfinished without the
+  // lines beneath it, each of which carries the share that earned the level.
   return [
-    `Demonstrated: ${demonstrated.level.label} (rank ${demonstrated.level.rank})`,
+    `Demonstrated: ${demonstrated.level.label} (rank ${demonstrated.level.rank}), reached on:`,
     ...demonstrated.axes.map((axis) => `  ${renderDemonstratedAxis(axis, report)}`),
   ].join('\n')
 }

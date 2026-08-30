@@ -595,10 +595,15 @@ describe('12. what the subject reached is reported beneath what it holds, never 
 
   it('never states a demonstrated value without the share that earned it', () => {
     const paragraph = demonstratedParagraph(withDemonstrated()) ?? ''
+    const [level, ...axes] = paragraph.split('\n')
 
     // INVARIANT: the clause most likely to be dropped in a later edit, so it is asserted per line
-    // rather than once for the paragraph.
-    for (const line of paragraph.split('\n').slice(1)) {
+    // rather than once for the paragraph — the level line included. That line carries no share of
+    // its own, so it must not read as a finished sentence: it ends in a colon and is followed by at
+    // least one line that does carry one.
+    expect(level).toMatch(/reached on:$/)
+    expect(axes.length).toBeGreaterThan(0)
+    for (const line of axes) {
       expect(line).toMatch(/reached on \d+% of /)
     }
   })
@@ -615,6 +620,25 @@ describe('12. what the subject reached is reported beneath what it holds, never 
 
     expect(paragraph).not.toContain('0.398')
     expect(paragraph).toContain('40%')
+  })
+
+  it('says nothing at all when no level could be established at all', () => {
+    const output = renderHumanReport(
+      assessmentReport({
+        proven: null,
+        levels: [copper],
+        demonstrated: {
+          level: copper,
+          axes: [{ axis: 'parallelism', observed: 3, share: 0.44, unit: 'ACTIVE_DAYS' }],
+        },
+      }),
+    )
+
+    // INVARIANT: no ceiling without a floor. Printed here it would be the only level in a document
+    // that says the subject could not be classified, handing a rank-4 label to a subject the tool
+    // declined to place — the "quoted alone" failure this section exists to prevent.
+    expect(output).toContain('could not be established')
+    expect(output).not.toContain('Demonstrated:')
   })
 
   it('says nothing at all when the subject demonstrated no more than it holds', () => {
