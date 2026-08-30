@@ -7703,137 +7703,7 @@ function levelAbove(levels, proven) {
 // src/assessment/contracts/assessment-report.contract.ts
 var ASSESSMENT_REPORT_SCHEMA_VERSION = 1;
 
-// src/assessment/composition/undeclared-axis.error.ts
-var UndeclaredAxisError = class extends Error {
-};
-
-// src/assessment/composition/compose-assessment-report.ts
-function composeAssessmentReport(input) {
-  const { model, evidence, subjectPath, provenance, diagnostics = [] } = input;
-  requireDeclaredAxes2(model, evidence);
-  const sustained = evidence.filter((entry) => entry.reading === "SUSTAINED");
-  const demonstrated2 = evidence.filter((entry) => entry.reading === "DEMONSTRATED");
-  const check = checkMaturity(model, sustained.map(toObservation));
-  const context = {
-    evidenceByAxis: new Map(sustained.map((entry) => [entry.axis, entry])),
-    diagnosticsByAxis: new Map(diagnostics.map((diagnostic) => [diagnostic.axis, diagnostic])),
-    labelsByAxis: new Map(model.axes.map((axis) => [axis.id, axis.label]))
-  };
-  const next = check.next === null ? null : reportLevel(check.next, context);
-  const proven = check.proven === null ? null : reportLevel(check.proven, context);
-  return {
-    schemaVersion: ASSESSMENT_REPORT_SCHEMA_VERSION,
-    model: { id: model.id, schemaVersion: model.schemaVersion },
-    subject: { path: subjectPath },
-    proven,
-    next,
-    demonstrated: reportDemonstrated(model, sustained, demonstrated2, check.proven, context),
-    levels: check.levels.map((level) => reportLevel(level, context)),
-    blocking: blockersOf(next),
-    vocabulary: reportVocabulary(model),
-    coverage: deriveCoverage(model, sustained),
-    provenance: provenance.map(toProvenanceEntry)
-  };
-}
-function reportVocabulary(model) {
-  return model.axes.map((axis) => {
-    const scale = scaleNamedBy(model, axis);
-    switch (scale.kind) {
-      case "ordinal":
-        return {
-          axis: axis.id,
-          kind: "ordinal",
-          values: scale.values,
-          descriptions: scale.descriptions
-        };
-      case "set":
-        return {
-          axis: axis.id,
-          kind: "set",
-          members: scale.members,
-          descriptions: scale.descriptions
-        };
-      case "numeric":
-        return { axis: axis.id, kind: "numeric", description: scale.description };
-    }
-  });
-}
-function reportDemonstrated(model, sustained, demonstrated2, proven, context) {
-  const observed = demonstrated2.filter(
-    (entry) => entry.status === "CONFIRMED" && entry.demonstration !== null
-  );
-  if (observed.length === 0) return null;
-  const projection = model.axes.map((axis) => {
-    const reached = observed.find((entry) => entry.axis === axis.id);
-    return reached ?? sustained.find((entry) => entry.axis === axis.id);
-  });
-  const check = checkMaturity(
-    model,
-    projection.filter((entry) => entry !== void 0).map(toObservation)
-  );
-  const level = highestOf(check.proven, proven);
-  return {
-    level: level === null ? null : namedLevel(level),
-    // INVARIANT: a confirmed demonstrated reading always carries its demonstration. Anything without
-    // one is dropped rather than published at a fabricated share, because a demonstrated value the
-    // reader cannot weigh is the maximum this whole reading exists to avoid.
-    axes: observed.flatMap(
-      (entry) => entry.demonstration === null ? [] : [
-        {
-          axis: entry.axis,
-          observed: entry.value,
-          share: entry.demonstration.share,
-          unit: entry.demonstration.unit
-        }
-      ]
-    )
-  };
-}
-function namedLevel(result) {
-  return {
-    id: result.level.id,
-    rank: result.level.rank,
-    label: result.level.label,
-    outcome: result.outcome
-  };
-}
-function highestOf(left, right) {
-  if (left === null) return right;
-  if (right === null) return left;
-  return left.level.rank >= right.level.rank ? left : right;
-}
-function deriveCoverage(model, evidence) {
-  return {
-    axesRequested: model.axes.length,
-    axesObserved: evidence.filter((entry) => entry.observations.length > 0).length,
-    axesConfirmed: evidence.filter((entry) => entry.status === "CONFIRMED").length
-  };
-}
-function toProvenanceEntry(entry) {
-  switch (entry.status) {
-    case "COMPLETED":
-      return { collector: entry.collector, status: "COMPLETED", axes: entry.axes };
-    case "FAILED":
-    case "TIMED_OUT":
-    case "SKIPPED":
-      return {
-        collector: entry.collector,
-        status: entry.status,
-        axes: entry.axes,
-        reason: entry.reason
-      };
-  }
-}
-function requireDeclaredAxes2(model, evidence) {
-  const declared = new Set(model.axes.map((axis) => axis.id));
-  for (const entry of evidence) {
-    if (!declared.has(entry.axis)) {
-      throw new UndeclaredAxisError(
-        `Evidence names an axis the model does not declare: '${entry.axis}'.`
-      );
-    }
-  }
-}
+// src/assessment/composition/report-projection.ts
 function toObservation(evidence) {
   switch (evidence.status) {
     case "CONFIRMED":
@@ -7949,10 +7819,203 @@ function blockersOf(next) {
     })
   );
 }
+function reportDemonstrated(model, sustained, demonstrated2, proven) {
+  const observed = demonstrated2.filter(
+    (entry) => entry.status === "CONFIRMED" && entry.demonstration !== null
+  );
+  if (observed.length === 0) return null;
+  const projection = model.axes.map((axis) => {
+    const reached = observed.find((entry) => entry.axis === axis.id);
+    return reached ?? sustained.find((entry) => entry.axis === axis.id);
+  });
+  const check = checkMaturity(
+    model,
+    projection.filter((entry) => entry !== void 0).map(toObservation)
+  );
+  const level = highestOf(check.proven, proven);
+  return {
+    level: level === null ? null : namedLevel(level),
+    // INVARIANT: a confirmed demonstrated reading always carries its demonstration. Anything without
+    // one is dropped rather than published at a fabricated share, because a demonstrated value the
+    // reader cannot weigh is the maximum this whole reading exists to avoid.
+    axes: observed.flatMap(
+      (entry) => entry.demonstration === null ? [] : [
+        {
+          axis: entry.axis,
+          observed: entry.value,
+          share: entry.demonstration.share,
+          unit: entry.demonstration.unit
+        }
+      ]
+    )
+  };
+}
+function namedLevel(result) {
+  return {
+    id: result.level.id,
+    rank: result.level.rank,
+    label: result.level.label,
+    outcome: result.outcome
+  };
+}
+function highestOf(left, right) {
+  if (left === null) return right;
+  if (right === null) return left;
+  return left.level.rank >= right.level.rank ? left : right;
+}
+
+// src/assessment/composition/compose-contributor-roster.ts
+function composeContributorRoster(input) {
+  const { model, run: run2 } = input;
+  if (run2 === null) return null;
+  if (run2.status !== "COMPLETED") {
+    return { status: run2.status, rows: [], reason: run2.reason };
+  }
+  const axes = model.axes.map((axis) => axis.id);
+  const rows = run2.records.map((record) => rowOf(model, axes, record));
+  rows.sort(compareRows);
+  return {
+    status: "COMPLETED",
+    windowDays: run2.windowDays,
+    harnessObserved: run2.harnessObserved,
+    harnessPaths: run2.harnessPaths,
+    rows
+  };
+}
+function rowOf(model, axes, record) {
+  const evidence = resolveEvidence(record.observations, axes);
+  const sustained = evidence.filter((entry) => entry.reading === "SUSTAINED");
+  const demonstrated2 = evidence.filter((entry) => entry.reading === "DEMONSTRATED");
+  const check = checkMaturity(model, sustained.map(toObservation));
+  const context = {
+    evidenceByAxis: new Map(sustained.map((entry) => [entry.axis, entry])),
+    // SAFETY: empty, and the reason is on `ProjectionContext` itself — a collector's diagnostic
+    // answers for the repository's collection, and no collector failed on a row.
+    diagnosticsByAxis: /* @__PURE__ */ new Map(),
+    labelsByAxis: new Map(model.axes.map((axis) => [axis.id, axis.label]))
+  };
+  const proven = check.proven === null ? null : reportLevel(check.proven, context);
+  const next = check.next === null ? null : reportLevel(check.next, context);
+  return {
+    account: record.account,
+    emailAddresses: record.emailAddresses,
+    commits: record.commits,
+    deliveries: record.deliveries,
+    activeDays: record.activeDays,
+    harnessAuthorship: record.harnessAuthorship,
+    proven,
+    next,
+    observed: sustained.map((entry) => ({
+      axis: entry.axis,
+      value: entry.status === "CONFIRMED" ? entry.value : null,
+      evidence: entry.status
+    })),
+    demonstrated: reportDemonstrated(model, sustained, demonstrated2, check.proven),
+    blocking: blockersOf(next)
+  };
+}
+function compareRows(left, right) {
+  if (left.account === null && right.account === null) return 0;
+  if (left.account === null) return 1;
+  if (right.account === null) return -1;
+  if (left.deliveries !== right.deliveries) return right.deliveries - left.deliveries;
+  if (left.account < right.account) return -1;
+  if (left.account > right.account) return 1;
+  return 0;
+}
+
+// src/assessment/composition/undeclared-axis.error.ts
+var UndeclaredAxisError = class extends Error {
+};
+
+// src/assessment/composition/compose-assessment-report.ts
+function composeAssessmentReport(input) {
+  const { model, evidence, subjectPath, provenance, diagnostics = [], roster } = input;
+  requireDeclaredAxes2(model, evidence);
+  const sustained = evidence.filter((entry) => entry.reading === "SUSTAINED");
+  const demonstrated2 = evidence.filter((entry) => entry.reading === "DEMONSTRATED");
+  const check = checkMaturity(model, sustained.map(toObservation));
+  const context = {
+    evidenceByAxis: new Map(sustained.map((entry) => [entry.axis, entry])),
+    diagnosticsByAxis: new Map(diagnostics.map((diagnostic) => [diagnostic.axis, diagnostic])),
+    labelsByAxis: new Map(model.axes.map((axis) => [axis.id, axis.label]))
+  };
+  const next = check.next === null ? null : reportLevel(check.next, context);
+  const proven = check.proven === null ? null : reportLevel(check.proven, context);
+  return {
+    schemaVersion: ASSESSMENT_REPORT_SCHEMA_VERSION,
+    model: { id: model.id, schemaVersion: model.schemaVersion },
+    subject: { path: subjectPath },
+    proven,
+    next,
+    demonstrated: reportDemonstrated(model, sustained, demonstrated2, check.proven),
+    levels: check.levels.map((level) => reportLevel(level, context)),
+    blocking: blockersOf(next),
+    vocabulary: reportVocabulary(model),
+    coverage: deriveCoverage(model, sustained),
+    provenance: provenance.map(toProvenanceEntry),
+    contributors: composeContributorRoster({ model, run: roster ?? null })
+  };
+}
+function reportVocabulary(model) {
+  return model.axes.map((axis) => {
+    const scale = scaleNamedBy(model, axis);
+    switch (scale.kind) {
+      case "ordinal":
+        return {
+          axis: axis.id,
+          kind: "ordinal",
+          values: scale.values,
+          descriptions: scale.descriptions
+        };
+      case "set":
+        return {
+          axis: axis.id,
+          kind: "set",
+          members: scale.members,
+          descriptions: scale.descriptions
+        };
+      case "numeric":
+        return { axis: axis.id, kind: "numeric", description: scale.description };
+    }
+  });
+}
+function deriveCoverage(model, evidence) {
+  return {
+    axesRequested: model.axes.length,
+    axesObserved: evidence.filter((entry) => entry.observations.length > 0).length,
+    axesConfirmed: evidence.filter((entry) => entry.status === "CONFIRMED").length
+  };
+}
+function toProvenanceEntry(entry) {
+  switch (entry.status) {
+    case "COMPLETED":
+      return { collector: entry.collector, status: "COMPLETED", axes: entry.axes };
+    case "FAILED":
+    case "TIMED_OUT":
+    case "SKIPPED":
+      return {
+        collector: entry.collector,
+        status: entry.status,
+        axes: entry.axes,
+        reason: entry.reason
+      };
+  }
+}
+function requireDeclaredAxes2(model, evidence) {
+  const declared = new Set(model.axes.map((axis) => axis.id));
+  for (const entry of evidence) {
+    if (!declared.has(entry.axis)) {
+      throw new UndeclaredAxisError(
+        `Evidence names an axis the model does not declare: '${entry.axis}'.`
+      );
+    }
+  }
+}
 
 // src/assessment/usecases/assess-maturity.usecase.ts
 async function assessMaturity(request) {
-  const { subjectPath, model, collectors, signal } = request;
+  const { subjectPath, model, collectors, roster, signal } = request;
   const vocabulary = axisVocabularyOf(model);
   const { evidence, provenance, diagnostics } = await collectEvidence({
     path: subjectPath,
@@ -7960,7 +8023,30 @@ async function assessMaturity(request) {
     collectors,
     signal
   });
-  return composeAssessmentReport({ subjectPath, model, evidence, provenance, diagnostics });
+  const run2 = await readRoster(roster, { path: subjectPath, vocabulary, signal });
+  return composeAssessmentReport({
+    subjectPath,
+    model,
+    evidence,
+    provenance,
+    diagnostics,
+    roster: run2
+  });
+}
+async function readRoster(roster, context) {
+  if (roster === void 0) return null;
+  try {
+    return await roster.read(context);
+  } catch (error) {
+    return {
+      status: context.signal.aborted ? "TIMED_OUT" : "FAILED",
+      records: [],
+      reason: reasonFor2(error)
+    };
+  }
+}
+function reasonFor2(error) {
+  return error instanceof Error ? error.message : String(error);
 }
 
 // src/evidence/adapters/fixture-bundle.adapter.ts
@@ -8228,9 +8314,6 @@ function decidedCapabilities(scan, scale) {
   return scan.capabilities.filter(rankable);
 }
 
-// src/evidence/adapters/harness/member-scan.ts
-var DECIDED_PRESENT = { proven: true, undecidable: false };
-
 // src/evidence/adapters/harness/capability-signals.ts
 var TRANSCRIPT_FILES = ["session.md", "prompt-history.md", ".aider.chat.history.md"];
 var TRANSCRIPT_DIRECTORIES = [".specstory/", ".claude/history/"];
@@ -8252,15 +8335,15 @@ var SETTINGS_FILES = [
   ".gemini/settings.json"
 ];
 function provesPrompts(tracked) {
-  return holdsFileNamedAnywhere(tracked, TRANSCRIPT_FILES) || holdsPathUnderRootDirectory(tracked, TRANSCRIPT_DIRECTORIES);
+  return matchingPaths(tracked, TRANSCRIPT_FILES, TRANSCRIPT_DIRECTORIES);
 }
 function provesContextEngineering(tracked) {
-  return holdsFileNamedAnywhere(tracked, CONTEXT_FILES) || holdsPathUnderRootDirectory(tracked, CONTEXT_DIRECTORIES);
+  return matchingPaths(tracked, CONTEXT_FILES, CONTEXT_DIRECTORIES);
 }
 async function provesBehavior(tree, tracked, signal) {
   const paths = tracked.map((entry) => entry.path);
-  if (holdsPathUnderRootDirectory(paths, BEHAVIOR_DIRECTORIES)) return DECIDED_PRESENT;
-  if (holdsFileNamedAnywhere(paths, BEHAVIOR_FILES)) return DECIDED_PRESENT;
+  const matched = matchingPaths(paths, BEHAVIOR_FILES, BEHAVIOR_DIRECTORIES);
+  if (matched.length > 0) return { paths: matched, undecidable: false };
   return declaresPermissions(tree, paths, signal);
 }
 async function declaresPermissions(tree, tracked, signal) {
@@ -8278,9 +8361,9 @@ async function declaresPermissions(tree, tracked, signal) {
       undecidable = true;
       continue;
     }
-    if (declaresPermissionList(document.value)) return DECIDED_PRESENT;
+    if (declaresPermissionList(document.value)) return { paths: [settings], undecidable: false };
   }
-  return { proven: false, undecidable };
+  return { paths: [], undecidable };
 }
 function parseSettings(content) {
   try {
@@ -8297,8 +8380,13 @@ function declaresPermissionList(settings) {
   return isNonEmptyArray(allow) || isNonEmptyArray(deny);
 }
 var isNonEmptyArray = (value) => Array.isArray(value) && value.length > 0;
-var holdsFileNamedAnywhere = (tracked, names) => tracked.some((file) => names.some((name) => file === name || file.endsWith(`/${name}`)));
-var holdsPathUnderRootDirectory = (tracked, directories) => tracked.some((file) => directories.some((directory) => file.startsWith(directory)));
+function matchingPaths(tracked, names, directories) {
+  return tracked.filter(
+    (file) => matchesFileNamedAnywhere(file, names) || matchesPathUnderRootDirectory(file, directories)
+  );
+}
+var matchesFileNamedAnywhere = (file, names) => names.some((name) => file === name || file.endsWith(`/${name}`));
+var matchesPathUnderRootDirectory = (file, directories) => directories.some((directory) => file.startsWith(directory));
 
 // src/evidence/adapters/harness/shell-tokens.ts
 function endOfCall(code, open3) {
@@ -8641,6 +8729,9 @@ function hasShellShebang(head) {
 }
 var hasShellExtension = (file) => SHELL_EXTENSIONS.some((extension) => file.endsWith(extension));
 
+// src/evidence/adapters/harness/member-scan.ts
+var DECIDED_PRESENT = { proven: true, undecidable: false };
+
 // src/evidence/adapters/harness/shell-loop.ts
 function readShellLoops(source) {
   const noise = stripShellNoise(source);
@@ -8830,35 +8921,58 @@ var HARNESS_MEMBERS = [
   "behavior",
   "loops"
 ];
+var NOTHING_PROVEN = { kind: "nothing" };
+var proofOf = (paths) => paths.length > 0 ? { kind: "files", paths } : NOTHING_PROVEN;
 async function scanHarness(tree, hasAiAttributionTrailer2, signal) {
   signal.throwIfAborted();
   const tracked = await tree.entries();
   const paths = tracked.map((entry) => entry.path);
   const capabilities = [];
   const undecidable = /* @__PURE__ */ new Set();
-  if (hasAiAttributionTrailer2 === true || provesPrompts(paths)) capabilities.push("prompts");
-  if (hasAiAttributionTrailer2 === null) undecidable.add("prompts");
-  if (provesContextEngineering(paths)) capabilities.push("context-engineering");
+  const provenBy = {
+    prompts: NOTHING_PROVEN,
+    "context-engineering": NOTHING_PROVEN,
+    behavior: NOTHING_PROVEN,
+    loops: NOTHING_PROVEN
+  };
+  const promptPaths = provesPrompts(paths);
+  if (promptPaths.length > 0) {
+    capabilities.push("prompts");
+    provenBy.prompts = { kind: "files", paths: promptPaths };
+  } else if (hasAiAttributionTrailer2 === true) {
+    capabilities.push("prompts");
+    provenBy.prompts = { kind: "commit-trailer" };
+  } else if (hasAiAttributionTrailer2 === null) {
+    undecidable.add("prompts");
+  }
+  const contextPaths = provesContextEngineering(paths);
+  if (contextPaths.length > 0) {
+    capabilities.push("context-engineering");
+    provenBy["context-engineering"] = { kind: "files", paths: contextPaths };
+  }
   signal.throwIfAborted();
   const behavior = await provesBehavior(tree, tracked, signal);
-  if (behavior.proven) capabilities.push("behavior");
+  if (behavior.paths.length > 0) capabilities.push("behavior");
   if (behavior.undecidable) undecidable.add("behavior");
+  provenBy.behavior = proofOf(behavior.paths);
   signal.throwIfAborted();
   const scripts = await scanScripts(tree, tracked, signal);
-  if (scripts.proven) capabilities.push("loops");
+  if (scripts.paths.length > 0) capabilities.push("loops");
   if (scripts.undecidable) undecidable.add("loops");
+  provenBy.loops = proofOf(scripts.paths);
   return {
     capabilities,
     undecidable: HARNESS_MEMBERS.filter(
       (member) => undecidable.has(member) && !capabilities.includes(member)
-    )
+    ),
+    provenBy
   };
 }
 async function scanScripts(tree, tracked, signal) {
-  let loops = false;
+  let provingPath = null;
   let undecidable = false;
   for (const entry of tracked) {
-    if (loops) break;
+    if (provingPath !== null) break;
     signal.throwIfAborted();
     if (!entry.regularFile) continue;
     const candidate = await readScriptCandidate(tree, entry.path, entry.executable);
@@ -8869,13 +8983,13 @@ async function scanScripts(tree, tracked, signal) {
     }
     if (candidate.shell || hasShellExtension(entry.path)) {
       const shell = readShellLoops(candidate.content);
-      if (shell.proven) loops = true;
+      if (shell.proven) provingPath = entry.path;
       if (shell.undecidable) undecidable = true;
     } else if (looksLikeAnAgentInvocation(candidate.content)) {
       undecidable = true;
     }
   }
-  return { proven: loops, undecidable };
+  return { paths: provingPath === null ? [] : [provingPath], undecidable };
 }
 
 // src/evidence/adapters/fixture-bundle.adapter.ts
@@ -8990,6 +9104,9 @@ function observation(axis, value, basis) {
   };
 }
 
+// src/evidence/models/harness-authorship.model.ts
+var NO_HARNESS_AUTHORSHIP = { files: 0, commits: 0 };
+
 // src/evidence/adapters/forge-repository/gh-process.ts
 import { execFile } from "child_process";
 
@@ -9034,62 +9151,28 @@ function runGh(args, signal, maxBuffer = GH_MAX_BUFFER) {
   });
 }
 
-// src/evidence/adapters/forge-repository/pull-request-history.ts
-var UNRECOVERABLE = {
-  sizeBucket: null,
-  demonstratedSize: null,
-  intervention: null,
-  demonstratedIntervention: null,
-  parallelism: null,
-  demonstratedParallelism: null,
-  activeDays: null
-};
-var PAGE_SIZE = 50;
+// src/evidence/adapters/forge-repository/commit-history.ts
+var PAGE_SIZE = 100;
 var MAXIMUM_PAGES = 20;
 var QUERY = `
-query($owner: String!, $name: String!, $size: Int!, $after: String) {
+query($owner: String!, $name: String!, $size: Int!, $since: GitTimestamp!, $after: String) {
   repository(owner: $owner, name: $name) {
-    pullRequests(states: MERGED, first: $size, orderBy: {field: CREATED_AT, direction: DESC}, after: $after) {
-      pageInfo { hasNextPage endCursor }
-      nodes {
-        createdAt
-        mergedAt
-        additions
-        deletions
-        changedFiles
-        author { __typename }
-        commits(first: 100) { nodes { commit { committedDate } } }
-      }
-    }
+    defaultBranchRef { target { ... on Commit {
+      history(first: $size, since: $since, after: $after) {
+        pageInfo { hasNextPage endCursor }
+        nodes { authoredDate author { name email user { login } } }
+      } } } }
   }
 }`;
-async function readForgeDerivedMetrics(slug, subjectActivityEnd, signal) {
-  const merged = await readMergedPullRequests(slug, signal);
-  if (merged === null || merged.length === 0) return UNRECOVERABLE;
-  const windowEnd = subjectActivityEnd ?? merged.reduce(
-    (latest, request) => Math.max(latest, Date.parse(request.mergedAt)),
-    Number.NEGATIVE_INFINITY
-  );
-  if (!Number.isFinite(windowEnd)) return UNRECOVERABLE;
-  const windowStart = windowStartFrom(windowEnd);
-  const inWindow = merged.filter((request) => {
-    if (request.openedByABot) return false;
-    const instant = Date.parse(request.mergedAt);
-    return Number.isFinite(instant) && instant >= windowStart && instant <= windowEnd;
-  });
-  const bucketPerDelivery = inWindow.map(bucketOf);
-  const requestsPerActiveDay = countRequestsPerActiveDay(inWindow);
-  return {
-    sizeBucket: readSizeBucket2(inWindow),
-    demonstratedSize: readDemonstratedSize(bucketPerDelivery),
-    intervention: readIntervention2(inWindow),
-    demonstratedIntervention: readDemonstratedIntervention(inWindow),
-    parallelism: readParallelism(requestsPerActiveDay),
-    demonstratedParallelism: readDemonstratedParallelism2(requestsPerActiveDay),
-    activeDays: requestsPerActiveDay.length
-  };
+async function readCommitHistory(slug, subjectActivityEnd, signal) {
+  if (subjectActivityEnd === null || !Number.isFinite(subjectActivityEnd)) return null;
+  const windowStart = windowStartFrom(subjectActivityEnd);
+  const commits = await readCommitPages(slug, new Date(windowStart).toISOString(), signal);
+  if (commits === null) return null;
+  return buildCommitHistory(commits, windowStart, subjectActivityEnd);
 }
-async function readMergedPullRequests(slug, signal) {
+async function readCommitPages(slug, since, signal) {
+  signal.throwIfAborted();
   const collected = [];
   let cursor = null;
   for (let pageIndex = 0; pageIndex < MAXIMUM_PAGES; pageIndex += 1) {
@@ -9104,6 +9187,8 @@ async function readMergedPullRequests(slug, signal) {
       `name=${slug.name}`,
       "-F",
       `size=${PAGE_SIZE}`,
+      "-F",
+      `since=${since}`,
       ...cursor === null ? [] : ["-F", `after=${cursor}`]
     ];
     const page = readPage(await runGh(args, signal));
@@ -9121,22 +9206,273 @@ function readPage(stdout) {
   } catch {
     return null;
   }
-  const connection = objectAt2(objectAt2(objectAt2(document, "data"), "repository"), "pullRequests");
+  const connection = objectAt2(
+    objectAt2(
+      objectAt2(objectAt2(objectAt2(document, "data"), "repository"), "defaultBranchRef"),
+      "target"
+    ),
+    "history"
+  );
   const nodes = objectAt2(connection, "nodes");
   if (!Array.isArray(nodes)) return null;
   const pageInfo = objectAt2(connection, "pageInfo");
   return {
     nodes: nodes.flatMap((node) => {
-      const request = readPullRequest(node);
-      return request === null ? [] : [request];
+      const commit = readRawCommit(node);
+      return commit === null ? [] : [commit];
     }),
     hasNextPage: objectAt2(pageInfo, "hasNextPage") === true,
     endCursor: stringAt(pageInfo, "endCursor")
   };
 }
+function readRawCommit(node) {
+  const authoredDate = stringAt(node, "authoredDate");
+  if (authoredDate === null) return null;
+  const author = objectAt2(node, "author");
+  return {
+    authoredDate,
+    email: stringAt(author, "email"),
+    login: stringAt(objectAt2(author, "user"), "login")
+  };
+}
+function buildCommitHistory(commits, windowStart, windowEnd) {
+  const commitsByAccount = /* @__PURE__ */ new Map();
+  const emailsByAccount = /* @__PURE__ */ new Map();
+  const accountsByEmail = /* @__PURE__ */ new Map();
+  for (const commit of commits) {
+    const instant = Date.parse(commit.authoredDate);
+    if (!Number.isFinite(instant) || instant < windowStart || instant > windowEnd) continue;
+    if (commit.login !== null && commit.login.endsWith("[bot]")) continue;
+    const account = commit.login;
+    commitsByAccount.set(account, (commitsByAccount.get(account) ?? 0) + 1);
+    if (account === null || commit.email === null) continue;
+    const email = commit.email.toLowerCase();
+    const accountsForEmail = accountsByEmail.get(email) ?? /* @__PURE__ */ new Set();
+    accountsForEmail.add(account);
+    accountsByEmail.set(email, accountsForEmail);
+    const emailsForAccount = emailsByAccount.get(account) ?? /* @__PURE__ */ new Set();
+    emailsForAccount.add(email);
+    emailsByAccount.set(account, emailsForAccount);
+  }
+  const accountByEmail = /* @__PURE__ */ new Map();
+  for (const [email, accounts] of accountsByEmail) {
+    if (accounts.size !== 1) continue;
+    const [account] = accounts;
+    if (account !== void 0) accountByEmail.set(email, account);
+  }
+  const emailAddressesByAccount = /* @__PURE__ */ new Map();
+  for (const [account, emails] of emailsByAccount) {
+    emailAddressesByAccount.set(account, emails.size);
+  }
+  return { commitsByAccount, accountByEmail, emailAddressesByAccount };
+}
+function objectAt2(document, key) {
+  if (typeof document !== "object" || document === null) return null;
+  return document[key];
+}
+function stringAt(document, key) {
+  const value = objectAt2(document, key);
+  return typeof value === "string" && value !== "" ? value : null;
+}
+
+// src/evidence/adapters/forge-repository/derived-observations.ts
+function deriveObservations(metrics, vocabulary, collectorId, basis) {
+  const sizeScale = scaleFor2(vocabulary, "size");
+  const interventionScale = scaleFor2(vocabulary, "intervention");
+  const parallelismScale = scaleFor2(vocabulary, "parallelism");
+  const observations = [];
+  if (metrics.sizeBucket !== null && sizeScale?.kind === "ordinal" && sizeScale.values.includes(metrics.sizeBucket)) {
+    observations.push(
+      observation2(collectorId, "size", metrics.sizeBucket, `median delivered change over ${basis}`)
+    );
+  }
+  if (metrics.demonstratedSize !== null && sizeScale?.kind === "ordinal" && sizeScale.values.includes(metrics.demonstratedSize.value)) {
+    observations.push(
+      demonstrated(
+        collectorId,
+        "size",
+        metrics.demonstratedSize.value,
+        { share: metrics.demonstratedSize.share, unit: "DELIVERIES" },
+        `size reached by at least a third of ${basis}`
+      )
+    );
+  }
+  if (metrics.intervention !== null && interventionScale?.kind === "ordinal" && interventionScale.values.includes(metrics.intervention)) {
+    observations.push(
+      observation2(
+        collectorId,
+        "intervention",
+        metrics.intervention,
+        `median corrective commits after opening, over ${basis}`
+      )
+    );
+  }
+  if (metrics.demonstratedIntervention !== null && interventionScale?.kind === "ordinal" && interventionScale.values.includes(metrics.demonstratedIntervention.value)) {
+    observations.push(
+      demonstrated(
+        collectorId,
+        "intervention",
+        metrics.demonstratedIntervention.value,
+        { share: metrics.demonstratedIntervention.share, unit: "DELIVERIES" },
+        `corrective commits after opening, over ${basis}`
+      )
+    );
+  }
+  if (metrics.parallelism !== null && parallelismScale?.kind === "numeric") {
+    observations.push(
+      observation2(
+        collectorId,
+        "parallelism",
+        metrics.parallelism,
+        `median, over active days, of distinct ${basis} receiving a commit`
+      )
+    );
+  }
+  if (metrics.demonstratedParallelism !== null && parallelismScale?.kind === "numeric") {
+    observations.push(
+      demonstrated(
+        collectorId,
+        "parallelism",
+        metrics.demonstratedParallelism.value,
+        { share: metrics.demonstratedParallelism.share, unit: "ACTIVE_DAYS" },
+        `concurrent ${basis} carried on at least a third of active days`
+      )
+    );
+  }
+  return observations;
+}
+function scaleFor2(vocabulary, axis) {
+  return vocabulary.find((scale) => scale.axis === axis);
+}
+function observation2(collectorId, axis, value, basis) {
+  return {
+    axis,
+    reading: "SUSTAINED",
+    value,
+    kind: "OBSERVED",
+    collector: collectorId,
+    basis,
+    demonstration: null
+  };
+}
+function demonstrated(collectorId, axis, value, demonstration, basis) {
+  return {
+    axis,
+    reading: "DEMONSTRATED",
+    value,
+    kind: "OBSERVED",
+    collector: collectorId,
+    basis,
+    demonstration
+  };
+}
+
+// src/evidence/adapters/forge-repository/pull-request-history.ts
+var UNRECOVERABLE = {
+  sizeBucket: null,
+  demonstratedSize: null,
+  intervention: null,
+  demonstratedIntervention: null,
+  parallelism: null,
+  demonstratedParallelism: null,
+  activeDays: null
+};
+var PAGE_SIZE2 = 50;
+var MAXIMUM_PAGES2 = 20;
+var QUERY2 = `
+query($owner: String!, $name: String!, $size: Int!, $after: String) {
+  repository(owner: $owner, name: $name) {
+    pullRequests(states: MERGED, first: $size, orderBy: {field: CREATED_AT, direction: DESC}, after: $after) {
+      pageInfo { hasNextPage endCursor }
+      nodes {
+        createdAt
+        mergedAt
+        additions
+        deletions
+        changedFiles
+        author { __typename login }
+        commits(first: 100) { nodes { commit { committedDate } } }
+      }
+    }
+  }
+}`;
+async function readDeliveredChanges(slug, subjectActivityEnd, signal) {
+  const merged = await readMergedPullRequests(slug, signal);
+  if (merged === null) return null;
+  const windowEnd = subjectActivityEnd ?? merged.reduce(
+    (latest, request) => Math.max(latest, Date.parse(request.mergedAt)),
+    Number.NEGATIVE_INFINITY
+  );
+  if (!Number.isFinite(windowEnd)) return null;
+  const windowStart = windowStartFrom(windowEnd);
+  return merged.filter((request) => {
+    if (request.openedByABot) return false;
+    const instant = Date.parse(request.mergedAt);
+    return Number.isFinite(instant) && instant >= windowStart && instant <= windowEnd;
+  });
+}
+function deriveForgeMetrics(deliveries) {
+  if (deliveries === null) return UNRECOVERABLE;
+  const bucketPerDelivery = deliveries.map(bucketOf);
+  const requestsPerActiveDay = countRequestsPerActiveDay(deliveries);
+  return {
+    sizeBucket: readSizeBucket2(deliveries),
+    demonstratedSize: readDemonstratedSize(bucketPerDelivery),
+    intervention: readIntervention2(deliveries),
+    demonstratedIntervention: readDemonstratedIntervention(deliveries),
+    parallelism: readParallelism(requestsPerActiveDay),
+    demonstratedParallelism: readDemonstratedParallelism2(requestsPerActiveDay),
+    activeDays: requestsPerActiveDay.length
+  };
+}
+async function readMergedPullRequests(slug, signal) {
+  const collected = [];
+  let cursor = null;
+  for (let pageIndex = 0; pageIndex < MAXIMUM_PAGES2; pageIndex += 1) {
+    const args = [
+      "api",
+      "graphql",
+      "-f",
+      `query=${QUERY2}`,
+      "-F",
+      `owner=${slug.owner}`,
+      "-F",
+      `name=${slug.name}`,
+      "-F",
+      `size=${PAGE_SIZE2}`,
+      ...cursor === null ? [] : ["-F", `after=${cursor}`]
+    ];
+    const page = readPage2(await runGh(args, signal));
+    if (page === null) return null;
+    collected.push(...page.nodes);
+    if (!page.hasNextPage || page.endCursor === null) return collected;
+    cursor = page.endCursor;
+  }
+  return null;
+}
+function readPage2(stdout) {
+  let document;
+  try {
+    document = JSON.parse(stdout);
+  } catch {
+    return null;
+  }
+  const connection = objectAt3(objectAt3(objectAt3(document, "data"), "repository"), "pullRequests");
+  const nodes = objectAt3(connection, "nodes");
+  if (!Array.isArray(nodes)) return null;
+  const pageInfo = objectAt3(connection, "pageInfo");
+  return {
+    nodes: nodes.flatMap((node) => {
+      const request = readPullRequest(node);
+      return request === null ? [] : [request];
+    }),
+    hasNextPage: objectAt3(pageInfo, "hasNextPage") === true,
+    endCursor: stringAt2(pageInfo, "endCursor")
+  };
+}
 function readPullRequest(node) {
-  const mergedAt = stringAt(node, "mergedAt");
-  const createdAt = stringAt(node, "createdAt");
+  const mergedAt = stringAt2(node, "mergedAt");
+  const createdAt = stringAt2(node, "createdAt");
   const additions = numberAt2(node, "additions");
   const deletions = numberAt2(node, "deletions");
   const files = numberAt2(node, "changedFiles");
@@ -9154,15 +9490,19 @@ function readPullRequest(node) {
     commitsAfterOpen: commitDates.filter((date) => date > createdAt).length,
     // COMPAT: GitHub types a pull request's author, and a GitHub App comes back as `Bot`. That is a
     // structural fact rather than a name, so no list of bot logins has to be kept correct here —
-    // `renovate` and `dependabot` do not even carry a `[bot]` suffix on this field.
-    openedByABot: stringAt(objectAt2(node, "author"), "__typename") === "Bot"
+    // `renovate` and `dependabot` do not even carry a `[bot]` suffix on this field. `login` is read
+    // from the same node and decides nothing here: it names whose sample a delivery belongs to,
+    // never whether the delivery counts at all.
+    openedByABot: stringAt2(objectAt3(node, "author"), "__typename") === "Bot",
+    // `null` here is nobody GitHub can name: a deleted account, no author, or an empty login.
+    openedBy: stringAt2(objectAt3(node, "author"), "login")
   };
 }
 function readCommitDates(node) {
-  const nodes = objectAt2(objectAt2(node, "commits"), "nodes");
+  const nodes = objectAt3(objectAt3(node, "commits"), "nodes");
   if (!Array.isArray(nodes)) return [];
   return nodes.flatMap((entry) => {
-    const date = stringAt(objectAt2(entry, "commit"), "committedDate");
+    const date = stringAt2(objectAt3(entry, "commit"), "committedDate");
     return date === null ? [] : [date];
   });
 }
@@ -9219,17 +9559,49 @@ function readDemonstratedParallelism2(perActiveDay) {
   }
   return demonstratedCountFrom(daysAtConcurrency);
 }
-function objectAt2(document, key) {
+function objectAt3(document, key) {
   if (typeof document !== "object" || document === null) return null;
   return document[key];
 }
 function numberAt2(document, key) {
-  const value = objectAt2(document, key);
+  const value = objectAt3(document, key);
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
-function stringAt(document, key) {
-  const value = objectAt2(document, key);
+function stringAt2(document, key) {
+  const value = objectAt3(document, key);
   return typeof value === "string" && value !== "" ? value : null;
+}
+
+// src/evidence/adapters/forge-repository/contributor-deliveries.ts
+var ROSTER_COLLECTOR_ID = "forge-contributor-roster";
+function readContributorDeliveries(deliveries, vocabulary) {
+  const byAccount = /* @__PURE__ */ new Map();
+  for (const delivery of deliveries) {
+    if (delivery.openedByABot) continue;
+    const bucket = byAccount.get(delivery.openedBy);
+    if (bucket === void 0) {
+      byAccount.set(delivery.openedBy, [delivery]);
+    } else {
+      bucket.push(delivery);
+    }
+  }
+  return [...byAccount.entries()].map(
+    ([account, ownDeliveries]) => readOneAccount(account, ownDeliveries, vocabulary)
+  );
+}
+function readOneAccount(account, ownDeliveries, vocabulary) {
+  const metrics = deriveForgeMetrics(ownDeliveries);
+  const basis = account === null ? "merged pull requests with no named author" : `merged pull requests opened by ${account}`;
+  return {
+    account,
+    deliveryCount: ownDeliveries.length,
+    activeDays: distinctActiveDays(ownDeliveries),
+    metrics,
+    observations: deriveObservations(metrics, vocabulary, ROSTER_COLLECTOR_ID, basis)
+  };
+}
+function distinctActiveDays(ownDeliveries) {
+  return new Set(ownDeliveries.flatMap((delivery) => delivery.commitDays)).size;
 }
 
 // src/evidence/adapters/live-repository/git-process.ts
@@ -9344,142 +9716,78 @@ async function isRepositoryRoot(path, signal) {
   }
 }
 
-// src/evidence/adapters/forge-repository.adapter.ts
-var COLLECTOR_ID2 = "forge-repository";
-var ForgeRepositoryEvidenceCollector = class {
-  constructor(slug) {
-    this.slug = slug;
+// src/evidence/adapters/harness/harness-authorship.ts
+var RECORD = "";
+var FIELD = "";
+var PROVING_PATHS_PER_LOG_INVOCATION = 500;
+async function readHarnessAuthorship(path, provingPaths, accountForEmail, windowStart, signal) {
+  signal.throwIfAborted();
+  if (provingPaths.length === 0) return /* @__PURE__ */ new Map();
+  const accumulators = /* @__PURE__ */ new Map();
+  for (let from = 0; from < provingPaths.length; from += PROVING_PATHS_PER_LOG_INVOCATION) {
+    const chunk = provingPaths.slice(from, from + PROVING_PATHS_PER_LOG_INVOCATION);
+    signal.throwIfAborted();
+    let stdout;
+    try {
+      stdout = await runGit(path, logArgsFor(chunk), signal);
+    } catch (error) {
+      if (signal.aborted) throw error;
+      return null;
+    }
+    for (const record of parseRecords(stdout)) {
+      const instant = Date.parse(record.authorDate);
+      if (!Number.isFinite(instant) || instant < windowStart) continue;
+      const account = accountForEmail(record.email);
+      const accumulator = accumulators.get(account) ?? {
+        commitHashes: /* @__PURE__ */ new Set(),
+        filePaths: /* @__PURE__ */ new Set()
+      };
+      accumulator.commitHashes.add(record.hash);
+      for (const provingPath of record.paths) accumulator.filePaths.add(provingPath);
+      accumulators.set(account, accumulator);
+    }
   }
-  slug;
-  id = COLLECTOR_ID2;
-  supportedAxes = ["size", "intervention", "parallelism"];
-  async collect(context) {
-    context.signal.throwIfAborted();
-    const sizeScale = scaleFor2(context.vocabulary, "size");
-    const interventionScale = scaleFor2(context.vocabulary, "intervention");
-    const parallelismScale = scaleFor2(context.vocabulary, "parallelism");
-    if (sizeScale === void 0 && interventionScale === void 0 && parallelismScale === void 0) {
-      return { observations: [], diagnostics: [] };
-    }
-    const metrics = await readForgeDerivedMetrics(
-      this.slug,
-      await mostRecentCommitDate(context.path, context.signal),
-      context.signal
-    );
-    const observations = [];
-    const basis = `merged pull requests of ${this.slug.owner}/${this.slug.name}`;
-    if (metrics.sizeBucket !== null && sizeScale?.kind === "ordinal" && sizeScale.values.includes(metrics.sizeBucket)) {
-      observations.push(
-        observation2("size", metrics.sizeBucket, `median delivered change over ${basis}`)
-      );
-    }
-    if (metrics.demonstratedSize !== null && sizeScale?.kind === "ordinal" && sizeScale.values.includes(metrics.demonstratedSize.value)) {
-      observations.push(
-        demonstrated(
-          "size",
-          metrics.demonstratedSize.value,
-          { share: metrics.demonstratedSize.share, unit: "DELIVERIES" },
-          `size reached by at least a third of ${basis}`
-        )
-      );
-    }
-    if (metrics.intervention !== null && interventionScale?.kind === "ordinal" && interventionScale.values.includes(metrics.intervention)) {
-      observations.push(
-        observation2(
-          "intervention",
-          metrics.intervention,
-          `median corrective commits after opening, over ${basis}`
-        )
-      );
-    }
-    if (metrics.demonstratedIntervention !== null && interventionScale?.kind === "ordinal" && interventionScale.values.includes(metrics.demonstratedIntervention.value)) {
-      observations.push(
-        demonstrated(
-          "intervention",
-          metrics.demonstratedIntervention.value,
-          { share: metrics.demonstratedIntervention.share, unit: "DELIVERIES" },
-          `corrective commits after opening, over ${basis}`
-        )
-      );
-    }
-    if (metrics.parallelism !== null && parallelismScale?.kind === "numeric") {
-      observations.push(
-        observation2(
-          "parallelism",
-          metrics.parallelism,
-          `median, over active days, of distinct ${basis} receiving a commit`
-        )
-      );
-    }
-    if (metrics.demonstratedParallelism !== null && parallelismScale?.kind === "numeric") {
-      observations.push(
-        demonstrated(
-          "parallelism",
-          metrics.demonstratedParallelism.value,
-          { share: metrics.demonstratedParallelism.share, unit: "ACTIVE_DAYS" },
-          `concurrent ${basis} carried on at least a third of active days`
-        )
-      );
-    }
-    const diagnostics = [];
-    if (parallelismScale?.kind === "numeric" && metrics.parallelism === null && metrics.activeDays !== null && metrics.activeDays < MINIMUM_ACTIVE_DAYS) {
-      diagnostics.push({
-        collector: COLLECTOR_ID2,
-        axis: "parallelism",
-        reason: "INSUFFICIENT_ACTIVE_DAYS",
-        observed: metrics.activeDays,
-        minimum: MINIMUM_ACTIVE_DAYS
-      });
-    }
-    return { observations, diagnostics };
+  const authorship = /* @__PURE__ */ new Map();
+  for (const [account, accumulator] of accumulators) {
+    authorship.set(account, {
+      files: accumulator.filePaths.size,
+      commits: accumulator.commitHashes.size
+    });
   }
-};
-function scaleFor2(vocabulary, axis) {
-  return vocabulary.find((scale) => scale.axis === axis);
+  return authorship;
 }
-function observation2(axis, value, basis) {
-  return {
-    axis,
-    reading: "SUSTAINED",
-    value,
-    kind: "OBSERVED",
-    collector: COLLECTOR_ID2,
-    basis,
-    demonstration: null
-  };
+function logArgsFor(provingPaths) {
+  return [
+    "log",
+    "--full-history",
+    "--no-merges",
+    "--name-only",
+    "-z",
+    "--no-ext-diff",
+    "--no-textconv",
+    `--format=${RECORD}%H${FIELD}%aI${FIELD}%ae`,
+    "HEAD",
+    "--",
+    ...provingPaths.map((provingPath) => `:(top,literal)${provingPath}`)
+  ];
 }
-function demonstrated(axis, value, demonstration, basis) {
-  return {
-    axis,
-    reading: "DEMONSTRATED",
-    value,
-    kind: "OBSERVED",
-    collector: COLLECTOR_ID2,
-    basis,
-    demonstration
-  };
-}
-
-// src/evidence/adapters/forge-repository/repository-slug.ts
-var GITHUB_REMOTE = /^(?:git@github\.com:|ssh:\/\/git@github\.com\/|https:\/\/(?:[^@/]*@)?github\.com\/)([^/]+)\/(.+?)(?:\.git)?\/?$/;
-async function repositorySlug(path, signal) {
-  let url;
-  try {
-    url = (await runGit(path, ["remote", "get-url", "origin"], signal)).trim();
-  } catch (error) {
-    if (signal.aborted) throw error;
-    return null;
+function parseRecords(stdout) {
+  const records = [];
+  for (const block of stdout.split(RECORD)) {
+    if (block === "") continue;
+    const [header, ...rest] = block.split("\0");
+    if (header === void 0) continue;
+    const [hash, authorDate, email] = header.split(FIELD);
+    if (hash === void 0 || authorDate === void 0 || email === void 0) continue;
+    const paths = rest.map((token, index) => index === 0 ? token.replace(/^\n/, "") : token).filter((token) => token !== "");
+    records.push({ hash, authorDate, email, paths });
   }
-  const match = GITHUB_REMOTE.exec(url);
-  const owner = match?.[1];
-  const name = match?.[2];
-  if (owner === void 0 || name === void 0 || owner === "" || name === "") return null;
-  return { owner, name };
+  return records;
 }
 
 // src/evidence/adapters/live-repository/git-history.ts
 var MINIMUM_MERGE_SHARE = 0.25;
-var FIELD = "";
+var FIELD2 = "";
 var UNRECOVERABLE2 = {
   sizeBucket: null,
   intervention: null,
@@ -9606,14 +9914,14 @@ async function isShallowRepository(path, signal) {
 async function readFirstParentWalk(path, signal) {
   const stdout = await readGit(
     path,
-    ["log", "--first-parent", `--format=%H${FIELD}%aI${FIELD}%P`, "HEAD"],
+    ["log", "--first-parent", `--format=%H${FIELD2}%aI${FIELD2}%P`, "HEAD"],
     signal
   );
   if (stdout === null) return null;
   const commits = [];
   for (const record of stdout.split("\n")) {
     if (record.trim() === "") continue;
-    const [hash, authorDate, parents] = record.split(FIELD);
+    const [hash, authorDate, parents] = record.split(FIELD2);
     if (hash === void 0 || authorDate === void 0 || parents === void 0) continue;
     commits.push({
       hash,
@@ -9638,7 +9946,7 @@ async function readSizeBucket3(path, deliveredChanges, signal) {
         "--no-ext-diff",
         "--no-textconv",
         "--numstat",
-        `--format=${RECORD}%H`,
+        `--format=${RECORD2}%H`,
         ...chunk.map((merge) => merge.hash)
       ],
       signal
@@ -9654,10 +9962,10 @@ async function readSizeBucket3(path, deliveredChanges, signal) {
   }
   return lowerBucket(bucketForLines(median(changedLines)), bucketForFiles(median(changedFiles)));
 }
-var RECORD = "";
+var RECORD2 = "";
 function readDiffstatsByCommit(stdout) {
   const byCommit = /* @__PURE__ */ new Map();
-  for (const record of stdout.split(RECORD)) {
+  for (const record of stdout.split(RECORD2)) {
     const [header, ...rows] = record.split("\n");
     if (header === void 0) continue;
     const hash = header.trim();
@@ -9777,6 +10085,216 @@ function calendarDay(authorDate) {
   return match?.[1] ?? null;
 }
 
+// src/evidence/adapters/forge-contributor-roster.adapter.ts
+var COLLECTOR_ID2 = "forge-contributor-roster";
+var ForgeContributorRosterAdapter = class {
+  constructor(slug, path, deliveries, tree) {
+    this.slug = slug;
+    this.path = path;
+    this.deliveries = deliveries;
+    this.tree = tree;
+  }
+  slug;
+  path;
+  deliveries;
+  tree;
+  id = COLLECTOR_ID2;
+  async read(context) {
+    try {
+      context.signal.throwIfAborted();
+      const subjectActivityEnd = await mostRecentCommitDate(this.path, context.signal);
+      const history = await readCommitHistory(this.slug, subjectActivityEnd, context.signal);
+      if (history === null) {
+        return this.failed(context, "the commit walk did not complete");
+      }
+      context.signal.throwIfAborted();
+      const deliveries = await this.deliveries.read(context.signal);
+      if (deliveries === null) {
+        return this.failed(context, "the delivery walk did not complete");
+      }
+      context.signal.throwIfAborted();
+      const windowStart = windowStartFrom(subjectActivityEnd);
+      const trailer = await hasAiAttributionTrailer(this.path, context.signal);
+      const scan = await scanHarness(this.tree, trailer, context.signal);
+      const harnessScale = harnessSetScaleFrom(context.vocabulary);
+      const harnessObserved = harnessScale === void 0 ? null : decidedCapabilities(scan, harnessScale);
+      const provingPaths = provingPathsOf(scan);
+      const accountForEmail = accountForEmailFrom(history.accountByEmail);
+      const authorship = await readHarnessAuthorship(
+        this.path,
+        provingPaths,
+        accountForEmail,
+        windowStart,
+        context.signal
+      );
+      if (authorship === null) {
+        return this.failed(context, "the harness authorship walk did not complete");
+      }
+      const deliveriesByAccount = new Map(
+        readContributorDeliveries(deliveries, context.vocabulary).map((entry) => [
+          entry.account,
+          entry
+        ])
+      );
+      const accounts = /* @__PURE__ */ new Set([
+        ...history.commitsByAccount.keys(),
+        ...deliveriesByAccount.keys()
+      ]);
+      const harnessObservation = harnessObserved === null ? null : {
+        axis: "harness",
+        reading: "SUSTAINED",
+        value: harnessObserved,
+        kind: "OBSERVED",
+        collector: COLLECTOR_ID2,
+        basis: `tracked tree of ${this.path}, union of what was seen \u2014 shared by every row`,
+        demonstration: null
+      };
+      const records = [...accounts].map((account) => {
+        const delivery = deliveriesByAccount.get(account) ?? emptyDeliveries(account);
+        return {
+          account,
+          // LIMITATION: `account === null` never carries an address count — the unattributed bucket
+          // is commits nothing observable could attribute, and counting the addresses it dropped
+          // would state something about a person who was never named.
+          emailAddresses: account === null ? 0 : history.emailAddressesByAccount.get(account) ?? 0,
+          commits: history.commitsByAccount.get(account) ?? 0,
+          deliveries: delivery.deliveryCount,
+          activeDays: delivery.activeDays,
+          harnessAuthorship: authorship.get(account) ?? NO_HARNESS_AUTHORSHIP,
+          observations: harnessObservation === null ? delivery.observations : [...delivery.observations, harnessObservation]
+        };
+      });
+      return {
+        status: "COMPLETED",
+        records,
+        windowDays: WINDOW_DAYS,
+        harnessObserved,
+        harnessPaths: provingPaths.length
+      };
+    } catch (error) {
+      return {
+        status: context.signal.aborted ? "TIMED_OUT" : "FAILED",
+        records: [],
+        reason: reasonFor3(error)
+      };
+    }
+  }
+  failed(context, reason) {
+    return {
+      status: context.signal.aborted ? "TIMED_OUT" : "FAILED",
+      records: [],
+      reason
+    };
+  }
+};
+function harnessSetScaleFrom(vocabulary) {
+  const scale = vocabulary.find((candidate) => candidate.axis === "harness");
+  return scale?.kind === "set" ? scale : void 0;
+}
+function provingPathsOf(scan) {
+  const paths = /* @__PURE__ */ new Set();
+  for (const proof of Object.values(scan.provenBy)) {
+    if (proof.kind === "files") {
+      for (const path of proof.paths) paths.add(path);
+    }
+  }
+  return [...paths];
+}
+function accountForEmailFrom(accountByEmail) {
+  return (email) => accountByEmail.get(email.toLowerCase()) ?? null;
+}
+function emptyDeliveries(account) {
+  return {
+    account,
+    deliveryCount: 0,
+    activeDays: 0,
+    metrics: deriveForgeMetrics([]),
+    observations: []
+  };
+}
+function reasonFor3(error) {
+  return error instanceof Error ? error.message : String(error);
+}
+
+// src/evidence/adapters/forge-repository.adapter.ts
+var COLLECTOR_ID3 = "forge-repository";
+var ForgeRepositoryEvidenceCollector = class {
+  constructor(slug, deliveries) {
+    this.slug = slug;
+    this.deliveries = deliveries;
+  }
+  slug;
+  deliveries;
+  id = COLLECTOR_ID3;
+  supportedAxes = ["size", "intervention", "parallelism"];
+  async collect(context) {
+    context.signal.throwIfAborted();
+    if (!hasAnySupportedAxis(context.vocabulary)) return { observations: [], diagnostics: [] };
+    const metrics = deriveForgeMetrics(await this.deliveries.read(context.signal));
+    return {
+      observations: deriveObservations(
+        metrics,
+        context.vocabulary,
+        COLLECTOR_ID3,
+        `merged pull requests of ${this.slug.owner}/${this.slug.name}`
+      ),
+      diagnostics: diagnosticsFor(metrics, context.vocabulary)
+    };
+  }
+};
+function diagnosticsFor(metrics, vocabulary) {
+  const parallelismScale = scaleFor2(vocabulary, "parallelism");
+  if (parallelismScale?.kind !== "numeric" || metrics.parallelism !== null || metrics.activeDays === null || metrics.activeDays >= MINIMUM_ACTIVE_DAYS) {
+    return [];
+  }
+  return [
+    {
+      collector: COLLECTOR_ID3,
+      axis: "parallelism",
+      reason: "INSUFFICIENT_ACTIVE_DAYS",
+      observed: metrics.activeDays,
+      minimum: MINIMUM_ACTIVE_DAYS
+    }
+  ];
+}
+function hasAnySupportedAxis(vocabulary) {
+  return vocabulary.some(
+    (scale) => scale.axis === "size" || scale.axis === "intervention" || scale.axis === "parallelism"
+  );
+}
+
+// src/evidence/adapters/forge-repository/delivery-reader.ts
+function forgeDeliveryReader(slug, subjectPath) {
+  let memo;
+  return {
+    read(signal) {
+      memo ??= readDeliveredChangesFor(slug, subjectPath, signal);
+      return memo;
+    }
+  };
+}
+async function readDeliveredChangesFor(slug, subjectPath, signal) {
+  const subjectActivityEnd = await mostRecentCommitDate(subjectPath, signal);
+  return readDeliveredChanges(slug, subjectActivityEnd, signal);
+}
+
+// src/evidence/adapters/forge-repository/repository-slug.ts
+var GITHUB_REMOTE = /^(?:git@github\.com:|ssh:\/\/git@github\.com\/|https:\/\/(?:[^@/]*@)?github\.com\/)([^/]+)\/(.+?)(?:\.git)?\/?$/;
+async function repositorySlug(path, signal) {
+  let url;
+  try {
+    url = (await runGit(path, ["remote", "get-url", "origin"], signal)).trim();
+  } catch (error) {
+    if (signal.aborted) throw error;
+    return null;
+  }
+  const match = GITHUB_REMOTE.exec(url);
+  const owner = match?.[1];
+  const name = match?.[2];
+  if (owner === void 0 || name === void 0 || owner === "" || name === "") return null;
+  return { owner, name };
+}
+
 // src/evidence/adapters/live-repository/tracked-tree.ts
 import { open as open2, readFile as readFile3 } from "fs/promises";
 import { join as join4 } from "path";
@@ -9842,10 +10360,10 @@ async function readTextFile(absolute) {
 }
 
 // src/evidence/adapters/live-repository.adapter.ts
-var COLLECTOR_ID3 = "live-repository";
+var COLLECTOR_ID4 = "live-repository";
 var EVERY_AXIS_IT_CAN_READ = ["size", "harness", "intervention", "parallelism"];
 var LiveRepositoryEvidenceCollector = class {
-  id = COLLECTOR_ID3;
+  id = COLLECTOR_ID4;
   supportedAxes;
   // INVARIANT: The axes this collector was *built* to answer, which the composition root narrows
   // when a better source owns them. Narrowing here rather than dropping observations later is what
@@ -9944,7 +10462,7 @@ function observation3(axis, value, basis) {
     reading: "SUSTAINED",
     value,
     kind: "OBSERVED",
-    collector: COLLECTOR_ID3,
+    collector: COLLECTOR_ID4,
     basis,
     demonstration: null
   };
@@ -10432,7 +10950,8 @@ function renderHumanReport(report, style = plainText) {
     renderCoverageSection(rendering),
     renderNoCollectorsSection(rendering),
     renderIncompleteCollectorsSection(rendering),
-    renderGapsSection(rendering)
+    renderGapsSection(rendering),
+    renderContributorsSection(rendering)
   ];
   return sections.filter((section) => section.length > 0).join("\n\n");
 }
@@ -10744,6 +11263,176 @@ function descriptionFor(vocabulary, axis, term) {
   if (scale === void 0 || scale.kind === "numeric") return void 0;
   return scale.descriptions[term];
 }
+function renderContributorsSection(rendering) {
+  const { report, style } = rendering;
+  const { contributors } = report;
+  if (contributors === null) return "";
+  if (contributors.status !== "COMPLETED") {
+    return style.heading(renderFailedRoster(contributors));
+  }
+  const header = style.heading(renderContributorsHeader(contributors));
+  if (contributors.rows.length === 0) {
+    return header;
+  }
+  const rows = contributors.rows.map((row) => renderContributorRow(rendering, contributors, row));
+  const harness = renderSharedHarnessLine(rendering, contributors);
+  return [header, ...rows, ...harness === null ? [] : [harness]].join("\n\n");
+}
+function renderFailedRoster(roster) {
+  return `Contributeurs : ${glossRosterStatus(roster.status)} \u2014 ${roster.reason}. Le niveau ci-dessus est inchang\xE9.`;
+}
+function glossRosterStatus(status) {
+  switch (status) {
+    case "FAILED":
+      return "lecture impossible";
+    case "TIMED_OUT":
+      return "d\xE9lai d\xE9pass\xE9";
+  }
+}
+function renderContributorsHeader(contributors) {
+  if (contributors.rows.length === 0) {
+    return `Contributeurs : aucun compte actif sur les ${contributors.windowDays} derniers jours.`;
+  }
+  const named = contributors.rows.filter((row) => row.account !== null).length;
+  const accounts = named === 1 ? "1 compte actif" : `${named} comptes actifs`;
+  const unattributed = contributors.rows.some((row) => row.account === null) ? ", plus des commits que GitHub ne rattache \xE0 aucun compte" : "";
+  return `Contributeurs : ${accounts} sur les ${contributors.windowDays} derniers jours${unattributed}. Le niveau ci-dessus couvre toutes les livraisons de la fen\xEAtre, quel qu'en soit l'auteur ; chaque ligne ci-dessous ne couvre que celles d'un compte.`;
+}
+function renderContributorRow(rendering, contributors, row) {
+  const { style } = rendering;
+  const label = row.account ?? "non rattach\xE9";
+  const lines = [
+    style.heading(`  ${label} \u2014 ${renderRowProvenLabel(row)}`),
+    style.faint(`    ${renderRowSample(row)}`)
+  ];
+  const demonstrated2 = renderRowDemonstrated(rendering, row);
+  if (demonstrated2 !== null) lines.push(demonstrated2);
+  if (row.proven === null) {
+    const observed = renderRowObserved(rendering, row);
+    if (observed !== null) lines.push(observed);
+  }
+  if (row.blocking.length > 0) {
+    const aim = renderRowNext(rendering, row);
+    if (aim !== null) lines.push(aim);
+    lines.push(...renderRowGapLines(rendering, row));
+  }
+  lines.push(style.faint(`    ${renderRowHarness(row, contributors)}`));
+  return lines.join("\n");
+}
+function renderRowNext(rendering, row) {
+  const { style } = rendering;
+  if (row.next === null) return null;
+  return style.faint(`    pour atteindre ${row.next.label} (rang ${row.next.rank}) :`);
+}
+function renderRowObserved(rendering, row) {
+  const { report, style } = rendering;
+  const confirmed = row.observed.flatMap(
+    (entry) => entry.evidence === "CONFIRMED" && entry.value !== null ? [{ axis: entry.axis, value: entry.value }] : []
+  );
+  if (confirmed.length === 0) return null;
+  const parts = confirmed.map(
+    (entry) => `${labelFor(report, entry.axis) ?? entry.axis} : ${formatScaleValue(report, entry.axis, entry.value)}`
+  );
+  return style.faint(`    observ\xE9 sur son propre \xE9chantillon \u2014 ${parts.join(" \xB7 ")}`);
+}
+function renderRowProvenLabel(row) {
+  return row.proven === null ? "niveau prouv\xE9 : aucun" : `niveau prouv\xE9 : ${row.proven.label} (rang ${row.proven.rank})`;
+}
+function renderRowSample(row) {
+  if (row.deliveries === 0) {
+    const whose = row.account === null ? " dont l'adresse d'auteur n'est rattach\xE9e \xE0 aucun compte GitHub" : "";
+    return `${countOf(0, "livraison")} \xB7 ${countOf(row.commits, "commit")}${whose}`;
+  }
+  return `${countOf(row.deliveries, "livraison")} \xB7 ${countOf(row.activeDays, "jour actif", "jours actifs")}`;
+}
+function countOf(count, one, many = `${one}s`) {
+  return `${count} ${count < 2 ? one : many}`;
+}
+function renderRowDemonstrated(rendering, row) {
+  const { report, style } = rendering;
+  const { demonstrated: demonstrated2, proven } = row;
+  if (demonstrated2 === null || demonstrated2.level === null) return null;
+  if (proven === null) return null;
+  if (demonstrated2.level.rank <= proven.rank) return null;
+  const level = demonstrated2.level;
+  return [
+    style.faint(`    d\xE9montr\xE9 : ${level.label} (rang ${level.rank}), atteint sur :`),
+    ...demonstrated2.axes.map(
+      (axis) => style.faint(`      ${renderDemonstratedAxis(report, axis)}`)
+    )
+  ].join("\n");
+}
+function renderRowGapLines(rendering, row) {
+  const practiceBlockers = row.blocking.filter(
+    (blocker) => blocker.gap === "PRACTICE"
+  );
+  if (practiceBlockers.length > 0) {
+    return practiceBlockers.map((blocker) => renderRowPracticeGap(rendering, row, blocker));
+  }
+  const evidenceBlockers = row.blocking.filter(
+    (blocker) => blocker.gap === "EVIDENCE"
+  );
+  return evidenceBlockers.length === 0 ? [] : [renderRowEvidenceGap(rendering, evidenceBlockers)];
+}
+function renderRowPracticeGap(rendering, row, blocker) {
+  const { report, style } = rendering;
+  const located = locateAxis(report, blocker);
+  const axis = row.next?.axes.find((candidate) => candidate.axis === blocker.axis);
+  const levelLabel = row.next?.label ?? located.levelLabel;
+  const axisLabel = axis?.label ?? located.axisLabel;
+  const tag = gapTagFor(style, "NOT_MET");
+  const requirement = findUniquePracticeRequirement(axis, blocker);
+  if (requirement === void 0) {
+    return `    ${tag}${axisLabel} \xE0 ${levelLabel} : la pratique observ\xE9e n'atteint pas l'exigence.`;
+  }
+  const evidence = style.faint(`(${requirement.evidence})`);
+  const fact = renderPracticeGapFact(report, blocker.axis, requirement, evidence);
+  return `    ${tag}${axisLabel} \xE0 ${levelLabel} : ${fact}`;
+}
+function renderRowEvidenceGap(rendering, blockers) {
+  const { report, style } = rendering;
+  const labels = blockers.map((blocker) => locateAxis(report, blocker).axisLabel);
+  const verb = labels.length === 1 ? "reste" : "restent";
+  return `    ${gapTagFor(style, "UNPROVEN")}l'\xE9chantillon propre \xE0 ce compte n'a pas permis de trancher : ${joinLabels(labels)} ${verb} sans r\xE9ponse pour ce compte. Ce n'est pas un constat sur sa pratique.`;
+}
+function joinLabels(labels) {
+  if (labels.length <= 1) return labels[0] ?? "";
+  return `${labels.slice(0, -1).join(", ")} et ${labels[labels.length - 1]}`;
+}
+function locateAxis(report, blocker) {
+  const level = report.levels.find((candidate) => candidate.id === blocker.level);
+  const axis = level?.axes.find((candidate) => candidate.axis === blocker.axis);
+  return {
+    levelLabel: level?.label ?? blocker.level,
+    axisLabel: axis?.label ?? blocker.axis,
+    axis
+  };
+}
+function findUniquePracticeRequirement(axis, blocker) {
+  const matches = (axis?.requirements ?? []).filter(
+    (candidate) => candidate.evidence === "CONFIRMED" && candidate.outcome === blocker.outcome
+  );
+  return matches.length === 1 ? matches[0] : void 0;
+}
+var HARNESS_AXIS = "harness";
+function renderSharedHarnessLine({ report, style }, contributors) {
+  if (contributors.harnessObserved === null) return null;
+  const observed = formatScaleValue(report, HARNESS_AXIS, contributors.harnessObserved);
+  return style.faint(
+    `  Le harness est celui du d\xE9p\xF4t, pas celui d'une personne : ${observed}, disponible pour chaque compte ci-dessus, qui en porte la m\xEAme valeur.`
+  );
+}
+function renderRowHarness(row, contributors) {
+  if (row.harnessAuthorship === null) {
+    return "harness : l'attribution n'a pas pu \xEAtre lue";
+  }
+  if (contributors.harnessPaths === 0) {
+    return "harness : l'ensemble harness de ce d\xE9p\xF4t est vide";
+  }
+  const { files } = row.harnessAuthorship;
+  const written = files === 0 ? `n'a \xE9crit aucun des ${contributors.harnessPaths} fichiers` : `a \xE9crit ${files} des ${contributors.harnessPaths} fichiers`;
+  return `harness : ce compte ${written} de l'ensemble harness de ce d\xE9p\xF4t`;
+}
 
 // src/cli/renderers/unrenderable-report.error.ts
 var UnrenderableReportError = class extends Error {
@@ -10786,6 +11475,7 @@ function projectReport(report) {
     schemaVersion: report.schemaVersion,
     model: { id: report.model.id, schemaVersion: report.model.schemaVersion },
     subject: { path: report.subject.path },
+    contributors: projectContributors(report.contributors),
     proven: report.proven === null ? null : projectLevel(report.proven),
     next: report.next === null ? null : projectLevel(report.next),
     demonstrated: report.demonstrated === null ? null : projectDemonstrated(report.demonstrated),
@@ -10911,6 +11601,41 @@ function projectProvenanceEntry(entry) {
       };
   }
 }
+function projectContributors(contributors) {
+  if (contributors === null) return null;
+  switch (contributors.status) {
+    case "COMPLETED":
+      return {
+        status: contributors.status,
+        windowDays: contributors.windowDays,
+        harnessObserved: contributors.harnessObserved,
+        harnessPaths: contributors.harnessPaths,
+        rows: contributors.rows.map(projectContributorRow)
+      };
+    case "FAILED":
+    case "TIMED_OUT":
+      return { status: contributors.status, rows: [], reason: contributors.reason };
+  }
+}
+function projectContributorRow(row) {
+  return {
+    account: row.account,
+    emailAddresses: row.emailAddresses,
+    commits: row.commits,
+    deliveries: row.deliveries,
+    activeDays: row.activeDays,
+    harnessAuthorship: row.harnessAuthorship === null ? null : { files: row.harnessAuthorship.files, commits: row.harnessAuthorship.commits },
+    proven: row.proven === null ? null : projectLevel(row.proven),
+    next: row.next === null ? null : projectLevel(row.next),
+    observed: row.observed.map((entry) => ({
+      axis: entry.axis,
+      value: entry.value,
+      evidence: entry.evidence
+    })),
+    demonstrated: row.demonstrated === null ? null : projectDemonstrated(row.demonstrated),
+    blocking: row.blocking.map(projectBlockingRequirement)
+  };
+}
 
 // src/cli/subjects/resolve-subjects.ts
 import { readdir as readdir2, stat as stat3 } from "fs/promises";
@@ -10972,9 +11697,16 @@ async function readEntries(path) {
 }
 
 // src/cli/commands/assess.command.ts
-async function forgeFor(subjectPath, isWorkTreeRoot, signal) {
+async function forgeAccessFor(subjectPath, isWorkTreeRoot, signal) {
   if (!isWorkTreeRoot) return null;
-  return repositorySlug(subjectPath, signal);
+  const slug = await repositorySlug(subjectPath, signal);
+  if (slug === null) return null;
+  return { slug, deliveries: forgeDeliveryReader(slug, subjectPath) };
+}
+async function rosterFor(forge, subjectPath, signal) {
+  if (forge === null) return null;
+  const tree = await trackedTree(subjectPath, signal);
+  return new ForgeContributorRosterAdapter(forge.slug, subjectPath, forge.deliveries, tree);
 }
 function collectorsFor(forge) {
   if (forge === null) {
@@ -10982,7 +11714,7 @@ function collectorsFor(forge) {
   }
   return [
     new LiveRepositoryEvidenceCollector(["harness"]),
-    new ForgeRepositoryEvidenceCollector(forge),
+    new ForgeRepositoryEvidenceCollector(forge.slug, forge.deliveries),
     new FixtureBundleEvidenceCollector()
   ];
 }
@@ -10996,11 +11728,17 @@ async function runAssess(argv2, io, options = {}) {
     const reports = [];
     for (const subjectPath of resolved.subjects) {
       const isWorkTreeRoot = resolved.isSet ? await isRepositoryRoot(subjectPath, budget.signal) : resolved.isWorkTreeRoot;
+      const forge = await forgeAccessFor(subjectPath, isWorkTreeRoot, budget.signal);
+      const roster = "roster" in options ? options.roster : await rosterFor(forge, subjectPath, budget.signal);
       reports.push(
         await assessMaturity({
           subjectPath,
           model,
-          collectors: options.collectors ?? collectorsFor(await forgeFor(subjectPath, isWorkTreeRoot, budget.signal)),
+          collectors: options.collectors ?? collectorsFor(forge),
+          // COMPAT: `exactOptionalPropertyTypes` forbids `roster: undefined` — the key must be
+          // absent rather than present holding it, so a `null` roster (no origin, or a suite's own
+          // override) is spread away instead of passed through.
+          ...roster === null || roster === void 0 ? {} : { roster },
           signal: budget.signal
         })
       );

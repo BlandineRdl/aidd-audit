@@ -199,6 +199,6 @@ describe('5. the contributor roster is present, refused, and names nobody', () =
     // SAFETY: a row, were the roster COMPLETED, would open with two leading spaces and an em dash
     // before "proven:" — `renderContributorRow`'s own shape. A FAILED roster is typed with no rows
     // at all, so this is a belt-and-braces check on the rendering rather than the contract.
-    expect(prose).not.toMatch(/^ {2}\S+ — proven:/m)
+    expect(prose).not.toMatch(/^ {2}\S+ — niveau prouvé/m)
   })
 })

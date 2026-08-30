@@ -239,6 +239,12 @@ function projectContributorRow(row: ContributorRow): ContributorRow {
         ? null
         : { files: row.harnessAuthorship.files, commits: row.harnessAuthorship.commits },
     proven: row.proven === null ? null : projectLevel(row.proven),
+    next: row.next === null ? null : projectLevel(row.next),
+    observed: row.observed.map((entry) => ({
+      axis: entry.axis,
+      value: entry.value,
+      evidence: entry.evidence,
+    })),
     demonstrated: row.demonstrated === null ? null : projectDemonstrated(row.demonstrated),
     blocking: row.blocking.map(projectBlockingRequirement),
   }

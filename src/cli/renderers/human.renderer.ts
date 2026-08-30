@@ -590,12 +590,60 @@ function renderContributorRow(
   const demonstrated = renderRowDemonstrated(rendering, row)
   if (demonstrated !== null) lines.push(demonstrated)
 
-  // What stops the row's own next level: an evidence gap, a practice gap, or both.
-  if (row.proven === null) lines.push(...renderRowGapLines(rendering, row))
+  // INVARIANT: what the row measured, printed only when it reached no level. A row with a level
+  // already carries its values inside that level's requirements; a row without one used to carry
+  // them nowhere, so the rows a reader most wants to understand were the ones saying least.
+  if (row.proven === null) {
+    const observed = renderRowObserved(rendering, row)
+    if (observed !== null) lines.push(observed)
+  }
+
+  // SAFETY: the aim and what stands in its way are one statement, never two. `pour atteindre X :`
+  // ends in a colon and must not stand alone — a row that named its next level and then said
+  // nothing about reaching it would read as a level already within reach. Both are keyed on
+  // `blocking` being non-empty rather than on `proven` being null, because a row that did prove a
+  // level still has a next one and still owes the reason it has not reached it.
+  if (row.blocking.length > 0) {
+    const aim = renderRowNext(rendering, row)
+    if (aim !== null) lines.push(aim)
+    lines.push(...renderRowGapLines(rendering, row))
+  }
 
   lines.push(style.faint(`    ${renderRowHarness(row, contributors)}`))
 
   return lines.join('\n')
+}
+
+// INVARIANT: the level this account is next in line for, named on every row that has one — the
+// question a person reads their own row to answer, and one the repository's own next level cannot
+// answer for them because it is measured over deliveries they did not make. The gap lines below say
+// what stands in the way; this says what it stands in the way of.
+function renderRowNext(rendering: Rendering, row: ContributorRow): string | null {
+  const { style } = rendering
+  if (row.next === null) return null
+  return style.faint(`    pour atteindre ${row.next.label} (rang ${row.next.rank}) :`)
+}
+
+// INVARIANT: only the axes this row's own evidence confirmed. An axis it could not establish is
+// left out rather than printed as unknown, because the gap lines below already name every one of
+// them and with the reason; repeating them here would state the same absence twice in two wordings.
+function renderRowObserved(rendering: Rendering, row: ContributorRow): string | null {
+  const { report, style } = rendering
+  // SAFETY: `value !== null` as well as CONFIRMED, so no entry can reach `formatScaleValue` with
+  // nothing to format. Coalescing an absent value to an empty array would print `l'ensemble vide`,
+  // which `cli.md` reserves for a set that was observed and found empty — the opposite sentence.
+  const confirmed = row.observed.flatMap((entry) =>
+    entry.evidence === 'CONFIRMED' && entry.value !== null
+      ? [{ axis: entry.axis, value: entry.value }]
+      : [],
+  )
+  if (confirmed.length === 0) return null
+
+  const parts = confirmed.map(
+    (entry) =>
+      `${labelFor(report, entry.axis) ?? entry.axis} : ${formatScaleValue(report, entry.axis, entry.value)}`,
+  )
+  return style.faint(`    observé sur son propre échantillon — ${parts.join(' · ')}`)
 }
 
 // INVARIANT: "aucun" is the row's own result and reads as the report's own null-proven line does —
@@ -651,7 +699,7 @@ function renderRowGapLines(rendering: Rendering, row: ContributorRow): readonly 
   // read that way rather than as the evidence gap the thin-sample prose describes. A row mixing
   // both never reads as an evidence gap once one axis was actually measured and found low.
   if (practiceBlockers.length > 0) {
-    return practiceBlockers.map((blocker) => renderRowPracticeGap(rendering, blocker))
+    return practiceBlockers.map((blocker) => renderRowPracticeGap(rendering, row, blocker))
   }
 
   const evidenceBlockers = row.blocking.filter(
@@ -667,9 +715,21 @@ function renderRowGapLines(rendering: Rendering, row: ContributorRow): readonly 
 // INVARIANT: the values themselves go through `renderPracticeGapFact`, the report's own, so a row
 // and the axis lines above it never describe one threshold in two vocabularies. Only the frame is
 // the row's, because a row carries no axis line to sit under.
-function renderRowPracticeGap(rendering: Rendering, blocker: PracticeBlocker): string {
+function renderRowPracticeGap(
+  rendering: Rendering,
+  row: ContributorRow,
+  blocker: PracticeBlocker,
+): string {
   const { report, style } = rendering
-  const { levelLabel, axisLabel, axis } = locateAxis(report, blocker)
+  const located = locateAxis(report, blocker)
+  // SAFETY: the axis is taken from the row's own next level, never from the report's. The
+  // repository's level report pairs each threshold with the repository's observed value, and on the
+  // axis that blocks this row that value is the one the repository met — so reading it there finds
+  // no unmet requirement and falls back to a sentence naming no values at all. The row's own next
+  // level pairs the same threshold with what this account observed, which is the fact owed here.
+  const axis = row.next?.axes.find((candidate) => candidate.axis === blocker.axis)
+  const levelLabel = row.next?.label ?? located.levelLabel
+  const axisLabel = axis?.label ?? located.axisLabel
   const tag = gapTagFor(style, 'NOT_MET')
   const requirement = findUniquePracticeRequirement(axis, blocker)
   if (requirement === undefined) {

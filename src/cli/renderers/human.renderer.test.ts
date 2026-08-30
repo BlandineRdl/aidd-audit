@@ -1279,3 +1279,140 @@ describe('15. contributors', () => {
     expect(rowWithNull).not.toContain("n'a écrit aucun")
   })
 })
+
+describe('16. a row states what it measured, not only what it lacks', () => {
+  const rowWithNoLevel = contributorRow({
+    account: 'mina',
+    deliveries: 7,
+    activeDays: 4,
+    proven: null,
+    observed: [
+      { axis: 'size', value: 'L', evidence: 'CONFIRMED' },
+      { axis: 'parallelism', value: null, evidence: 'UNKNOWN' },
+    ],
+  })
+
+  it('prints the confirmed values of a row that reached no level', () => {
+    const output = renderHumanReport(
+      assessmentReport({ contributors: completedRoster({ rows: [rowWithNoLevel] }) }),
+    )
+
+    // SAFETY: the row must be in the document before its contents are asserted — an assertion over
+    // a rendering that never printed the row would hold whatever the renderer did.
+    expect(output).toContain('mina — niveau prouvé : aucun')
+    const line = output
+      .split('\n')
+      .find((candidate) => candidate.includes('observé sur son propre échantillon'))
+
+    expect(line).toBeDefined()
+    expect(line).toContain('L (large)')
+  })
+
+  it('names no unresolved axis on that line, the gap lines already carrying them with a reason', () => {
+    const output = renderHumanReport(
+      assessmentReport({ contributors: completedRoster({ rows: [rowWithNoLevel] }) }),
+    )
+    const line = output
+      .split('\n')
+      .find((candidate) => candidate.includes('observé sur son propre échantillon'))
+
+    expect(line).toBeDefined()
+    expect(line).not.toContain('En parallèle')
+    expect(line).not.toContain('UNKNOWN')
+  })
+
+  it('prints no such line for a row that reached a level, whose values ride in its level', () => {
+    const output = renderHumanReport(
+      assessmentReport({
+        contributors: completedRoster({
+          rows: [
+            contributorRow({
+              account: 'ada',
+              observed: [{ axis: 'size', value: 'L', evidence: 'CONFIRMED' }],
+            }),
+          ],
+        }),
+      }),
+    )
+
+    expect(output).toContain('ada — niveau prouvé')
+    expect(output).not.toContain('observé sur son propre échantillon')
+  })
+})
+
+describe('17. a row names its aim, and never names it alone', () => {
+  const nextLevel = levelReport({
+    id: 'green',
+    rank: 3,
+    label: 'Green',
+    outcome: 'NOT_MET',
+    axes: [
+      axisReport({
+        axis: 'size',
+        label: 'Taille',
+        outcome: 'NOT_MET',
+        requirements: [notMetRequirement('size', 'L', 'S')],
+      }),
+    ],
+  })
+
+  it('names the level a row is next in line for, with what stands in the way', () => {
+    const output = renderHumanReport(
+      assessmentReport({
+        contributors: completedRoster({
+          rows: [
+            contributorRow({
+              account: 'mina',
+              next: nextLevel,
+              blocking: [practiceBlocker('green', 'size')],
+            }),
+          ],
+        }),
+      }),
+    )
+    const rowLines = output.split('\n').filter((line) => line.startsWith('    '))
+
+    expect(output).toContain('mina — niveau prouvé')
+    expect(rowLines.some((line) => line.includes('pour atteindre Green (rang 3) :'))).toBe(true)
+    expect(rowLines.some((line) => line.includes('[écart de pratique]'))).toBe(true)
+  })
+
+  it('takes the gap values from the row own next level, never from the repository', () => {
+    // SAFETY: the repository has met this axis, so reading the values there finds no unmet
+    // requirement and states none. The row's own next level is what pairs the threshold with what
+    // this account observed.
+    const output = renderHumanReport(
+      assessmentReport({
+        contributors: completedRoster({
+          rows: [
+            contributorRow({
+              account: 'mina',
+              next: nextLevel,
+              blocking: [practiceBlocker('green', 'size')],
+            }),
+          ],
+        }),
+      }),
+    )
+    const gap = output
+      .split('\n')
+      .find((line) => line.includes('[écart de pratique]') && line.includes('Taille à Green'))
+
+    expect(gap).toBeDefined()
+    expect(gap).not.toContain("n'atteint pas l'exigence.")
+    expect(gap).toContain('S')
+  })
+
+  it('names no aim on a row that has nothing left to reach', () => {
+    const output = renderHumanReport(
+      assessmentReport({
+        contributors: completedRoster({
+          rows: [contributorRow({ account: 'ada', next: null, blocking: [] })],
+        }),
+      }),
+    )
+
+    expect(output).toContain('ada — niveau prouvé')
+    expect(output).not.toContain('pour atteindre')
+  })
+})

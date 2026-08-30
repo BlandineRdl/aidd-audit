@@ -148,6 +148,8 @@ const validRow: ContributorRow = {
   activeDays: 12,
   harnessAuthorship: { files: 41, commits: 60 },
   proven: provenLevel,
+  next: null,
+  observed: [{ axis: 'size', value: 'L', evidence: 'CONFIRMED' }],
   demonstrated: null,
   blocking: [],
 }

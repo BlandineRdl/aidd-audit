@@ -26,6 +26,8 @@
     "src/evidence/adapters/forge-repository/commit-history.ts",
     "src/evidence/adapters/forge-repository/contributor-deliveries.ts",
     "src/evidence/adapters/forge-repository/derived-observations.ts",
+    "src/evidence/adapters/forge-repository/delivery-reader.ts",
+    "src/evidence/adapters/forge-contributor-roster.adapter.ts",
     "src/evidence/resolution/**/*.ts",
     "src/assessment/composition/**/*.ts",
     "!src/**/*.test.ts",

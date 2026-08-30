@@ -634,3 +634,64 @@ describe('13. many reports render as an array of the same documents', () => {
     expect(JSON.parse(renderJsonReport(report))).toEqual(JSON.parse(renderJsonReports([report]))[0])
   })
 })
+
+describe('a contributor row publishes what it observed', () => {
+  it('projects the observed list field by field, on a row that reached no level', () => {
+    const rendered = JSON.parse(
+      renderJsonReport(
+        assessmentReport({
+          contributors: completedRoster({
+            rows: [
+              contributorRow({
+                account: 'mina',
+                proven: null,
+                observed: [
+                  { axis: 'size', value: 'L', evidence: 'CONFIRMED' },
+                  { axis: 'parallelism', value: null, evidence: 'UNKNOWN' },
+                ],
+              }),
+            ],
+          }),
+        }),
+      ),
+    )
+
+    const rows = rendered.contributors.rows
+    expect(rows).toHaveLength(1)
+    expect(rows[0].proven).toBeNull()
+    expect(rows[0].next).toBeNull()
+    expect(rows[0].observed).toEqual([
+      { axis: 'size', value: 'L', evidence: 'CONFIRMED' },
+      { axis: 'parallelism', value: null, evidence: 'UNKNOWN' },
+    ])
+  })
+
+  it('drops a field the contract does not declare on an observed entry', () => {
+    const rendered = JSON.parse(
+      renderJsonReport(
+        assessmentReport({
+          contributors: completedRoster({
+            rows: [
+              contributorRow({
+                observed: [
+                  {
+                    axis: 'size',
+                    value: 'L',
+                    evidence: 'CONFIRMED',
+                    smuggled: 'never published',
+                  } as never,
+                ],
+              }),
+            ],
+          }),
+        }),
+      ),
+    )
+
+    expect(rendered.contributors.rows[0].observed[0]).toEqual({
+      axis: 'size',
+      value: 'L',
+      evidence: 'CONFIRMED',
+    })
+  })
+})

@@ -34,15 +34,21 @@ pnpm build      # produit dist/cli.js
 node dist/cli.js assess profiles/bohort
 ```
 
-Le CLI attend toujours le dossier à évaluer. Pour évaluer le projet courant :
+Le CLI attend toujours un chemin. Ce chemin désigne un dépôt Git, un dossier enregistré, ou un
+dossier qui en contient plusieurs — dans ce dernier cas chaque dossier enregistré est évalué pour
+lui-même, dans l'ordre des noms. Pour évaluer le projet courant :
 
 ```bash
 node dist/cli.js assess .
+node dist/cli.js assess profiles     # les six dossiers enregistrés, un rapport chacun
 ```
+
+Un chemin qui n'est ni l'un ni l'autre est une faute de l'appelant, pas un rapport vide :
+`assess src` sort avec le code `2` et dit ce qu'il a cherché.
 
 | Option | Effet |
 | --- | --- |
-| `--json` | publie le contrat de rapport versionné au lieu de l'explication en prose |
+| `--json` | publie le contrat de rapport versionné au lieu de l'explication en prose : un document pour un sujet, un **tableau** de documents pour un ensemble |
 | `--model <chemin>` | évalue contre un modèle de maturité personnalisé au lieu de l'`aidd.yml` fourni |
 
 ## Audit du harness Claude
@@ -88,7 +94,10 @@ pnpm build:standalone
 ```
 
 Cette commande produit `plugins/aidd-evaluation/bin/cli.js` et place `aidd.yml` à côté. Les deux
-fichiers font partie du plugin et doivent être publiés ensemble.
+fichiers font partie du plugin, sont versionnés dans le dépôt et doivent être publiés ensemble.
+`pnpm check` ne les lit jamais : c'est une seconde surface publiée du même contrat, et rien ne
+prouve qu'elle corresponde à `src/`. Reconstruis-la dès que le contrat, un renderer ou le modèle
+bouge.
 
 Ce dépôt est aussi son propre marketplace. Une fois les fichiers poussés sur GitHub, et le dépôt
 rendu public ou accessible aux participants, ils installent le plugin sans cloner ni construire le
@@ -107,13 +116,15 @@ projet ouvert :
 /aidd-evaluation:aidd-harness     # audite le coût et la forme du contexte Claude
 ```
 
-Les quatre profils de référence sont livrés avec le dépôt :
+Les six dossiers de référence sont livrés avec le dépôt :
 
 ```bash
 node dist/cli.js assess profiles/perceval    # Red
 node dist/cli.js assess profiles/bohort      # Blue
 node dist/cli.js assess profiles/leodagan    # Green
 node dist/cli.js assess profiles/arthur      # Copper
+node dist/cli.js assess profiles/lancelot    # Red
+node dist/cli.js assess profiles/venec       # aucun niveau : trois axes restent inconnus
 ```
 
 ## Lire la sortie
@@ -213,7 +224,8 @@ C'est vérifié au chargement du modèle, pas supposé.
   `En parallèle`. Sans accès à la forge, ces axes restent `UNKNOWN` au lieu d'être devinés ; le
   rapport sort tout de même avec le code `0`, mais peut ne prouver aucun niveau. Git local seul ne
   porte pas toutes les informations temporelles de revue.
-* **Ce sont les dossiers de profil enregistrés qui sont classés**, parce qu'eux portent cette trace.
+* **Sans accès à la forge, seuls les dossiers enregistrés sont classés**, parce qu'eux portent cette
+  trace. Avec une origine GitHub que `gh` peut interroger, un dépôt vivant est classé comme eux.
 * **Ce qu'un développeur déclare n'est recevable pour rien.** `declaratif.md` et ce que le manifeste
   affirme de lui-même sont lus comme des déclarations, et une déclaration n'atteint jamais
   `CONFIRMED`.
@@ -226,7 +238,7 @@ développeur*.
 | Code | Signification |
 | --- | --- |
 | `0` | un rapport a été publié, y compris « aucun niveau n'a pu être établi » |
-| `2` | la faute de l'appelant : invocation malformée, chemin qui ne désigne rien, modèle illisible |
+| `2` | la faute de l'appelant : invocation malformée, chemin qui ne désigne rien, dossier lisible qui n'est ni un dépôt, ni un dossier enregistré, ni un dossier qui en contient, modèle illisible |
 | `1` | la nôtre : l'outil a cassé |
 
 La sortie standard porte le rapport et rien d'autre. Tout le reste part sur la sortie d'erreur, en

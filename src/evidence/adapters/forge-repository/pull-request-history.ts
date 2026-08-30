@@ -150,14 +150,6 @@ export function deriveForgeMetrics(
   }
 }
 
-export async function readForgeDerivedMetrics(
-  slug: RepositorySlug,
-  subjectActivityEnd: number | null,
-  signal: AbortSignal,
-): Promise<ForgeDerivedMetrics> {
-  return deriveForgeMetrics(await readDeliveredChanges(slug, subjectActivityEnd, signal))
-}
-
 // INVARIANT: `null` whenever the walk could not be completed — an unreadable page, or the page cap
 // reached with more still offered. Every caller turns that into an evidence gap, because a partial
 // window is not a smaller repository.

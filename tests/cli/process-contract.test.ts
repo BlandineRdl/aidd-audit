@@ -309,6 +309,9 @@ describe('8. the wired collectors reach the pipeline through the binary', () => 
 
     // INVARIANT: a checkout with no GitHub origin builds no roster at all, the other half of the
     // same rule the forge-collector assertion above already carries.
+    // SAFETY: asserted before the narrowing return, which would otherwise skip every assertion
+    // below and leave the test green on a checkout whose roster was never built at all.
+    expect(report.contributors).not.toBeNull()
     if (report.contributors === null) return
 
     expect(report.contributors.status).toBe('FAILED')

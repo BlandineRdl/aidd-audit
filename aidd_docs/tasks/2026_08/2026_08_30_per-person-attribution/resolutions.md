@@ -4,6 +4,12 @@ The nine phase files were written in parallel from one brief and contradict each
 places. Each is settled here, once, and the phases are patched to match. **Where a phase and this
 file disagree, this file stands.**
 
+**The phases were patched for R1 to R10 only.** R11, R12 and R13 were written later, against code
+that had already shipped, and no phase file carries them: `phase-6.md` still declares
+`harnessObserved` non-nullable, `phase-7.md` still puts `windowDays` on the failed arm, and
+`phase-8.md` still states as a rule that a row names no next level. Read a phase against this file,
+never on its own.
+
 ## R1 — The composition root wires the roster, and one walk means one walk
 
 `ForgeContributorRosterAdapter` was specified with a `RepositorySlug` alone, and then needed three
@@ -84,8 +90,9 @@ imports what phase 1 exported and specifies no extraction of its own.
 
 The observation projection extracted by phase 3 takes the collector id as a parameter —
 `(metrics, vocabulary, collectorId, basis)` — because it now has two callers that must not share
-one baked-in `'forge-repository'`. The roster adapter calls it; phase 6 emits no observations of its
-own construction.
+one baked-in `'forge-repository'`. Its second caller is `contributor-deliveries.ts`, not the roster
+adapter: the adapter receives each account's observations already built, and constructs exactly one
+of its own, the shared harness observation R1 requires on every record.
 
 ## R6 — Composition sorts, and nobody else does
 
@@ -118,7 +125,7 @@ address, and `harness-authorship.ts` normalises nothing and receives the lookup 
 both already say so and neither changes. One normalisation, in one place, named here so a second
 does not appear beside it.
 
-## R10 — What the producer must carry, and what the seams are called
+## R10 — What the producer must carry, and what the seams are called — corrected in R12 on `windowDays`
 
 R7 added four fields to the contract and nobody was told to produce them. R3's set total has the same
 shape of gap. Settled on the producing side:
@@ -194,3 +201,26 @@ lived twice with nothing pinning the two together. The span is a constant and co
 printed, which is exactly why printing it on a failed run misleads: nothing was counted over any
 period, and a reader owed "none enumerated, and here is why" must not also be handed a window
 suggesting something was. The omission is now the statement, and the duplicate constant is gone.
+
+## R13 — A row names the level it is next in line for
+
+`phase-8.md` states, as a rule, that **a row names no next level**, on the ground that "what would
+raise this person's level" is a recommendation about a person. The shipped code does the opposite:
+`ContributorRow.next` is published, and prose prints `pour atteindre <level> (rang N) :` on every
+row that has a blocker.
+
+**The phase's reasoning does not survive contact with the output.** A level is a measurement, and
+naming the one immediately above a row's own proven level states a fact about that row's evidence —
+the same fact the report has always published about the repository under `next`. What the plan
+forbids is *recommending*, and nothing here recommends: the line names a rank and is bound to the
+blockers beneath it, which state observed against required and stop. The imperative the plan bars is
+absent by construction — `renderRowPracticeGap` is deliberately not `renderPracticeGap`, whose
+fallback ends in one.
+
+What the phase was right about, and what the code therefore honours: the values in a row's gap lines
+come from **that row's own next level**, never from the repository's. Read from the repository's
+level report the same axis carries the repository's observed value, which on a blocking axis is the
+value the repository met — so the row would state a gap it does not have, or none at all. The row's
+own `next` pairs each threshold with what that account observed.
+
+A row without a blocker names no aim, because it has none to name.

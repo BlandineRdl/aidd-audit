@@ -113,6 +113,20 @@ export type AxisVocabularyReport =
 // `evidence/models/observation.model.ts` carries the same names and the two must not drift.
 export type DemonstrationUnit = 'DELIVERIES' | 'ACTIVE_DAYS'
 
+// INVARIANT: One axis of one contributor as its own evidence resolved it, whatever level that row
+// reached. `value` is `null` for every status but `CONFIRMED`, on the same terms a
+// `RequirementReport` uses. It exists because a row whose `proven` is null published nothing it had
+// observed: the level report is the only place a row's values travelled, so the rows that reached
+// no level — the ones a reader most wants to understand — stated only what blocked them. One entry
+// per axis the model declares, resolved or not: an axis nobody answered is present holding
+// `UNKNOWN` and a null value, on the same terms a `RequirementReport` states an unproven one, so a
+// reader can tell an axis nobody answered from one this row simply does not carry.
+export interface ContributorAxisObservation {
+  readonly axis: string
+  readonly value: ObservedValue | null
+  readonly evidence: EvidenceStatus
+}
+
 // INVARIANT: One axis the subject repeatedly reached, and how often it did. `share` is a fraction of
 // occasions between 0 and 1, not a percentage — the recorded bundle format already states every
 // ratio that way, and a bare `40` would read as a count. It is not optional: a demonstrated value
@@ -167,12 +181,14 @@ export interface ContributorRow {
   // and a human account ending in `[bot]` would be wrongly dropped.
   readonly account: string | null
 
-  // INVARIANT: how many distinct email addresses GitHub collapsed into this one account. The join
-  // the forge performs is on the address; the author name travels in the query and decides nothing,
-  // so counting name-and-address pairs would publish a larger number about a mapping nobody made.
-  // Two addresses were measured on the subject, under two name strings, all resolving to the one
-  // login. A fact about the mapping, never a level input — and a roster keyed on the address rather
-  // than on the account would have published one person twice and joined to nothing.
+  // INVARIANT: how many distinct email addresses this account authored commits under, inside the
+  // window. It is what the forge's own address-to-account mapping collapsed, which is why the row
+  // is keyed on the account and not on the address: two addresses under two name strings resolving
+  // to one login were measured on a real subject, and a roster keyed on the address would have
+  // published one person twice and joined to nothing. `0` is not a fabrication and not a missing
+  // mapping — it accompanies `commits: 0`, an account that merged a delivery in the window without
+  // authoring a commit in it, and there were then no addresses to collapse. A fact about the
+  // mapping, never a level input.
   readonly emailAddresses: number
 
   // INVARIANT: `commits`, `deliveries` and `activeDays` are all counted over the same window every
@@ -208,9 +224,24 @@ export interface ContributorRow {
   // shared repository and is an evidence gap, not a verdict on anyone.
   readonly proven: LevelReport | null
 
+  // INVARIANT: the level immediately above this row's own `proven`, or null once the highest is
+  // proven — the report's own `next`, asked of one account's evidence. Its requirements pair each
+  // threshold with what *this row* observed, never with the repository's, so it states what this
+  // account would have to reach and not what the repository already has. A row is a person, and the
+  // question "what is next for me" is the one a person reads the report for; the repository's own
+  // `next` cannot answer it, because it is measured over deliveries this account did not make.
+  readonly next: LevelReport | null
+
   // INVARIANT: the same terms the report's own block carries, applied to one account's evidence.
   // Never below that row's `proven`, and never an axis without the share that earned it.
   readonly demonstrated: DemonstratedReport | null
+
+  // INVARIANT: every axis this row's own evidence resolved, published whether or not the row
+  // reached a level. Without it a row with `proven: null` says only what blocked it and never what
+  // it measured, which is the wrong way round: an account with seven deliveries whose size and
+  // intervention were both established, and whose parallelism alone was undecidable, was publishing
+  // three facts and showing none of them.
+  readonly observed: readonly ContributorAxisObservation[]
 
   // INVARIANT: what stops the row's next level, on the same footing as the report's own `blocking`.
   // Non-empty whenever `proven` is null, so a reader never meets an absent level with nothing said
@@ -305,11 +336,5 @@ export interface AssessmentReport {
   // shipped under: a consumer reading `proven` alone sees exactly what it saw before this field
   // existed, and the schema version does not move.
   //
-  // LIMITATION: optional rather than required, unlike `demonstrated` before it — every producer in
-  // `assessment/` always sets it (to a report or explicitly to `null`), but the two driving-adapter
-  // renderers are owed to a later phase and would otherwise fail to typecheck for a field neither
-  // reads yet. `json.renderer.ts` projects the contract field by field through an allowlist, so an
-  // object literal that omits this key already states the field's own rule for itself: not yet
-  // published.
   readonly contributors: ContributorRosterReport | null
 }

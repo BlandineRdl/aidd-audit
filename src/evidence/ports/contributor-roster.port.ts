@@ -14,10 +14,12 @@ export interface ContributorRosterContext {
   readonly signal: AbortSignal
 }
 
-// INVARIANT: `emailAddresses` counts the distinct addresses GitHub collapsed into this account —
-// `commit-history.ts`'s `emailAddressesByAccount` — and never name-and-email pairs; a field named
-// after identities and counting addresses is exactly what published two different numbers for one
-// measured subject. `activeDays` is copied from that account's own delivery metrics
+// INVARIANT: `emailAddresses` counts the distinct addresses this account authored commits under
+// inside the window — `commit-history.ts`'s `emailAddressesByAccount` — and never name-and-email
+// pairs; a field named after identities and counting addresses is exactly what published two
+// different numbers for one measured subject. `0` is a true reading and not a missing mapping: it
+// accompanies `commits: 0`, an account whose delivery merged in the window without a commit
+// authored in it, and there were then no addresses to collapse. `activeDays` is copied from that account's own delivery metrics
 // (`contributor-deliveries.ts`) rather than recomputed here: a day on which one of this account's
 // own deliveries received a commit, and never a day on which only somebody else was active.
 export interface ContributorRecord {

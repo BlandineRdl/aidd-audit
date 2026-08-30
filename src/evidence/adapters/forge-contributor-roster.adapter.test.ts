@@ -526,4 +526,100 @@ describe('the contributor roster, the signal', () => {
     },
     A_LONG_TIME,
   )
+
+  it(
+    'gives an account that delivered without committing in the window a row of its own',
+    async () => {
+      // SAFETY: the two walks filter on different things — the commit walk drops a bot by its
+      // `[bot]` login suffix while the delivery walk drops one by `__typename` — and a delivery can
+      // be merged inside the window from commits authored before it. Either way an account can be
+      // known to the delivery walk and unknown to the commit walk, and its row must exist with the
+      // counts that reading actually supports rather than be dropped.
+      const repository = await initRepository()
+      await commitAs(repository, { 'CLAUDE.md': 'a\n' }, 'init', DAY(30))
+
+      await ghAnswering(
+        commitHistoryPayload([
+          { authoredDate: DAY(1), email: 'alice@example.com', login: 'alice' },
+        ]),
+      )
+
+      const reader = readerFor([
+        pullRequest({ mergedAt: DAY(10), commitDays: [DAY(10)], openedBy: 'carol' }),
+      ])
+
+      const adapter = new ForgeContributorRosterAdapter(
+        SLUG,
+        repository,
+        reader,
+        await trackedTree(repository, new AbortController().signal),
+      )
+
+      const result = await adapter.read({
+        path: repository,
+        vocabulary: FULL_VOCABULARY,
+        signal: new AbortController().signal,
+      })
+
+      if (result.status !== 'COMPLETED') throw new Error('unreachable')
+
+      const carol = result.records.find((record) => record.account === 'carol')
+      expect(carol).toBeDefined()
+      expect(carol?.deliveries).toBe(1)
+      expect(carol?.commits).toBe(0)
+      // INVARIANT: zero addresses accompanies zero commits, and states that nothing was collapsed
+      // rather than that a mapping was read and found empty.
+      expect(carol?.emailAddresses).toBe(0)
+    },
+    A_LONG_TIME,
+  )
+
+  it(
+    'withholds the harness value, and does not fail, when the scan leaves a rankable member undecidable',
+    async () => {
+      // SAFETY: the other half of the rule the previous case covers, and the branch an adapter is
+      // most likely to misread as a failure. A tracked `.claude/settings.json` that cannot be parsed
+      // leaves `behavior` undecidable, `decidedCapabilities` answers null for the whole axis, and
+      // nothing failed to be read — the walk ran to completion and the scan simply could not decide.
+      // Calling that `FAILED` would tell the reader the forge refused when it answered.
+      const repository = await initRepository()
+      await commitAs(
+        repository,
+        { '.claude/settings.json': '{ this is not json', 'CLAUDE.md': 'memory\n' },
+        'init',
+        DAY(30),
+      )
+
+      await ghAnswering(
+        commitHistoryPayload([
+          { authoredDate: DAY(1), email: 'alice@example.com', login: 'alice' },
+        ]),
+      )
+
+      const adapter = new ForgeContributorRosterAdapter(
+        SLUG,
+        repository,
+        readerFor([]),
+        await trackedTree(repository, new AbortController().signal),
+      )
+
+      const result = await adapter.read({
+        path: repository,
+        vocabulary: FULL_VOCABULARY,
+        signal: new AbortController().signal,
+      })
+
+      expect(result.status).toBe('COMPLETED')
+      if (result.status !== 'COMPLETED') throw new Error('unreachable')
+
+      expect(result.harnessObserved).toBeNull()
+      expect(result.records.map((record) => record.account)).toEqual(['alice'])
+      expect(
+        result.records.flatMap((record) =>
+          record.observations.filter((observation) => observation.axis === 'harness'),
+        ),
+      ).toEqual([])
+    },
+    A_LONG_TIME,
+  )
 })

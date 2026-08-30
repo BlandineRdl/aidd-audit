@@ -80,6 +80,12 @@ function rowOf(
     activeDays: record.activeDays,
     harnessAuthorship: record.harnessAuthorship,
     proven,
+    next,
+    observed: sustained.map((entry) => ({
+      axis: entry.axis,
+      value: entry.status === 'CONFIRMED' ? entry.value : null,
+      evidence: entry.status,
+    })),
     demonstrated: reportDemonstrated(model, sustained, demonstrated, check.proven),
     blocking: blockersOf(next),
   }

@@ -212,3 +212,143 @@ describe('ordering', () => {
     expect(report?.rows.map((row) => row.account)).toEqual(['amy', 'amy2', 'zack', null])
   })
 })
+
+describe('a row publishes what it observed, whether or not it reached a level', () => {
+  it('publishes every axis of a row that reached no level, with the status each was resolved to', () => {
+    // SAFETY: the fixture model declares three axes and this record answers one, so no level can be
+    // proven — every level requires all three. That is the case the field exists for: before it,
+    // such a row published its blockers and never the value it had actually established.
+    const run = completedRun([recordOf({ observations: [observation('size', 'L')] })])
+
+    const roster = composeContributorRoster({ model, run })
+    if (roster === null || roster.status !== 'COMPLETED') throw new Error('unreachable')
+
+    const [row] = roster.rows
+    if (row === undefined) throw new Error('the row must exist before its contents are asserted')
+
+    expect(row.proven).toBeNull()
+    expect(row.observed).toEqual([
+      { axis: 'size', value: 'L', evidence: 'CONFIRMED' },
+      { axis: 'harness', value: null, evidence: 'UNKNOWN' },
+      { axis: 'parallelism', value: null, evidence: 'UNKNOWN' },
+    ])
+  })
+
+  it('publishes the same list for a row that did reach a level', () => {
+    const run = completedRun([recordOf({ observations: highObservations() })])
+
+    const roster = composeContributorRoster({ model, run })
+    if (roster === null || roster.status !== 'COMPLETED') throw new Error('unreachable')
+
+    const [row] = roster.rows
+    if (row === undefined) throw new Error('the row must exist before its contents are asserted')
+
+    expect(row.proven?.id).toBe('high')
+    expect(row.observed).toEqual([
+      { axis: 'size', value: 'L', evidence: 'CONFIRMED' },
+      { axis: 'harness', value: ['prompts', 'context-engineering'], evidence: 'CONFIRMED' },
+      { axis: 'parallelism', value: 3, evidence: 'CONFIRMED' },
+    ])
+  })
+
+  it('carries the sustained reading alone, never the demonstrated one', () => {
+    // INVARIANT: a demonstrated value is a different question with its own share, and letting it
+    // into this list would publish a maximum wearing a habit's clothes.
+    const run = completedRun([
+      recordOf({
+        observations: [
+          observation('size', 'S'),
+          observation('size', 'L', {
+            reading: 'DEMONSTRATED',
+            demonstration: { share: 0.5, unit: 'DELIVERIES' },
+          }),
+        ],
+      }),
+    ])
+
+    const roster = composeContributorRoster({ model, run })
+    if (roster === null || roster.status !== 'COMPLETED') throw new Error('unreachable')
+
+    const [row] = roster.rows
+    if (row === undefined) throw new Error('the row must exist before its contents are asserted')
+
+    expect(row.observed.filter((entry) => entry.axis === 'size')).toEqual([
+      { axis: 'size', value: 'S', evidence: 'CONFIRMED' },
+    ])
+  })
+})
+
+describe('a row names the level it is next in line for', () => {
+  it('derives that level from the row own evidence, not from the repository', () => {
+    const run = completedRun([recordOf({ observations: lowObservations() })])
+
+    const roster = composeContributorRoster({ model, run })
+    if (roster === null || roster.status !== 'COMPLETED') throw new Error('unreachable')
+
+    const [row] = roster.rows
+    if (row === undefined) throw new Error('the row must exist before its contents are asserted')
+
+    expect(row.proven?.id).toBe('low')
+    expect(row.next?.id).toBe('high')
+
+    // INVARIANT: the row's next level pairs each threshold with what this row observed. Read from
+    // the repository's own level report instead, the same axis would carry the repository's value
+    // and the row would state a gap it does not have.
+    const size = row.next?.axes.find((axis) => axis.axis === 'size')
+    expect(size?.requirements.at(0)?.observed).toBe('S')
+  })
+
+  it('carries a next level even for a row that proved none, and it is the floor', () => {
+    const run = completedRun([recordOf({ observations: [observation('size', 'L')] })])
+
+    const roster = composeContributorRoster({ model, run })
+    if (roster === null || roster.status !== 'COMPLETED') throw new Error('unreachable')
+
+    const [row] = roster.rows
+    if (row === undefined) throw new Error('the row must exist before its contents are asserted')
+
+    expect(row.proven).toBeNull()
+    expect(row.next?.id).toBe('low')
+    expect(row.blocking.length).toBeGreaterThan(0)
+  })
+})
+
+describe('the block-level values travel from the run and are never re-derived', () => {
+  it('carries the window, the shared harness value and the harness-set size the run stated', () => {
+    // SAFETY: deliberately none of the defaults. `windowDays: 180`, an empty harness set and a
+    // count of zero are exactly what a hardcoded composition would emit, so a test built on them
+    // stays green with the carry replaced by literals — which is what R7 exists to prevent, since
+    // a renderer may not reach into `delivery-sample.ts` for the window nor re-derive the shared
+    // axis for itself.
+    const run: ContributorRosterRun = {
+      status: 'COMPLETED',
+      records: [recordOf({ observations: lowObservations() })],
+      windowDays: 90,
+      harnessObserved: ['prompts', 'behavior'],
+      harnessPaths: 7,
+    }
+
+    const roster = composeContributorRoster({ model, run })
+    if (roster === null || roster.status !== 'COMPLETED') throw new Error('unreachable')
+
+    expect(roster.rows).toHaveLength(1)
+    expect(roster.windowDays).toBe(90)
+    expect(roster.harnessObserved).toEqual(['prompts', 'behavior'])
+    expect(roster.harnessPaths).toBe(7)
+  })
+
+  it('carries a withheld harness value as the null the run stated, never as an empty set', () => {
+    const run: ContributorRosterRun = {
+      status: 'COMPLETED',
+      records: [recordOf({ observations: lowObservations() })],
+      windowDays: 90,
+      harnessObserved: null,
+      harnessPaths: 7,
+    }
+
+    const roster = composeContributorRoster({ model, run })
+    if (roster === null || roster.status !== 'COMPLETED') throw new Error('unreachable')
+
+    expect(roster.harnessObserved).toBeNull()
+  })
+})
