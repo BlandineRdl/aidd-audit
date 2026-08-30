@@ -246,7 +246,14 @@ function contextFor(
   return { path, vocabulary, signal }
 }
 
-describe('the live repository evidence collector', () => {
+// SAFETY: every case here spawns real `git` against a real temporary repository, and two of them
+// hold a spawn open to abort mid-read. Vitest's 5s default is a wall-clock budget for process
+// contention, not for anything this suite decides, and it started tripping once sibling suites began
+// spawning `git` and `gh` of their own in parallel. The number is the one the newer process-driving
+// suites already use.
+const A_LONG_TIME = 60_000
+
+describe('the live repository evidence collector', { timeout: A_LONG_TIME }, () => {
   it('observes nothing at all about a directory that is not a Git work tree', async () => {
     const notARepository = await emptyDirectory()
     await write(notARepository, { 'CLAUDE.md': 'project memory\n' })

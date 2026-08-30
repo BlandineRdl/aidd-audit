@@ -41,6 +41,12 @@ How this project is tested: TDD boundaries, doubles, and validation.
 | `harness/shell-tokens` | what the shell hides (comments, quotes, expansions, continuations) and where a word may be a command | none — a source string in, tokens and marks out |
 | `harness/shell-loop` | the three answers about a loop: retry proven, decidably iterating, undecidable | none — a source string in, a `MemberScan` out |
 | `fixture-bundle/bundle-tree` | the recorded tree: what `repo-context/` rebases to, that no mode is recorded, cancellation | none — real temporary directories |
+| `forge-repository/commit-history` | the commit walk, the email-to-account dictionary, the windowed counts per account, bots dropped by login suffix, the unattributed bucket | none — recorded payloads answered by a stub `gh` on the child's PATH |
+| `harness/harness-authorship` | who authored the paths that proved each harness member, keyed through the dictionary | none — real temporary Git repositories and the real filesystem |
+| `forge-contributor-roster.adapter` | the records the roster answers, its failure, its cancellation | none |
+| `composition/compose-contributor-roster` | a level per record, both readings, the ordering, the floors read per person | none — real `checkMaturity` over real records |
+
+**Nothing internal is faked in any of the four rows above.** Every double this feature adds is at a boundary — a stub `gh` on PATH, a temporary Git repository — and no internal collaborator is mocked, per the Chicago-style rule this section already states.
 
 The first three are not use cases: each takes domain values and returns one, so it is tested directly.
 
@@ -54,6 +60,8 @@ It was a `beforeAll` inside `process-contract.test.ts` while that was the only s
 
 **That last exclusion is the one worth stating, because two drafts got it wrong.** An earlier cut of *this* suite pinned the whole `provenance` array with `toEqual` and pinned `proven` to `null`. Both photograph today's implementation, and both were removed **from here** — they live in `process-contract.test.ts`, where the subject is the wiring rather than the capability, and where a forge collector turning them red is the signal rather than the accident. A forge collector landing is the feature working better — it must not turn the self-assessment red, and `proven` ceasing to be null is *changed evidence*, never a changed capability. What replaced them: the collector list must contain `live-repository` and no id matching `/fake|stub|mock|fixture|self/i`, which is the real criterion — nothing was faked for AIDD's benefit — and `proven` is asserted only as the property it always holds (null implies a non-empty `blocking`; otherwise the proven level is `MET`).
 
+**The suite gained the roster section under a refusing forge, held to the same discipline.** This checkout has a GitHub origin, so the composition root builds a roster for it, and the refusing `gh` on the spawn fixture's PATH is what keeps the section present-and-`FAILED` rather than absent, deterministically. What is asserted is the capability — a source that could not answer says so, both in the contract and in prose — and never a login, a row count or a level: the JSON assertion reads only `status`, `rows` (structurally empty on a `FAILED` union member) and that `reason` is non-empty, and the prose assertion matches no rendered contributor row (`^ {2}\S+ — proven:`) rather than banning the literal string `BlandineRdl`. **That string cannot be banned outright**: the reason echoes the failed `gh` invocation verbatim, including `-F owner=BlandineRdl` from this repository's own slug, which is plumbing about the failed command and not a claim about any person — banning it as a substring was tried first and failed the suite on exactly that line, which is itself evidence the two must be told apart rather than conflated.
+
 The division across three suites: `process-contract.test.ts` owns the exit codes, the streams and the collector wiring — which collectors the composition root built, and that each answers for its own subject; `live-repository.adapter.test.ts` owns which subjects the collector answers for, including a directory that merely sits inside a work tree; this one owns the self-assessment. `tests/cli/spawn-cli.test-fixture.ts` is the spawn helper the two CLI suites share, so they cannot drift on how the process is invoked.
 
 `src/cli/assess.command.test.ts` sits beside `assess.command.ts`, per **Where a test lives** above, and drives `runAssess(argv, io)` with a capturing `CommandIo` — two in-memory string arrays, no spawn and no build. It asserts stdout, stderr and the exit code only, never which function ran. `main.ts` is never imported by any suite; it is reached only by spawning the built binary, which both suites in `tests/cli/` now do.
@@ -62,7 +70,9 @@ The division across three suites: `process-contract.test.ts` owns the exit codes
 
 ## Mutation testing is a command, not a habit
 
-`pnpm mutation` runs Stryker over the decision logic: `maturity/loading/`, `maturity/engine/`, `maturity/models/`, `evidence/adapters/harness/` and `evidence/resolution/`. It is deliberately outside `pnpm check` — a sweep is minutes, a gate is seconds — and deliberately reproducible, which is the whole point: every finding this technique has produced here came from a sweep nobody could re-run.
+`pnpm mutation` runs Stryker over the decision logic named in `stryker.config.json`'s own `mutate` list — read that file, not this paragraph, for the current set; it has grown past what any fixed prose here could restate without drifting from it the day another module joins. It is deliberately outside `pnpm check` — a sweep is minutes, a gate is seconds — and deliberately reproducible, which is the whole point: every finding this technique has produced here came from a sweep nobody could re-run.
+
+**`forge-repository/` is swept file by file, not by glob**, unlike `evidence/adapters/harness/**/*.ts` or `assessment/composition/**/*.ts` beside it in the same list. A module added beside `pull-request-history.ts` is mutated by nothing until it is named there — which is why the per-person attribution work cost `stryker.config.json` three explicit entries, `commit-history.ts`, `contributor-deliveries.ts` and `derived-observations.ts`, where landing inside `harness/` or `composition/` would have cost none: the email dictionary and the windowed counts, the sample floors applied per person and the per-account active-day count, and the guards that drop a value the loaded scale has no name for, are all decision logic and exactly what the sweep exists to interrogate. `harness-authorship.ts` and `compose-contributor-roster.ts` needed no entry of their own — they already sit inside the two globbed folders.
 
 Three things in the configuration are load-bearing:
 
@@ -82,6 +92,18 @@ Three things in the configuration are load-bearing:
 | mutants nothing reached | 118 | 61 |
 
 **The second pass is the more useful lesson.** A further 25 tests, aimed at survivors named one by one from the report, bought 0.7 points. `readShellLoops` answers in two booleans, so a great many internal distinctions are simply not observable from outside it, and chasing them would mean exporting internals to test them — which buys a number and loses the rule. **Stop when the curve flattens.** What remains worth doing sits elsewhere: `agent-invocation.ts` (66.28, 29 uncovered) and `model-consistency.ts` (78.90, 9 uncovered).
+
+**Third baseline, 2026-08-31, after the per-person attribution work: 88.62% total, 91.07% of covered code — 2013 killed, 425 timed out, 239 survived, 74 uncovered, 0 errors. Wall time: 40 minutes 36 seconds**, up from the thirteen minutes above. The set mutated grew by three named files — `commit-history.ts`, `contributor-deliveries.ts` and `derived-observations.ts` — and the `harness/` and `assessment/composition/` globs picked up `harness-authorship.ts` and `compose-contributor-roster.ts` for free; the totals below are therefore not comparable to the ones above them, whose file set was smaller. What is comparable, because neither file moved, is the pair the second baseline earned:
+
+| | second baseline | third baseline |
+| --- | --- | --- |
+| `shell-tokens.ts` | 81.01 | 82.40 |
+| `shell-loop.ts` | 79.15 | 81.41 |
+| `harness/` overall | 79.51 | 81.42 |
+
+**Neither fell — a fall was the one thing this sweep was run to catch, since this feature touches neither file.** Both rose instead, by a margin consistent with sweep-to-sweep noise rather than a change of behaviour.
+
+`harness-authorship.ts` is the reason wall time grew: 74.07% total, 21 survived, 3 timed out, over real temporary Git repositories — the slowest per-mutant cost of anything in the swept set, since every mutant re-runs `git log` against a real work tree rather than a source string. It was kept in the sweep rather than taken out: authorship is decision logic — which commits and which files a proving path resolves to — and the whole reason `stryker.config.json` interrogates decision logic is to catch exactly the kind of guard this feature already shipped once with a neutered test (see `contributor-roster.port.ts`'s `null`-to-`FAILED` classification, restored in phase 9's own neutering pass). The other new files cost little: `commit-history.ts` scored 97.35 (98.00 covered) despite 44 of its mutants timing out — the paginated walk's own loop — and `derived-observations.ts` scored 100.00 with 61 timeouts and zero survivors. `contributor-deliveries.ts`, at 77.27 with 5 survivors, and `compose-contributor-roster.ts`, at 81.16 with 13 survivors, are this baseline's own weak spots and are owed the same kind of second pass `shell-tokens.ts` and `shell-loop.ts` already had — not chased here, because `pnpm mutation` stays a report to read rather than a gate this phase exists to close.
 
 ## Doubles
 
@@ -144,6 +166,8 @@ instead — which would prove the arithmetic and not the wiring.
 * **`leodagan` is the trap the harness axis has to survive.** Expected Green, so `aidd.yml` requires `prompts` of him, yet `session.md` — the prompt-to-commit trace — is exactly what he lacks. A collector that confirms `prompts` only from a transcript file makes Green and above unreachable, and three fixtures out of four fail at once.
 * `profiles/` ship their own `*.test.ts`. They stay out through vitest's `include` and a second exclusion; drop either and `profiles/bohort/code/pricing.test.ts` fails on a `zod` it does not have while `profiles/arthur/code/usage-summary.test.ts` adds five green tests that prove nothing.
 
+**The contributor roster has been proven per module and never end to end, and this is owed rather than done.** `mc-tracker-fr/McTracker`, the subject measured while this feature was built, holds one human row inside its own 180-day window — `Ayaerna`, its second contributor, last committed sixteen months before that window's start — so its roster restates its repository line rather than exercising the feature's whole point: two people, two levels, one repository. What closes it is a repository with two accounts opening pull requests inside one window — Darkwaters, or any other with that shape. What does **not** close it: lowering a sample floor so that a second row appears. Measurements are in `aidd_docs/tasks/2026_08/2026_08_30_per-person-attribution/measurements.md`.
+
 ## What one unobserved axis costs
 
 * Every level of `aidd.yml` declares all four axes, so a single `UNKNOWN` leaves even White unproven and the report has no level to name. The conservative rule taken to its end.
@@ -162,6 +186,7 @@ instead — which would prove the arithmetic and not the wiring.
 * One honest mutation sweep over that loader ran 61 mutations; **22 survived**.
 * An earlier sweep reported every mutant killed — an invalid reporter name was making every run die at startup, which reads exactly like success.
 * **A cancellation test can be satisfied by the wrong checkpoint.** Honouring `context.signal` is a duty the collector port freezes, so every collector is owed one; but a collector checks the signal several times, and a test aiming at the deep check is satisfied by the shallow one. A test written for an abort *during* the tree walk passed with the walk's guard deleted — it was proving the adapter's pre-flight `throwIfAborted`. Only the mutation sweep said so. Drive the guarded unit directly when a checkpoint upstream can answer for it.
+* **An assertion over a collection pins nothing until the collection is proven non-empty.** A test written to prove that no contributor row carried a harness observation ran against a fixture whose recorded history held no accounts: the roster answered zero rows, the assertion mapped over an empty list, and it held whatever the adapter did. Neutering the guard it was written for left the suite green. `toEqual([])` on a derived list is two claims — that the source produced entries, and that none of them matched — and it silently proves only the second. Assert the rows are there before asserting what they lack.
 * What to do about it is a rule: `.claude/rules/03-testing/3-tests.md`, loaded when a suite is edited.
 
 ## Tools

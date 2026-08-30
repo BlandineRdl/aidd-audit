@@ -12,8 +12,11 @@ import { UnrenderableReportError } from './unrenderable-report.error.js'
 import {
   assessmentReport,
   axisReport,
+  completedRoster,
+  contributorRow,
   evidenceBlocker,
   failedProvenance,
+  failedRoster,
   levelReport,
   metRequirement,
   notMetRequirement,
@@ -186,6 +189,7 @@ describe('6. rendering is deterministic', () => {
       provenance: [provenanceA],
     })
     const reportB: AssessmentReport = {
+      contributors: null,
       provenance: [provenanceB],
       coverage: { ...reportA.coverage },
       blocking: [blockerB],
@@ -303,6 +307,23 @@ describe('8. arrays are never sorted or deduped', () => {
     const output = renderJsonReport(assessmentReport({ blocking: [blocker, blocker] }))
     const parsed = JSON.parse(output)
     expect(parsed.blocking).toEqual([blocker, blocker])
+  })
+
+  // INVARIANT: order is `composeContributorRoster`'s alone. `zack` has more deliveries than `amy`
+  // but sorts after her by neither field a renderer's own sort would naturally use — a renderer
+  // that sorted rows itself, by account or by deliveries, would put them in a different order than
+  // the block already carries.
+  it('renders contributor rows in the input order, never re-sorted', () => {
+    const rows = [
+      contributorRow({ account: 'zack', deliveries: 2 }),
+      contributorRow({ account: 'amy', deliveries: 90 }),
+    ]
+    const output = renderJsonReport(assessmentReport({ contributors: completedRoster({ rows }) }))
+    const parsed = JSON.parse(output)
+    expect(parsed.contributors.rows.map((row: { account: string | null }) => row.account)).toEqual([
+      'zack',
+      'amy',
+    ])
   })
 })
 
@@ -444,5 +465,102 @@ describe('12. a non-finite number is refused, never published as null', () => {
     })
     const parsed = JSON.parse(renderJsonReport(report))
     expect(parsed.coverage).toEqual({ axesRequested: 4, axesObserved: 0, axesConfirmed: 0 })
+  })
+
+  it('refuses a non-finite demonstrated share on a contributor row, naming the path it sits on', () => {
+    const report = assessmentReport({
+      contributors: completedRoster({
+        rows: [
+          contributorRow({
+            demonstrated: {
+              level: null,
+              axes: [{ axis: 'size', observed: 'L', share: Number.NaN, unit: 'DELIVERIES' }],
+            },
+          }),
+        ],
+      }),
+    })
+
+    expect(() => renderJsonReport(report)).toThrow(UnrenderableReportError)
+    expect(() => renderJsonReport(report)).toThrow(
+      /\$\.contributors\.rows\[0\]\.demonstrated\.axes\[0\]\.share/,
+    )
+  })
+})
+
+describe('13. contributors', () => {
+  it('keeps contributors as a present key holding null when no roster was read', () => {
+    const output = renderJsonReport(assessmentReport({ contributors: null }))
+    const parsed = JSON.parse(output)
+
+    expect('contributors' in parsed).toBe(true)
+    expect(parsed.contributors).toBeNull()
+  })
+
+  it('round-trips a completed roster with two rows, one of them unattributed', () => {
+    const roster = completedRoster({
+      windowDays: 180,
+      harnessObserved: ['prompts', 'context-engineering'],
+      harnessPaths: 41,
+      rows: [
+        contributorRow({ account: 'alice', harnessAuthorship: { files: 41, commits: 60 } }),
+        contributorRow({
+          account: null,
+          emailAddresses: 0,
+          commits: 3,
+          deliveries: 0,
+          activeDays: 0,
+          harnessAuthorship: null,
+          proven: null,
+          blocking: [],
+        }),
+      ],
+    })
+    const report = assessmentReport({ contributors: roster })
+
+    const output = renderJsonReport(report)
+    expect(JSON.parse(output).contributors).toEqual(roster)
+  })
+
+  it('round-trips a failed roster with no windowDays and no rows', () => {
+    const roster = failedRoster({ status: 'FAILED', reason: 'gh: no credentials in this run' })
+    const output = renderJsonReport(assessmentReport({ contributors: roster }))
+    const parsed = JSON.parse(output)
+
+    expect(parsed.contributors).toEqual(roster)
+    expect('windowDays' in parsed.contributors).toBe(false)
+    expect('harnessObserved' in parsed.contributors).toBe(false)
+    expect('harnessPaths' in parsed.contributors).toBe(false)
+  })
+
+  it('drops a property the contract does not declare on a row, at every depth', () => {
+    const row = { ...contributorRow(), extra: 'nope' }
+    const report = assessmentReport({
+      contributors: completedRoster({ rows: [row as never] }),
+    })
+
+    const output = renderJsonReport(report)
+    expect(output).not.toContain('extra')
+    expect(output).not.toContain('nope')
+  })
+
+  it('keeps a null harnessAuthorship null rather than substituting zeros', () => {
+    const report = assessmentReport({
+      contributors: completedRoster({
+        rows: [contributorRow({ harnessAuthorship: null })],
+      }),
+    })
+    const parsed = JSON.parse(renderJsonReport(report))
+
+    expect(parsed.contributors.rows[0].harnessAuthorship).toBeNull()
+  })
+
+  it('keeps a null harnessObserved null rather than an invented set', () => {
+    const report = assessmentReport({
+      contributors: completedRoster({ harnessObserved: null, rows: [contributorRow()] }),
+    })
+    const parsed = JSON.parse(renderJsonReport(report))
+
+    expect(parsed.contributors.harnessObserved).toBeNull()
   })
 })

@@ -81,3 +81,5 @@ Two failure modes it exists to catch, both of which silently disarmed a rule her
 - `dependencyTypes: ['npm']` excludes a devDependency, which is `npm-dev`. The rule keeps a dedicated devDependency sentinel so it cannot be narrowed back.
 
 **Prose has the same failure and no sentinel at all.** A comment naming a position — `the candidate gate below`, `Every table below`, `further down` — stops being true the moment its code moves, and a stale comment compiles. Three survived two refactors of `harness-scan.ts`, each caught by a reviewer rather than by a check. Name what a comment refers to instead of where it sits, and when a file is split, re-read what crossed with the code and what was left behind.
+
+**Owed, not fixed: the three `domain-has-no-*` rules name `models/` and `contracts/` in their `from.path`, and no sentinel sits in any folder of either kind.** The gap pre-dates the per-person attribution work, which added no file to either folder, so it is not closed here — but a gap nobody has written down is a gap everybody assumes is closed.

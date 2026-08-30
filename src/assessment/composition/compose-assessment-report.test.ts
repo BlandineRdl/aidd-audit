@@ -14,6 +14,7 @@ import type {
   EvidenceStatus,
   ObservedValue,
 } from '../../evidence/models/observation.model.js'
+import type { ContributorRosterRun } from '../../evidence/ports/contributor-roster.port.js'
 import { validModel as model } from '../../maturity/engine/maturity-model.test-fixture.js'
 
 type Unresolved = Exclude<EvidenceStatus, 'CONFIRMED'>
@@ -71,13 +72,17 @@ const provenance: readonly CollectorProvenance[] = [
 
 const compose = (
   evidence: readonly Evidence[],
-  overrides: Partial<{ provenance: readonly CollectorProvenance[] }> = {},
+  overrides: Partial<{
+    provenance: readonly CollectorProvenance[]
+    roster: ContributorRosterRun | null
+  }> = {},
 ): AssessmentReport =>
   composeAssessmentReport({
     subjectPath: '/repo/example',
     model,
     evidence,
     provenance: overrides.provenance ?? provenance,
+    roster: overrides.roster ?? null,
   })
 
 const levelOf = (report: AssessmentReport, levelId: string): LevelReport =>
@@ -393,5 +398,53 @@ describe('what the subject reached is composed beside what it sustains', () => {
 
     expect(report.demonstrated?.level?.id).toBe('high')
     expect(report.proven).toBeNull()
+  })
+})
+
+describe('a roster never moves the repository-level fields', () => {
+  it('composes the same proven, demonstrated, levels, next, blocking, coverage and provenance with and without a roster', () => {
+    const roster: ContributorRosterRun = {
+      status: 'COMPLETED',
+      windowDays: 180,
+      harnessObserved: ['prompts', 'context-engineering'],
+      harnessPaths: 3,
+      records: [
+        {
+          account: 'alice',
+          emailAddresses: 1,
+          commits: 5,
+          deliveries: 5,
+          activeDays: 5,
+          harnessAuthorship: { files: 2, commits: 3 },
+          observations: [],
+        },
+        {
+          account: 'bob',
+          emailAddresses: 2,
+          commits: 3,
+          deliveries: 3,
+          activeDays: 3,
+          harnessAuthorship: null,
+          observations: [],
+        },
+        {
+          account: null,
+          emailAddresses: 0,
+          commits: 1,
+          deliveries: 0,
+          activeDays: 0,
+          harnessAuthorship: null,
+          observations: [],
+        },
+      ],
+    }
+
+    const withoutRoster = compose(evidenceOf())
+    const withRoster = compose(evidenceOf(), { roster })
+
+    const { contributors: _withoutContributors, ...withoutRest } = withoutRoster
+    const { contributors: _withContributors, ...withRest } = withRoster
+
+    expect(withRest).toEqual(withoutRest)
   })
 })

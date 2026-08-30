@@ -4,6 +4,8 @@ import type {
   AxisReport,
   DemonstratedAxis,
   BlockingRequirement,
+  ContributorRosterReport,
+  ContributorRow,
   EvidenceStatus,
   LevelReport,
   ObservedValue,
@@ -23,6 +25,7 @@ export function renderHumanReport(report: AssessmentReport): string {
     renderIncompleteCollectorsSection(report),
     renderNextSection(report),
     renderBlockingSection(report),
+    renderContributorsSection(report),
   ]
   return sections.filter((section) => section.length > 0).join('\n\n')
 }
@@ -280,6 +283,182 @@ function whoWasAsked(report: AssessmentReport, axis: string): string {
   }
   const names = asked.map((entry) => entry.collector).join(', ')
   return `asked ${names}, and no value was observed`
+}
+
+type CompletedRoster = Extract<ContributorRosterReport, { status: 'COMPLETED' }>
+type FailedRoster = Exclude<ContributorRosterReport, CompletedRoster>
+
+// INVARIANT: existence is keyed on `report.contributors === null` alone, never on the roster's own
+// status. Falling back to the repository-only rendering when the roster failed would make one
+// subject produce two documents depending on credentials, and `cli.md` promises the same bytes on
+// any machine, on any day.
+function renderContributorsSection(report: AssessmentReport): string {
+  const { contributors } = report
+  if (contributors === null) return ''
+
+  if (contributors.status !== 'COMPLETED') {
+    return renderFailedRoster(contributors)
+  }
+
+  const header = renderContributorsHeader(contributors)
+  if (contributors.rows.length === 0) {
+    return header
+  }
+
+  const rows = contributors.rows.map((row) => renderContributorRow(report, contributors, row))
+  const harness = renderSharedHarnessLine(contributors)
+
+  return [header, ...rows, ...(harness === null ? [] : [harness])].join('\n\n')
+}
+
+function renderFailedRoster(roster: FailedRoster): string {
+  return `Contributors: ${glossRosterStatus(roster.status)} — ${roster.reason}. The level above is unchanged.`
+}
+
+// INVARIANT: never `glossProvenanceStatus` — that one is typed on a provenance entry, and the
+// roster is not a collector and answers no axis.
+function glossRosterStatus(status: FailedRoster['status']): string {
+  switch (status) {
+    case 'FAILED':
+      return 'could not be read'
+    case 'TIMED_OUT':
+      return 'timed out'
+  }
+}
+
+function renderContributorsHeader(contributors: CompletedRoster): string {
+  if (contributors.rows.length === 0) {
+    return `Contributors: no account was active in the last ${contributors.windowDays} days.`
+  }
+
+  const named = contributors.rows.filter((row) => row.account !== null).length
+  const hasUnattributed = contributors.rows.some((row) => row.account === null)
+  const noun = named === 1 ? 'account' : 'accounts'
+  const unattributedClause = hasUnattributed ? ', plus commits GitHub maps to no account' : ''
+
+  return `Contributors: ${named} ${noun} active in the last ${contributors.windowDays} days${unattributedClause}. The level above covers every delivery in the window, whoever made it; each row below covers one account's own.`
+}
+
+function renderContributorRow(
+  report: AssessmentReport,
+  contributors: CompletedRoster,
+  row: ContributorRow,
+): string {
+  const label = row.account ?? 'unattributed'
+  const lines = [`  ${label} — ${renderRowProvenLabel(row)}`, `    ${renderRowSample(row)}`]
+
+  const demonstratedLine = renderRowDemonstrated(row, report)
+  if (demonstratedLine !== null) lines.push(demonstratedLine)
+
+  // What stops the row's own next level: an evidence gap, a practice gap, or both.
+  if (row.proven === null) lines.push(...renderRowGapLines(report, row))
+
+  lines.push(`    ${renderRowHarness(row, contributors)}`)
+
+  return lines.join('\n')
+}
+
+function renderRowProvenLabel(row: ContributorRow): string {
+  return row.proven === null
+    ? 'proven: could not be established'
+    : `proven: ${row.proven.label} (rank ${row.proven.rank})`
+}
+
+// INVARIANT: `activeDays` where the sample supported a reading, `commits` where it did not — a day
+// on which one of this account's own deliveries received a commit is meaningless at zero
+// deliveries, so the commit count is what tells "nothing to measure" from "measured and low" for
+// that row instead.
+function renderRowSample(row: ContributorRow): string {
+  if (row.deliveries === 0) {
+    const whose = row.account === null ? ' whose author address GitHub maps to no account' : ''
+    return `0 deliveries · ${row.commits} commits${whose}`
+  }
+  return `${row.deliveries} deliveries · ${row.activeDays} active days`
+}
+
+// SAFETY: never below the row's own proven level, and never without the share that earned it — the
+// same rule `renderDemonstratedSection` applies at the top of the document.
+function renderRowDemonstrated(row: ContributorRow, report: AssessmentReport): string | null {
+  const { demonstrated, proven } = row
+  if (demonstrated === null || demonstrated.level === null) return null
+  if (proven === null) return null
+  if (demonstrated.level.rank <= proven.rank) return null
+
+  return [
+    '    demonstrated:',
+    ...demonstrated.axes.map((axis) => `      ${renderRowDemonstratedAxis(axis, report)}`),
+  ].join('\n')
+}
+
+function renderRowDemonstratedAxis(axis: DemonstratedAxis, report: AssessmentReport): string {
+  const label = labelFor(axis.axis, report) ?? axis.axis
+  const percent = Math.round(axis.share * 100)
+  return `${label}: ${formatSet(axis.observed)} · reached on ${percent}% of ${occasionsOf(axis.unit)}`
+}
+
+function renderRowGapLines(report: AssessmentReport, row: ContributorRow): readonly string[] {
+  const practiceBlockers = row.blocking.filter(
+    (blocker): blocker is PracticeBlocker => blocker.gap === 'PRACTICE',
+  )
+  // INVARIANT: a practice gap on the row is a measurement that did say something, and the row must
+  // read that way rather than as the evidence gap the plan's agreed prose only shows. A row mixing
+  // both never reads as an evidence gap once one axis was actually measured and found low.
+  if (practiceBlockers.length > 0) {
+    return practiceBlockers.map((blocker) => renderRowPracticeGap(report, blocker))
+  }
+
+  const evidenceBlockers = row.blocking.filter(
+    (blocker): blocker is EvidenceBlocker => blocker.gap === 'EVIDENCE',
+  )
+  return evidenceBlockers.length === 0 ? [] : [renderRowEvidenceGap(report, evidenceBlockers)]
+}
+
+// SAFETY: never `renderPracticeGap` — its fallback ends `Improve ${axisLabel} to close the gap.`,
+// an imperative aimed at a named human. `project-brief.md` forbids recommending a practice change
+// from a failure to prove one, and the plan forbids reading a thin row as a performance problem at
+// all — this line carries no imperative of its own.
+function renderRowPracticeGap(report: AssessmentReport, blocker: PracticeBlocker): string {
+  const { levelLabel, axisLabel, axis } = locateAxis(report, blocker)
+  const requirement = findUniquePracticeRequirement(axis, blocker)
+  if (requirement) {
+    return `    [practice gap] ${axisLabel} at ${levelLabel}: observed ${formatSet(requirement.observed)} does not reach the required ${formatSet(requirement.threshold)}.`
+  }
+  return `    [practice gap] ${axisLabel} at ${levelLabel}: the observed practice does not meet the requirement.`
+}
+
+function renderRowEvidenceGap(
+  report: AssessmentReport,
+  blockers: readonly EvidenceBlocker[],
+): string {
+  const labels = blockers.map((blocker) => locateAxis(report, blocker).axisLabel)
+  const verb = labels.length === 1 ? 'is' : 'are'
+  return `    [evidence gap] this account's own sample could not decide it, so ${joinLabels(labels)} ${verb} UNKNOWN for this account. This is not a statement about their practice.`
+}
+
+function joinLabels(labels: readonly string[]): string {
+  if (labels.length <= 1) return labels[0] ?? ''
+  return `${labels.slice(0, -1).join(', ')} and ${labels[labels.length - 1]}`
+}
+
+function renderSharedHarnessLine(contributors: CompletedRoster): string | null {
+  // INVARIANT: `null` per R11 is an evidence gap the roster completed anyway — the loaded model
+  // declares no harness axis, or the scan left a rankable member undecidable — never a failure, and
+  // the sentence is omitted rather than printed with a fabricated value.
+  if (contributors.harnessObserved === null) return null
+  return `  Harness is the repository's, not a person's: ${formatSet(contributors.harnessObserved)} are available to every account above, and each carries that same value.`
+}
+
+function renderRowHarness(row: ContributorRow, contributors: CompletedRoster): string {
+  // SAFETY: `null` is a walk that did not run, and never "authored none" — printing the latter for
+  // a `git` that failed would publish a claim about a person on the strength of a refusal.
+  if (row.harnessAuthorship === null) {
+    return 'harness: authorship could not be read'
+  }
+  if (contributors.harnessPaths === 0) {
+    return `harness: this repository's harness set is empty`
+  }
+  const authored = row.harnessAuthorship.files === 0 ? 'none' : `${row.harnessAuthorship.files}`
+  return `harness: authored ${authored} of the ${contributors.harnessPaths} files in this repository's harness set`
 }
 
 function formatValue(value: Threshold | ObservedValue): string {

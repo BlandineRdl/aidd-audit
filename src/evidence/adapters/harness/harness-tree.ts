@@ -6,6 +6,7 @@ export interface HarnessTreeEntry {
 }
 
 export interface HarnessTree {
+  // Deterministically ordered: `HarnessScan.provenBy` reports paths in this order.
   entries(): Promise<readonly HarnessTreeEntry[]>
   // null is "could not be read", never "read and found empty".
   probe(path: string, bytes: number): Promise<string | null>

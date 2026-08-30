@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { AxisVocabulary } from '../models/axis.model.js'
 import type { Observation } from '../models/observation.model.js'
+import { forgeDeliveryReader } from './forge-repository/delivery-reader.js'
 import { ForgeRepositoryEvidenceCollector } from './forge-repository.adapter.js'
 
 // SAFETY: Integration against a stub `gh` on PATH: the forge is the boundary and the suite never
@@ -111,7 +112,12 @@ function collectFrom(
   vocabulary: readonly AxisVocabulary[] = FULL_VOCABULARY,
   signal: AbortSignal = NEVER_ABORTED,
 ): Promise<readonly Observation[]> {
-  return new ForgeRepositoryEvidenceCollector(SLUG).collect({ path: '.', vocabulary, signal })
+  const deliveries = forgeDeliveryReader(SLUG, '.')
+  return new ForgeRepositoryEvidenceCollector(SLUG, deliveries).collect({
+    path: '.',
+    vocabulary,
+    signal,
+  })
 }
 
 const on = (observations: readonly Observation[], axis: string, reading: string) =>
@@ -198,7 +204,7 @@ describe('the forge evidence collector', () => {
     async () => {
       await ghAnswering(payload(TWELVE_DELIVERIES))
 
-      const collector = new ForgeRepositoryEvidenceCollector(SLUG)
+      const collector = new ForgeRepositoryEvidenceCollector(SLUG, forgeDeliveryReader(SLUG, '.'))
       const observations = await collector.collect({
         path: '.',
         vocabulary: FULL_VOCABULARY,

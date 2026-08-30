@@ -284,4 +284,26 @@ describe('8. the wired collectors reach the pipeline through the binary', () => 
     expect(human.status).toBe(0)
     expect(human.stdout).toContain('could not be established')
   })
+
+  it('names no roster for a bundle with no GitHub origin', () => {
+    expect(reportFor('assess', 'profiles/perceval').contributors).toBeNull()
+  })
+
+  it('renders the contributors section as a failure, not an absence, when the forge refuses', () => {
+    // INVARIANT: a source that could not answer is an evidence gap, never the tool breaking — on
+    // the same footing as the forge-collector assertion above. The spawn fixture's refusing `gh`
+    // is what keeps this deterministic and offline, whatever `gh` a real machine has.
+    const report = reportFor('assess', '.')
+
+    // INVARIANT: a checkout with no GitHub origin builds no roster at all, the other half of the
+    // same rule the forge-collector assertion above already carries.
+    if (report.contributors === null) return
+
+    expect(report.contributors.status).toBe('FAILED')
+    expect('reason' in report.contributors ? report.contributors.reason : '').toContain('gh')
+
+    const human = runCli('assess', '.')
+    expect(human.status).toBe(0)
+    expect(human.stdout).toContain('Contributors: could not be read')
+  })
 })

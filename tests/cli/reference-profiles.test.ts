@@ -88,6 +88,30 @@ describe('every reference profile reaches the level its bundle proves', () => {
   })
 })
 
+describe('the four reference profiles carry no roster: prose byte for byte, json plus one key', () => {
+  it.each(Object.keys(EXPECTED_LEVEL))(
+    'keeps contributors a present key holding null for %s',
+    async (profile) => {
+      const report = await reportFor(profile)
+
+      expect('contributors' in report).toBe(true)
+      expect(report.contributors).toBeNull()
+    },
+  )
+
+  it.each(Object.keys(EXPECTED_LEVEL))(
+    'names no contributor section in prose for %s',
+    async (profile) => {
+      const { io, stdout } = capturingIo()
+
+      const exitCode = await runAssess(['assess', `profiles/${profile}`], io)
+
+      expect(exitCode).toBe(0)
+      expect(stdout()).not.toContain('Contributors:')
+    },
+  )
+})
+
 describe('the production graph holds no knowledge of any profile', () => {
   const FORBIDDEN = [...Object.keys(EXPECTED_LEVEL), 'profiles/']
 

@@ -3,8 +3,11 @@ import { renderHumanReport } from './human.renderer.js'
 import {
   assessmentReport,
   axisReport,
+  completedRoster,
+  contributorRow,
   evidenceBlocker,
   failedProvenance,
+  failedRoster,
   levelReport,
   metRequirement,
   notMetRequirement,
@@ -648,5 +651,297 @@ describe('12. what the subject reached is reported beneath what it holds, never 
     expect(renderHumanReport(assessmentReport({ demonstrated: null }))).not.toContain(
       'Demonstrated:',
     )
+  })
+})
+
+describe('13. contributors', () => {
+  it('renders no section at all when no roster was read', () => {
+    const output = renderHumanReport(assessmentReport({ contributors: null }))
+
+    expect(output).not.toContain('Contributors:')
+  })
+
+  it('renders the section, present and empty, naming the reason, when the roster could not be read', () => {
+    const output = renderHumanReport(
+      assessmentReport({
+        contributors: failedRoster({ reason: 'gh: no credentials in this run' }),
+      }),
+    )
+    const paragraph = output
+      .split('\n\n')
+      .find((candidate) => candidate.startsWith('Contributors:'))
+
+    expect(paragraph).toBe(
+      'Contributors: could not be read — gh: no credentials in this run. The level above is unchanged.',
+    )
+  })
+
+  it('glosses a timed-out roster apart from a failed one', () => {
+    const output = renderHumanReport(
+      assessmentReport({
+        contributors: failedRoster({ status: 'TIMED_OUT', reason: 'the budget was spent' }),
+      }),
+    )
+
+    expect(output).toContain('Contributors: timed out — the budget was spent.')
+  })
+
+  it('says nobody was active, naming the window, when the roster completed with no rows', () => {
+    const output = renderHumanReport(
+      assessmentReport({ contributors: completedRoster({ rows: [], windowDays: 90 }) }),
+    )
+
+    expect(output).toContain('Contributors: no account was active in the last 90 days.')
+  })
+
+  it('counts named accounts in the header and names the unattributed bucket as a second clause', () => {
+    const output = renderHumanReport(
+      assessmentReport({
+        contributors: completedRoster({
+          windowDays: 180,
+          rows: [
+            contributorRow({ account: 'alice' }),
+            contributorRow({ account: 'bob' }),
+            contributorRow({ account: null, deliveries: 0, activeDays: 0, commits: 3 }),
+          ],
+        }),
+      }),
+    )
+
+    expect(output).toContain(
+      'Contributors: 2 accounts active in the last 180 days, plus commits GitHub maps to no account.',
+    )
+  })
+
+  it('uses the singular noun for exactly one account', () => {
+    const output = renderHumanReport(
+      assessmentReport({
+        contributors: completedRoster({ rows: [contributorRow({ account: 'alice' })] }),
+      }),
+    )
+
+    expect(output).toContain('Contributors: 1 account active')
+  })
+
+  it('names deliveries and, beside them, active days on a row with a measured sample', () => {
+    const output = renderHumanReport(
+      assessmentReport({
+        contributors: completedRoster({
+          rows: [contributorRow({ account: 'alice', deliveries: 87, activeDays: 12, commits: 90 })],
+        }),
+      }),
+    )
+
+    expect(output).toContain('87 deliveries · 12 active days')
+  })
+
+  it('names commits instead of active days when nothing was delivered', () => {
+    const output = renderHumanReport(
+      assessmentReport({
+        contributors: completedRoster({
+          rows: [contributorRow({ account: 'bob', deliveries: 0, activeDays: 0, commits: 4 })],
+        }),
+      }),
+    )
+
+    expect(output).toContain('0 deliveries · 4 commits')
+  })
+
+  it('names the unattributed bucket, never a blank and never a plausible-looking login', () => {
+    const output = renderHumanReport(
+      assessmentReport({
+        contributors: completedRoster({
+          rows: [contributorRow({ account: null, deliveries: 0, activeDays: 0, commits: 12 })],
+        }),
+      }),
+    )
+
+    expect(output).toContain('unattributed')
+    expect(output).toContain(
+      '0 deliveries · 12 commits whose author address GitHub maps to no account',
+    )
+  })
+
+  it('names a demonstrated axis with the share that earned it, glossed as it is above', () => {
+    const output = renderHumanReport(
+      assessmentReport({
+        contributors: completedRoster({
+          rows: [
+            contributorRow({
+              account: 'alice',
+              proven: levelReport({ id: 'blue', rank: 1, label: 'Blue' }),
+              demonstrated: {
+                level: { id: 'copper', rank: 4, label: 'Copper', outcome: 'MET' },
+                axes: [{ axis: 'size', observed: 'XL', share: 0.34, unit: 'DELIVERIES' }],
+              },
+            }),
+          ],
+        }),
+      }),
+    )
+
+    expect(output).toContain('XL')
+    expect(output).toContain('34% of delivered changes')
+  })
+
+  it('omits the demonstrated line when the row demonstrates no more than it proves', () => {
+    const level = levelReport({ id: 'blue', rank: 1, label: 'Blue' })
+    const output = renderHumanReport(
+      assessmentReport({
+        contributors: completedRoster({
+          rows: [
+            contributorRow({
+              account: 'alice',
+              proven: level,
+              demonstrated: { level, axes: [] },
+            }),
+          ],
+        }),
+      }),
+    )
+
+    expect(output).not.toContain('demonstrated:')
+  })
+
+  it(
+    'says a row could not be established, names the unknown axes as an evidence gap, and never ' +
+      'reads as a statement about practice',
+    () => {
+      const copper = levelReport({
+        id: 'copper',
+        rank: 4,
+        label: 'Copper',
+        axes: [
+          axisReport({ axis: 'size', label: 'Taille' }),
+          axisReport({ axis: 'intervention', label: 'Intervention' }),
+          axisReport({ axis: 'parallelism', label: 'En parallèle' }),
+        ],
+      })
+      const output = renderHumanReport(
+        assessmentReport({
+          levels: [copper],
+          contributors: completedRoster({
+            rows: [
+              contributorRow({
+                account: 'carol',
+                proven: null,
+                demonstrated: null,
+                blocking: [
+                  evidenceBlocker('copper', 'size'),
+                  evidenceBlocker('copper', 'intervention'),
+                  evidenceBlocker('copper', 'parallelism'),
+                ],
+              }),
+            ],
+          }),
+        }),
+      )
+
+      expect(output).toContain('carol — proven: could not be established')
+      expect(output).toContain('[evidence gap]')
+      expect(output).toContain('Taille')
+      expect(output).toContain('Intervention')
+      expect(output).toContain('En parallèle')
+      expect(output).toContain('This is not a statement about their practice.')
+      expect(output).not.toMatch(/improve/i)
+    },
+  )
+
+  it('reads a practice gap as measured and low, never as missing evidence, and recommends nothing', () => {
+    const copper = levelReport({
+      id: 'copper',
+      rank: 4,
+      label: 'Copper',
+      axes: [
+        axisReport({
+          axis: 'size',
+          label: 'Taille',
+          requirements: [notMetRequirement('size', 'L', 'S')],
+        }),
+      ],
+    })
+    const output = renderHumanReport(
+      assessmentReport({
+        levels: [copper],
+        contributors: completedRoster({
+          rows: [
+            contributorRow({
+              account: 'dave',
+              proven: null,
+              demonstrated: null,
+              blocking: [practiceBlocker('copper', 'size')],
+            }),
+          ],
+        }),
+      }),
+    )
+
+    expect(output).toContain('[practice gap]')
+    expect(output).not.toContain('[evidence gap]')
+    expect(output).not.toMatch(/improve/i)
+    expect(output).not.toMatch(/\bfix\b/i)
+  })
+
+  it('prints the shared harness sentence exactly once, beneath the rows, never inside one', () => {
+    const output = renderHumanReport(
+      assessmentReport({
+        contributors: completedRoster({
+          harnessObserved: ['prompts', 'context-engineering'],
+          harnessPaths: 41,
+          rows: [
+            contributorRow({ account: 'alice', harnessAuthorship: { files: 41, commits: 60 } }),
+          ],
+        }),
+      }),
+    )
+
+    const occurrences = output.split("Harness is the repository's").length - 1
+    expect(occurrences).toBe(1)
+    expect(output).toContain("authored 41 of the 41 files in this repository's harness set")
+  })
+
+  it('omits the shared harness sentence when no harness value was established (R11: an evidence gap, not a failure)', () => {
+    const output = renderHumanReport(
+      assessmentReport({
+        contributors: completedRoster({ harnessObserved: null, rows: [contributorRow()] }),
+      }),
+    )
+
+    expect(output).not.toContain("Harness is the repository's")
+  })
+
+  it('renders an empty harness set as "an empty set", never a blank', () => {
+    const output = renderHumanReport(
+      assessmentReport({
+        contributors: completedRoster({
+          harnessObserved: [],
+          harnessPaths: 0,
+          rows: [contributorRow({ harnessAuthorship: { files: 0, commits: 0 } })],
+        }),
+      }),
+    )
+
+    expect(output).toContain('an empty set')
+    expect(output).toContain("this repository's harness set is empty")
+  })
+
+  it('reads "authored none" apart from authorship that could not be read', () => {
+    const outputZero = renderHumanReport(
+      assessmentReport({
+        contributors: completedRoster({
+          rows: [contributorRow({ harnessAuthorship: { files: 0, commits: 0 } })],
+        }),
+      }),
+    )
+    const outputNull = renderHumanReport(
+      assessmentReport({
+        contributors: completedRoster({ rows: [contributorRow({ harnessAuthorship: null })] }),
+      }),
+    )
+
+    expect(outputZero).toContain('authored none of')
+    expect(outputNull).toContain('authorship could not be read')
+    expect(outputZero).not.toContain('could not be read')
+    expect(outputNull).not.toContain('authored none')
   })
 })
