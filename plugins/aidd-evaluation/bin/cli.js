@@ -4451,7 +4451,7 @@ var require_resolve_block_scalar = __commonJS({
       if (!header)
         return { value: "", type: null, comment: "", range: [start, start, start] };
       const type = header.mode === ">" ? Scalar.Scalar.BLOCK_FOLDED : Scalar.Scalar.BLOCK_LITERAL;
-      const lines = scalar.source ? splitLines(scalar.source) : [];
+      const lines = scalar.source ? splitLines2(scalar.source) : [];
       let chompStart = lines.length;
       for (let i = lines.length - 1; i >= 0; --i) {
         const content = lines[i][1];
@@ -4609,7 +4609,7 @@ var require_resolve_block_scalar = __commonJS({
       }
       return { mode, indent, chomp, comment, length };
     }
-    function splitLines(source) {
+    function splitLines2(source) {
       const split = source.split(/\n( *)/);
       const first = split[0];
       const m = first.match(/^( *)/);
@@ -7264,7 +7264,7 @@ var require_public_api = __commonJS({
       }
       return doc;
     }
-    function parse(src, reviver, options) {
+    function parse2(src, reviver, options) {
       let _reviver = void 0;
       if (typeof reviver === "function") {
         _reviver = reviver;
@@ -7305,7 +7305,7 @@ var require_public_api = __commonJS({
         return value.toString(options);
       return new Document.Document(value, _replacer, options).toString(options);
     }
-    exports.parse = parse;
+    exports.parse = parse2;
     exports.parseAllDocuments = parseAllDocuments;
     exports.parseDocument = parseDocument;
     exports.stringify = stringify;
@@ -7480,11 +7480,11 @@ async function runCollector(collector, requestedAxes, context) {
 function reasonFor(error) {
   return error instanceof Error ? error.message : String(error);
 }
-function toProvenance({ run, responsibleAxes }) {
-  if (run.status === "COMPLETED") {
-    return { collector: run.collector, status: "COMPLETED", axes: responsibleAxes };
+function toProvenance({ run: run2, responsibleAxes }) {
+  if (run2.status === "COMPLETED") {
+    return { collector: run2.collector, status: "COMPLETED", axes: responsibleAxes };
   }
-  return { collector: run.collector, status: run.status, axes: responsibleAxes, reason: run.reason };
+  return { collector: run2.collector, status: run2.status, axes: responsibleAxes, reason: run2.reason };
 }
 
 // src/maturity/models/invalid-maturity-model.error.ts
@@ -9008,7 +9008,7 @@ var GhCommandFailedError = class extends Error {
 // src/evidence/adapters/forge-repository/gh-process.ts
 var GH_MAX_BUFFER = 64 * 1024 * 1024;
 function runGh(args, signal, maxBuffer = GH_MAX_BUFFER) {
-  return new Promise((resolve2, reject) => {
+  return new Promise((resolve3, reject) => {
     signal.throwIfAborted();
     execFile(
       "gh",
@@ -9021,7 +9021,7 @@ function runGh(args, signal, maxBuffer = GH_MAX_BUFFER) {
       },
       (error, stdout, stderr) => {
         if (error === null) {
-          resolve2(stdout);
+          resolve3(stdout);
           return;
         }
         if (signal.aborted) {
@@ -9284,7 +9284,7 @@ var HARDENED_CONFIGURATION = [
   "core.hooksPath=/dev/null"
 ];
 function runGit(cwd, args, signal) {
-  return new Promise((resolve2, reject) => {
+  return new Promise((resolve3, reject) => {
     signal.throwIfAborted();
     execFile2(
       "git",
@@ -9299,7 +9299,7 @@ function runGit(cwd, args, signal) {
       },
       (error, stdout, stderr) => {
         if (error === null) {
-          resolve2(stdout);
+          resolve3(stdout);
           return;
         }
         if (signal.aborted) {
@@ -9490,9 +9490,9 @@ function isDeliveredChange(commit) {
 }
 async function readGitDerivedMetrics(path, signal) {
   if (await isShallowRepository(path, signal)) return UNRECOVERABLE2;
-  const walk2 = await readFirstParentWalk(path, signal);
-  if (walk2 === null) return UNRECOVERABLE2;
-  const merges = walk2.filter(isDeliveredChange);
+  const walk3 = await readFirstParentWalk(path, signal);
+  if (walk3 === null) return UNRECOVERABLE2;
+  const merges = walk3.filter(isDeliveredChange);
   if (merges.length === 0) return UNRECOVERABLE2;
   const windowEnd = await mostRecentCommitDate(path, signal);
   if (windowEnd === null) return UNRECOVERABLE2;
@@ -9502,7 +9502,7 @@ async function readGitDerivedMetrics(path, signal) {
     return Number.isFinite(instant) && instant >= windowStart;
   };
   const deliveredInWindow = merges.filter((merge) => inWindow(merge.authorDate));
-  const landedDirectlyInWindow = walk2.filter(
+  const landedDirectlyInWindow = walk3.filter(
     (commit) => !isDeliveredChange(commit) && inWindow(commit.authorDate)
   );
   const readsBranchShape = mergesCarryTheDeliveries(
@@ -9511,7 +9511,7 @@ async function readGitDerivedMetrics(path, signal) {
   );
   const sizeBucket = readsBranchShape ? await readSizeBucket3(path, deliveredInWindow, signal) : null;
   const intervention = readsBranchShape ? await readAutonomy(path, deliveredInWindow, signal) : null;
-  const parallelism = readsBranchShape ? await readParallelism2(path, walk2, merges, inWindow, signal) : null;
+  const parallelism = readsBranchShape ? await readParallelism2(path, walk3, merges, inWindow, signal) : null;
   return { sizeBucket, intervention, parallelism };
 }
 function mergesCarryTheDeliveries(merges, landedDirectly) {
@@ -9729,7 +9729,7 @@ function mergeSideRevisions(merge) {
     ...merge.parents.filter((parent) => parent !== side).map((parent) => `^${parent}`)
   ]);
 }
-async function readParallelism2(path, walk2, merges, inWindow, signal) {
+async function readParallelism2(path, walk3, merges, inWindow, signal) {
   const branchesByDay = /* @__PURE__ */ new Map();
   const record = (branch, authorDate) => {
     if (!inWindow(authorDate)) return;
@@ -9739,7 +9739,7 @@ async function readParallelism2(path, walk2, merges, inWindow, signal) {
     branches.add(branch);
     branchesByDay.set(day, branches);
   };
-  for (const commit of walk2) {
+  for (const commit of walk3) {
     if (isDeliveredChange(commit)) continue;
     record("mainline", commit.authorDate);
   }
@@ -9765,10 +9765,10 @@ async function readParallelism2(path, walk2, merges, inWindow, signal) {
   return median([...branchesByDay.values()].map((branches) => branches.size));
 }
 var SPAWNS_IN_FLIGHT = 8;
-async function inBoundedParallel(inputs, run) {
+async function inBoundedParallel(inputs, run2) {
   const outputs = [];
   for (let from = 0; from < inputs.length; from += SPAWNS_IN_FLIGHT) {
-    outputs.push(...await Promise.all(inputs.slice(from, from + SPAWNS_IN_FLIGHT).map(run)));
+    outputs.push(...await Promise.all(inputs.slice(from, from + SPAWNS_IN_FLIGHT).map(run2)));
   }
   return outputs;
 }
@@ -10327,19 +10327,25 @@ function parseYamlDocument(source) {
 var UsageError = class extends Error {
 };
 
-// src/cli/parsing/assess-arguments.ts
-var USAGE_LINE = "usage: aidd-audit assess <path> [--json] [--model <path>]";
-function parseAssessArguments(argv) {
-  const command = argv[0];
-  if (command !== "assess") {
+// src/cli/parsing/command-name.ts
+var USAGE_LINE = "usage: aidd-audit assess <path> [--json] [--model <path>] | aidd-audit harness <path> [--json]";
+function commandOperandsFor(argv2, expected) {
+  const command = argv2[0];
+  if (command !== expected) {
     const what = command === void 0 ? "No command given." : `Unknown command '${command}'.`;
-    throw usageError(what);
+    throw new UsageError(`${what} ${USAGE_LINE}`);
   }
+  return argv2.slice(1);
+}
+
+// src/cli/parsing/assess-arguments.ts
+var USAGE_LINE2 = "usage: aidd-audit assess <path> [--json] [--model <path>]";
+function parseAssessArguments(argv2) {
+  const operands = commandOperandsFor(argv2, "assess");
   let subjectPath;
   let modelPath = null;
   let jsonSeen = false;
   let modelSeen = false;
-  const operands = argv.slice(1);
   let valueConsumedAt = -1;
   for (const [index, token] of operands.entries()) {
     if (index === valueConsumedAt) {
@@ -10373,7 +10379,7 @@ function parseAssessArguments(argv) {
   return { subjectPath, modelPath, json: jsonSeen };
 }
 function usageError(reason) {
-  return new UsageError(`${reason} ${USAGE_LINE}`);
+  return new UsageError(`${reason} ${USAGE_LINE2}`);
 }
 
 // src/cli/bootstrap/canonical-model-path.ts
@@ -10980,10 +10986,10 @@ function collectorsFor(forge) {
     new FixtureBundleEvidenceCollector()
   ];
 }
-async function runAssess(argv, io, options = {}) {
+async function runAssess(argv2, io, options = {}) {
   const budget = new AbortController();
   try {
-    const args = parseAssessArguments(argv);
+    const args = parseAssessArguments(argv2);
     requireExistingSubject(args.subjectPath);
     const resolved = await resolveSubjects(args.subjectPath, budget.signal);
     const model = loadMaturityModel(args.modelPath ?? canonicalModelPath());
@@ -11014,7 +11020,8 @@ async function runAssess(argv, io, options = {}) {
 function renderReports(reports, isSet, json, colours) {
   const [only] = reports;
   const style = colours ? colouredText : plainText;
-  if (!isSet && only !== void 0) return json ? renderJsonReport(only) : renderHumanReport(only, style);
+  if (!isSet && only !== void 0)
+    return json ? renderJsonReport(only) : renderHumanReport(only, style);
   return json ? renderJsonReports(reports) : renderHumanReports(reports, style);
 }
 function requireExistingSubject(subjectPath) {
@@ -11032,6 +11039,963 @@ function messageOf(error) {
   return error instanceof Error ? error.message : String(error);
 }
 
+// src/cli/commands/harness.command.ts
+import { statSync as statSync2 } from "fs";
+
+// src/harness/adapters/claude-harness.adapter.ts
+import { homedir } from "os";
+import { dirname as dirname2, join as join9, resolve as resolve2 } from "path";
+
+// src/harness/adapters/claude/context-imports.ts
+var IMPORT_DEPTH_LIMIT = 4;
+var FENCE = /^```/;
+var BACKTICK_SPAN = /`[^`\n]*`/g;
+var MACHINE_IMPORT_PREFIX = "~/.claude/";
+function withoutQuotedText(content) {
+  const kept = [];
+  let inFence = false;
+  for (const line of content.split("\n")) {
+    if (FENCE.test(line.trim())) {
+      inFence = !inFence;
+      kept.push("");
+      continue;
+    }
+    if (inFence) {
+      kept.push("");
+      continue;
+    }
+    kept.push(line.replace(BACKTICK_SPAN, (span) => " ".repeat(span.length)));
+  }
+  return kept.join("\n");
+}
+function importsIn(content) {
+  const found = [];
+  for (const line of withoutQuotedText(content).split("\n")) {
+    for (const token of line.split(/\s+/)) {
+      if (token.startsWith("@") && token.length > 1) found.push(token.slice(1));
+    }
+  }
+  return found;
+}
+function resolveRelative(fromPath, importPath) {
+  if (importPath.startsWith(MACHINE_IMPORT_PREFIX)) return importPath;
+  const machinePath = fromPath.startsWith(MACHINE_IMPORT_PREFIX);
+  const fromDir = machinePath ? fromPath.slice(0, fromPath.lastIndexOf("/") + 1) : fromPath.includes("/") ? fromPath.slice(0, fromPath.lastIndexOf("/")) : "";
+  const combined = fromDir === "" ? importPath : `${fromDir}/${importPath}`;
+  if (machinePath) {
+    const relative = combined.slice(MACHINE_IMPORT_PREFIX.length);
+    return `${MACHINE_IMPORT_PREFIX}${normalisePath(relative)}`;
+  }
+  return normalisePath(combined);
+}
+function normalisePath(combined) {
+  const resolved = [];
+  for (const segment of combined.split("/")) {
+    if (segment === "." || segment === "") continue;
+    if (segment === "..") resolved.pop();
+    else resolved.push(segment);
+  }
+  return resolved.join("/");
+}
+async function followImports(entryPath, entryContent, read) {
+  const visited = /* @__PURE__ */ new Set([entryPath]);
+  const found = /* @__PURE__ */ new Map();
+  async function collect(path, content, depth) {
+    for (const rawImport of importsIn(content)) {
+      const resolved = resolveRelative(path, rawImport);
+      if (visited.has(resolved)) continue;
+      visited.add(resolved);
+      const importedContent = await read(resolved);
+      found.set(resolved, { path: resolved, content: importedContent });
+      if (importedContent !== null && depth < IMPORT_DEPTH_LIMIT) {
+        await collect(resolved, importedContent, depth + 1);
+      }
+    }
+  }
+  await collect(entryPath, entryContent, 1);
+  return [...found.values()];
+}
+
+// src/harness/adapters/claude/rule-tier.ts
+var import_yaml2 = __toESM(require_dist(), 1);
+var FRONT_MATTER_BLOCK = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/;
+function readFrontMatter(content) {
+  const match = FRONT_MATTER_BLOCK.exec(content);
+  if (match === null) return { present: false };
+  let data;
+  try {
+    data = (0, import_yaml2.parse)(match[1] ?? "");
+  } catch {
+    return { present: true, parsed: false };
+  }
+  return {
+    present: true,
+    parsed: true,
+    data: typeof data === "object" && data !== null ? data : {},
+    body: match[2] ?? ""
+  };
+}
+function tierOfRule(content) {
+  const frontMatter = readFrontMatter(content);
+  if (!frontMatter.present) return { decided: true, tier: "ALWAYS_LOADED" };
+  if (!frontMatter.parsed) return { decided: false, reason: "INVALID_RULE_FRONT_MATTER" };
+  return {
+    decided: true,
+    tier: "paths" in frontMatter.data ? "CONDITIONALLY_LOADED" : "ALWAYS_LOADED"
+  };
+}
+
+// src/harness/adapters/claude/declaration-front-matter.ts
+function splitDeclaration(content) {
+  const frontMatter = readFrontMatter(content);
+  if (!frontMatter.present) {
+    return { decided: false, reason: "MISSING_DECLARATION_FRONT_MATTER" };
+  }
+  if (!frontMatter.parsed) {
+    return { decided: false, reason: "INVALID_DECLARATION_FRONT_MATTER" };
+  }
+  const description = frontMatter.data["description"];
+  if (typeof description !== "string") {
+    return { decided: false, reason: "MISSING_DECLARATION_DESCRIPTION" };
+  }
+  return { decided: true, description, body: frontMatter.body };
+}
+
+// src/harness/adapters/claude/directory-tree.ts
+import { readFile as readFile4, readdir as readdir3 } from "fs/promises";
+import { join as join8 } from "path";
+var NEVER_LOADED = /* @__PURE__ */ new Set(["node_modules", ".git", ".DS_Store"]);
+function isSkipped(name) {
+  return NEVER_LOADED.has(name) || name.startsWith(".");
+}
+function directoryTree(root, signal) {
+  return {
+    entries: (directory) => walk2(root, directory, signal),
+    read: async (path) => {
+      signal.throwIfAborted();
+      try {
+        return await readFile4(join8(root, path), "utf8");
+      } catch {
+        return null;
+      }
+    }
+  };
+}
+async function walk2(root, directory, signal) {
+  signal.throwIfAborted();
+  let listing;
+  try {
+    listing = await readdir3(join8(root, directory), { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  const entries = [];
+  for (const entry of listing) {
+    if (isSkipped(entry.name)) continue;
+    const path = directory === "" ? entry.name : `${directory}/${entry.name}`;
+    if (entry.isDirectory()) {
+      entries.push(...await walk2(root, path, signal));
+    } else if (entry.isFile()) {
+      entries.push({ path });
+    }
+  }
+  return entries;
+}
+
+// src/harness/adapters/claude-harness.adapter.ts
+var CONTEXT_FILE_CANDIDATES = ["CLAUDE.md", ".claude/CLAUDE.md"];
+var LOCAL_CONTEXT_FILE = "CLAUDE.local.md";
+var RULES_DIRECTORY = "rules";
+var DECLARATION_DIRECTORIES = ["skills", "agents", "commands"];
+var SUBJECT_PREFIX = ".claude/";
+var MACHINE_IMPORT_PREFIX2 = "~/.claude/";
+var BODY_SUFFIX = "::body";
+function push(files, seen, root, path, content, tier, scope, publishAt) {
+  const key = resolve2(root, path);
+  if (seen.has(key)) return;
+  seen.add(key);
+  const published = publishAt(path);
+  files.push({
+    path: published,
+    byteSize: Buffer.byteLength(content, "utf8"),
+    content,
+    tier,
+    scope
+  });
+}
+async function findContextFile(tree) {
+  for (const candidate of CONTEXT_FILE_CANDIDATES) {
+    const content = await tree.read(candidate);
+    if (content !== null) return { path: candidate, content };
+  }
+  return null;
+}
+async function forEachImportOf(tree, machineTree, entry, publish, publishMachineImport, markUnread) {
+  const imports = await followImports(
+    entry.path,
+    entry.content,
+    (path) => path.startsWith(MACHINE_IMPORT_PREFIX2) ? machineTree.read(path.slice(MACHINE_IMPORT_PREFIX2.length)) : tree.read(path)
+  );
+  for (const imported of imports) {
+    if (imported.content === null) {
+      markUnread(imported.path);
+    } else if (imported.path.startsWith(MACHINE_IMPORT_PREFIX2)) {
+      publishMachineImport(imported.path, imported.content);
+    } else {
+      publish(imported.path, imported.content);
+    }
+  }
+}
+async function readContextFiles(tree, files, unread, seen, scope, root, machineRoot, machineTree, publishAt = (path) => path) {
+  const main = await findContextFile(tree);
+  if (main === null) return;
+  const publish = (path, content) => push(files, seen, root, path, content, "ALWAYS_LOADED", scope, publishAt);
+  const publishMachineImport = (path, content) => {
+    const localPath2 = path.slice(MACHINE_IMPORT_PREFIX2.length);
+    push(
+      files,
+      seen,
+      machineRoot,
+      localPath2,
+      content,
+      "ALWAYS_LOADED",
+      "MACHINE",
+      (publishedPath) => join9(machineRoot, publishedPath)
+    );
+  };
+  const markUnread = (path) => {
+    const machineImport = path.startsWith(MACHINE_IMPORT_PREFIX2);
+    unread.push({
+      path: machineImport ? join9(machineRoot, path.slice(MACHINE_IMPORT_PREFIX2.length)) : publishAt(path),
+      scope: machineImport ? "MACHINE" : scope,
+      reason: "MISSING_IMPORT"
+    });
+  };
+  publish(main.path, main.content);
+  await forEachImportOf(tree, machineTree, main, publish, publishMachineImport, markUnread);
+  const localDirectory = main.path.includes("/") ? main.path.slice(0, main.path.lastIndexOf("/")) : "";
+  const localPath = localDirectory === "" ? LOCAL_CONTEXT_FILE : `${localDirectory}/${LOCAL_CONTEXT_FILE}`;
+  const local = await tree.read(localPath);
+  if (local === null) return;
+  const localEntry = { path: localPath, content: local };
+  publish(localPath, local);
+  await forEachImportOf(tree, machineTree, localEntry, publish, publishMachineImport, markUnread);
+}
+async function readRules(tree, files, unread, seen, scope, root, publishAt, prefix) {
+  for (const entry of await tree.entries(`${prefix}${RULES_DIRECTORY}`)) {
+    const content = await tree.read(entry.path);
+    if (content === null) continue;
+    const reading = tierOfRule(content);
+    if (!reading.decided) {
+      unread.push({ path: publishAt(entry.path), scope, reason: reading.reason });
+      continue;
+    }
+    push(files, seen, root, entry.path, content, reading.tier, scope, publishAt);
+  }
+}
+async function readDeclarations(tree, directory, files, unread, seen, scope, root, publishAt) {
+  for (const entry of await tree.entries(directory)) {
+    if (!entry.path.endsWith(".md")) continue;
+    const content = await tree.read(entry.path);
+    if (content === null) continue;
+    const declaration = splitDeclaration(content);
+    if (!declaration.decided) {
+      unread.push({ path: publishAt(entry.path), scope, reason: declaration.reason });
+      continue;
+    }
+    push(files, seen, root, entry.path, declaration.description, "ALWAYS_LOADED", scope, publishAt);
+    const bodyPath = `${entry.path}${BODY_SUFFIX}`;
+    push(files, seen, root, bodyPath, declaration.body, "CONDITIONALLY_LOADED", scope, publishAt);
+  }
+}
+async function readOneScope(tree, scope, files, unread, seen, root, publishAt, prefix, machineRoot, machineTree) {
+  await readContextFiles(
+    tree,
+    files,
+    unread,
+    seen,
+    scope,
+    root,
+    machineRoot,
+    machineTree,
+    publishAt
+  );
+  await readRules(tree, files, unread, seen, scope, root, publishAt, prefix);
+  for (const directory of DECLARATION_DIRECTORIES) {
+    await readDeclarations(
+      tree,
+      `${prefix}${directory}`,
+      files,
+      unread,
+      seen,
+      scope,
+      root,
+      publishAt
+    );
+  }
+}
+async function readAncestors(subjectPath, signal, files, unread, seen, machineRoot, machineTree) {
+  let directory = resolve2(subjectPath);
+  for (; ; ) {
+    const parent = dirname2(directory);
+    if (parent === directory) return;
+    directory = parent;
+    const tree = directoryTree(directory, signal);
+    await readContextFiles(
+      tree,
+      files,
+      unread,
+      seen,
+      "MACHINE",
+      directory,
+      machineRoot,
+      machineTree,
+      (path) => join9(directory, path)
+    );
+  }
+}
+var ClaudeHarnessAdapter = class {
+  constructor(machineConfigDirectory = join9(homedir(), ".claude")) {
+    this.machineConfigDirectory = machineConfigDirectory;
+  }
+  machineConfigDirectory;
+  tool = "claude";
+  async read(subjectPath, signal) {
+    const files = [];
+    const unread = [];
+    const seen = /* @__PURE__ */ new Set();
+    const machine = this.machineConfigDirectory;
+    const machineTree = directoryTree(machine, signal);
+    await readOneScope(
+      directoryTree(subjectPath, signal),
+      "SUBJECT",
+      files,
+      unread,
+      seen,
+      subjectPath,
+      (path) => path,
+      SUBJECT_PREFIX,
+      machine,
+      machineTree
+    );
+    await readOneScope(
+      machineTree,
+      "MACHINE",
+      files,
+      unread,
+      seen,
+      machine,
+      (path) => join9(machine, path),
+      "",
+      machine,
+      machineTree
+    );
+    await readAncestors(subjectPath, signal, files, unread, seen, machine, machineTree);
+    return { files, unread };
+  }
+};
+
+// src/harness/adapters/token-encoder.adapter.ts
+import { countTokens } from "gpt-tokenizer/encoding/o200k_base";
+var ENCODING = "o200k_base";
+var GptTokenizerEncoderAdapter = class {
+  encoding = ENCODING;
+  estimate(text) {
+    return { tokens: countTokens(text), encoding: ENCODING };
+  }
+};
+
+// src/harness/advice/guidelines.ts
+var SESSION_OPENING_TOKEN_BUDGET = 1e4;
+var ALWAYS_LOADED_FILE_TOKENS = 4e3;
+var ALWAYS_LOADED_FILE_LINES = 200;
+var PROSE_SHARE = 0.6;
+var SHARED_PASSAGES_PER_PAIR = 5;
+var PROSE_SHARE_MINIMUM_LINES = 20;
+
+// src/harness/advice/harness-findings.ts
+var SESSION_SUBJECT = "session opening (always-loaded, subject and machine combined)";
+function sessionBudgetFinding(report) {
+  const alwaysLoadedTotal = report.tierTotals.filter((total) => total.tier === "ALWAYS_LOADED").reduce((sum, total) => sum + total.tokenEstimate, 0);
+  if (alwaysLoadedTotal <= SESSION_OPENING_TOKEN_BUDGET) return null;
+  return {
+    guideline: "SESSION_OPENING_TOKEN_BUDGET",
+    subject: SESSION_SUBJECT,
+    observed: alwaysLoadedTotal,
+    guidelineValue: SESSION_OPENING_TOKEN_BUDGET,
+    action: "Move some always-loaded content behind a path-scoped rule or an on-demand declaration so it is read only for the work that needs it.",
+    potentialTokensRemoved: alwaysLoadedTotal - SESSION_OPENING_TOKEN_BUDGET
+  };
+}
+function alwaysLoadedFileFindings(files) {
+  const findings = [];
+  for (const file of files) {
+    if (file.tier !== "ALWAYS_LOADED") continue;
+    if (file.tokenEstimate > ALWAYS_LOADED_FILE_TOKENS) {
+      findings.push({
+        guideline: "ALWAYS_LOADED_FILE_TOKENS",
+        subject: file.path,
+        observed: file.tokenEstimate,
+        guidelineValue: ALWAYS_LOADED_FILE_TOKENS,
+        action: `Give ${file.path} a paths: scope so it loads only for the work it concerns.`,
+        potentialTokensRemoved: file.tokenEstimate
+      });
+    }
+    if (file.lineCount > ALWAYS_LOADED_FILE_LINES) {
+      findings.push({
+        guideline: "ALWAYS_LOADED_FILE_LINES",
+        subject: file.path,
+        observed: file.lineCount,
+        guidelineValue: ALWAYS_LOADED_FILE_LINES,
+        action: `Split ${file.path} so a reader is not faced with the whole file at once.`,
+        potentialTokensRemoved: file.tokenEstimate
+      });
+    }
+  }
+  return findings;
+}
+function proseShareFindings(proseShares) {
+  const findings = [];
+  for (const share of proseShares) {
+    if (!share.countable) continue;
+    const countable = share.listLines + share.proseLines;
+    if (countable < PROSE_SHARE_MINIMUM_LINES) continue;
+    const observed = share.proseLines / countable;
+    if (observed > PROSE_SHARE) {
+      findings.push({
+        guideline: "PROSE_SHARE",
+        subject: share.path,
+        observed,
+        guidelineValue: PROSE_SHARE,
+        action: `Reformat ${share.path} toward more list structure and less running prose.`,
+        potentialTokensRemoved: null
+      });
+    }
+  }
+  return findings;
+}
+function duplicationFindings(pairs, encoder) {
+  const findings = [];
+  for (const pair of pairs) {
+    if (pair.passages.length <= SHARED_PASSAGES_PER_PAIR) continue;
+    const potentialTokensRemoved = pair.passages.reduce(
+      (sum, passage) => sum + encoder.estimate(passage.words.join(" ")).tokens,
+      0
+    );
+    findings.push({
+      guideline: "SHARED_PASSAGES_PER_PAIR",
+      subject: `${pair.left} <-> ${pair.right}`,
+      observed: pair.passages.length,
+      guidelineValue: SHARED_PASSAGES_PER_PAIR,
+      action: `Extract what ${pair.left} and ${pair.right} share into one file both can reference.`,
+      potentialTokensRemoved
+    });
+  }
+  return findings;
+}
+function byPotentialTokensRemovedDescendingNullsLast(left, right) {
+  if (left.potentialTokensRemoved === null && right.potentialTokensRemoved === null) return 0;
+  if (left.potentialTokensRemoved === null) return 1;
+  if (right.potentialTokensRemoved === null) return -1;
+  return right.potentialTokensRemoved - left.potentialTokensRemoved;
+}
+function harnessFindings(report, encoder) {
+  const findings = [
+    ...alwaysLoadedFileFindings(report.files),
+    ...proseShareFindings(report.proseShares),
+    ...duplicationFindings(report.duplication, encoder),
+    sessionBudgetFinding(report)
+  ].filter((finding) => finding !== null);
+  return [...findings].sort(byPotentialTokensRemovedDescendingNullsLast);
+}
+
+// src/harness/contracts/harness-audit-report.contract.ts
+var HARNESS_AUDIT_REPORT_SCHEMA_VERSION = 1;
+
+// src/harness/models/loading-tier.model.ts
+var LOADING_TIERS = ["ALWAYS_LOADED", "CONDITIONALLY_LOADED"];
+
+// src/harness/models/reading-scope.model.ts
+var READING_SCOPES = ["SUBJECT", "MACHINE"];
+
+// src/harness/measurement/file-length.ts
+function splitLines(content) {
+  if (content === "") return [];
+  const withoutTrailingNewline = content.endsWith("\n") ? content.slice(0, -1) : content;
+  return withoutTrailingNewline.split("\n");
+}
+function countLines(content) {
+  return splitLines(content).length;
+}
+function measureFileLength(content, encoder) {
+  return {
+    lineCount: countLines(content),
+    tokenEstimate: encoder.estimate(content).tokens
+  };
+}
+
+// src/harness/measurement/prose-share.ts
+var LIST_LINE_READING = "a line beginning with -, *, or +; a digit followed by . or ); or | for a table row \u2014 blank lines and lines inside a fenced code block are counted as neither prose nor list";
+var FENCE2 = /^```/;
+var BULLET = /^[-*+]\s+/;
+var ORDERED = /^\d+[.)]\s+/;
+var TABLE_ROW = /^\|/;
+function isListLine(trimmed) {
+  return BULLET.test(trimmed) || ORDERED.test(trimmed) || TABLE_ROW.test(trimmed);
+}
+function stripFencedBlocks(content) {
+  const kept = [];
+  let inFence = false;
+  for (const line of splitLines(content)) {
+    if (FENCE2.test(line.trim())) {
+      inFence = !inFence;
+      continue;
+    }
+    if (!inFence) kept.push(line);
+  }
+  return kept.join("\n");
+}
+function measureProseShare(content) {
+  let listLines = 0;
+  let proseLines = 0;
+  let inFence = false;
+  for (const line of splitLines(content)) {
+    const trimmed = line.trim();
+    if (FENCE2.test(trimmed)) {
+      inFence = !inFence;
+      continue;
+    }
+    if (inFence || trimmed === "") continue;
+    if (isListLine(trimmed)) listLines += 1;
+    else proseLines += 1;
+  }
+  if (listLines + proseLines === 0) return { countable: false };
+  return { countable: true, listLines, proseLines };
+}
+
+// src/harness/measurement/shared-passages.ts
+var SHINGLE_LENGTH = 8;
+function normaliseWord(raw) {
+  return raw.toLowerCase().replace(/[^\p{L}\p{N}']/gu, "");
+}
+function wordsOf(content) {
+  return stripFencedBlocks(content).split(/\s+/).map(normaliseWord).filter((word) => word.length > 0);
+}
+function shingleStartsOf(words) {
+  const starts = /* @__PURE__ */ new Map();
+  for (let start = 0; start + SHINGLE_LENGTH <= words.length; start += 1) {
+    const key = words.slice(start, start + SHINGLE_LENGTH).join(" ");
+    const matching = starts.get(key);
+    if (matching === void 0) starts.set(key, [start]);
+    else matching.push(start);
+  }
+  return starts;
+}
+function maximalRunsBetween(left, right) {
+  const rightStarts = shingleStartsOf(right);
+  const passages = /* @__PURE__ */ new Map();
+  for (let leftStart = 0; leftStart + SHINGLE_LENGTH <= left.length; leftStart += 1) {
+    const key = left.slice(leftStart, leftStart + SHINGLE_LENGTH).join(" ");
+    const matches = rightStarts.get(key);
+    if (matches === void 0) continue;
+    for (const rightStart of matches) {
+      if (leftStart > 0 && rightStart > 0 && left[leftStart - 1] === right[rightStart - 1]) continue;
+      let length = SHINGLE_LENGTH;
+      while (leftStart + length < left.length && rightStart + length < right.length && left[leftStart + length] === right[rightStart + length]) {
+        length += 1;
+      }
+      const words = left.slice(leftStart, leftStart + length);
+      passages.set(words.join(" "), { words });
+    }
+  }
+  return [...passages.values()];
+}
+function sharedPassagesBetween(leftContent, rightContent) {
+  const left = wordsOf(leftContent);
+  return maximalRunsBetween(left, wordsOf(rightContent));
+}
+
+// src/harness/measurement/compose-harness-audit.ts
+function tierTotalsOf(files) {
+  const totals = [];
+  for (const tier of LOADING_TIERS) {
+    for (const scope of READING_SCOPES) {
+      const inBucket = files.filter((file) => file.tier === tier && file.scope === scope);
+      if (inBucket.length === 0) continue;
+      totals.push({
+        tier,
+        scope,
+        fileCount: inBucket.length,
+        lineCount: inBucket.reduce((total, file) => total + file.lineCount, 0),
+        tokenEstimate: inBucket.reduce((total, file) => total + file.tokenEstimate, 0)
+      });
+    }
+  }
+  return totals;
+}
+function proseSharesOf(sourceFiles) {
+  return sourceFiles.map((file) => {
+    const share = measureProseShare(file.content);
+    return share.countable ? {
+      path: file.path,
+      countable: true,
+      listLines: share.listLines,
+      proseLines: share.proseLines
+    } : { path: file.path, countable: false };
+  });
+}
+function duplicationOf(sourceFiles) {
+  const pairs = [];
+  for (let left = 0; left < sourceFiles.length; left += 1) {
+    for (let right = left + 1; right < sourceFiles.length; right += 1) {
+      const leftFile = sourceFiles[left];
+      const rightFile = sourceFiles[right];
+      if (leftFile === void 0 || rightFile === void 0) continue;
+      const passages = sharedPassagesBetween(leftFile.content, rightFile.content);
+      if (passages.length > 0) {
+        pairs.push({ left: leftFile.path, right: rightFile.path, passages });
+      }
+    }
+  }
+  return pairs;
+}
+function composeHarnessAudit(tool, sourceFiles, encoder, unread = []) {
+  const files = sourceFiles.map((file) => {
+    const length = measureFileLength(file.content, encoder);
+    return {
+      path: file.path,
+      byteSize: file.byteSize,
+      lineCount: length.lineCount,
+      tokenEstimate: length.tokenEstimate,
+      tier: file.tier,
+      scope: file.scope
+    };
+  });
+  const reportWithoutFindings = {
+    schemaVersion: HARNESS_AUDIT_REPORT_SCHEMA_VERSION,
+    tool,
+    encoding: encoder.encoding,
+    shingleLength: SHINGLE_LENGTH,
+    listLineReading: LIST_LINE_READING,
+    files,
+    tierTotals: tierTotalsOf(files),
+    proseShares: proseSharesOf(sourceFiles),
+    duplication: duplicationOf(sourceFiles),
+    unread,
+    findings: []
+  };
+  return {
+    ...reportWithoutFindings,
+    findings: harnessFindings(reportWithoutFindings, encoder)
+  };
+}
+
+// src/harness/usecases/audit-harness.usecase.ts
+async function auditHarness(input) {
+  const sourceReading = await input.source.read(input.subjectPath, input.signal);
+  return composeHarnessAudit(
+    input.source.tool,
+    sourceReading.files,
+    input.encoder,
+    sourceReading.unread
+  );
+}
+
+// src/cli/parsing/harness-arguments.ts
+var USAGE_LINE3 = "usage: aidd-audit harness <path> [--json] [--details]";
+function parseHarnessArguments(argv2) {
+  const operands = commandOperandsFor(argv2, "harness");
+  let subjectPath;
+  let jsonSeen = false;
+  let detailsSeen = false;
+  for (const token of operands) {
+    if (token === "--json") {
+      if (jsonSeen) throw usageError2("Flag '--json' was given more than once.");
+      jsonSeen = true;
+      continue;
+    }
+    if (token === "--details") {
+      if (detailsSeen) throw usageError2("Flag '--details' was given more than once.");
+      detailsSeen = true;
+      continue;
+    }
+    if (token.startsWith("--")) {
+      throw usageError2(`Unknown flag '${token}'.`);
+    }
+    if (subjectPath !== void 0) {
+      throw usageError2(`Unexpected second subject '${token}'.`);
+    }
+    subjectPath = token;
+  }
+  if (subjectPath === void 0) {
+    throw usageError2("No subject path given.");
+  }
+  return { subjectPath, json: jsonSeen, details: detailsSeen };
+}
+function usageError2(reason) {
+  return new UsageError(`${reason} ${USAGE_LINE3}`);
+}
+
+// src/cli/renderers/harness-human.renderer.ts
+var SCOPE_LABEL = {
+  SUBJECT: "Subject (this repository) \u2014 reproduces the same bytes on any machine, on any day, for this subject.",
+  MACHINE: "Machine (this tool's own configuration) \u2014 reproduces only against an unchanged machine, the same claim this tool makes for any source living outside the subject."
+};
+var TIER_LABEL = {
+  ALWAYS_LOADED: "Always loaded \u2014 read at every session opening",
+  CONDITIONALLY_LOADED: "Conditionally loaded \u2014 a ceiling on what could be added if every one of these triggered, never an opening cost"
+};
+function renderHarnessHumanReport(report, options = {}) {
+  if (report.files.length === 0) {
+    return [
+      `Harness audit \u2014 loading convention read: ${report.tool}`,
+      "Nothing was found to measure: no harness file was read for this subject.",
+      renderUnreadSection(report)
+    ].filter((section) => section.length > 0).join("\n\n");
+  }
+  const summarySections = [
+    renderHeader2(report),
+    renderOverviewSection(report),
+    renderUnreadSection(report)
+  ];
+  const sections = options.details ? [...summarySections, renderMeasurementsSection(report), renderFindingsSection(report)] : [
+    ...summarySections,
+    renderFindingsSection(report),
+    "Details: re-run with --details to list every file, prose shape and shared passage."
+  ];
+  return sections.filter((section) => section.length > 0).join("\n\n");
+}
+function renderHeader2(report) {
+  return [
+    `Harness audit \u2014 loading convention read: ${report.tool}`,
+    `Token figures are estimates under the ${report.encoding} encoding, not the counts the model itself would produce.`
+  ].join("\n");
+}
+function renderOverviewSection(report) {
+  const lines = [
+    "Context at session opening:",
+    ...["SUBJECT", "MACHINE"].flatMap((scope) => renderOverviewForScope(report, scope))
+  ];
+  const conditional = ["SUBJECT", "MACHINE"].flatMap(
+    (scope) => renderOverviewForScope(report, scope, "CONDITIONALLY_LOADED")
+  );
+  if (conditional.length > 0)
+    lines.push("", "Conditional context \u2014 ceiling, not an opening cost:", ...conditional);
+  return lines.join("\n");
+}
+function renderOverviewForScope(report, scope, tier = "ALWAYS_LOADED") {
+  const overview = renderTierOverview(report, scope, tier);
+  if (overview === "") return [];
+  const reproducibility = scope === "SUBJECT" ? "same subject on any machine" : "unchanged machine configuration only";
+  return [`  ${scope === "SUBJECT" ? "Subject" : "Machine"} (${reproducibility}): ${overview}`];
+}
+function renderTierOverview(report, scope, tier) {
+  const total = report.tierTotals.find(
+    (candidate) => candidate.scope === scope && candidate.tier === tier
+  );
+  if (total === void 0) return "";
+  return `${total.fileCount} file${plural(total.fileCount)}, ${total.lineCount} lines, ~${total.tokenEstimate} tokens`;
+}
+function renderMeasurementsSection(report) {
+  return [
+    "Details \u2014 every measured file:",
+    `List line reading: ${report.listLineReading}`,
+    renderScopeSection(report, "SUBJECT"),
+    renderScopeSection(report, "MACHINE"),
+    renderDuplicationSection(report)
+  ].filter((section) => section.length > 0).join("\n\n");
+}
+function renderScopeSection(report, scope) {
+  const files = report.files.filter((file) => file.scope === scope);
+  if (files.length === 0) return "";
+  const tierSections = ["ALWAYS_LOADED", "CONDITIONALLY_LOADED"].map((tier) => renderTierSection(report, scope, tier)).filter((section) => section.length > 0);
+  return [SCOPE_LABEL[scope], ...tierSections].join("\n");
+}
+function renderTierSection(report, scope, tier) {
+  const files = report.files.filter((file) => file.scope === scope && file.tier === tier);
+  if (files.length === 0) return "";
+  const total = report.tierTotals.find(
+    (candidate) => candidate.scope === scope && candidate.tier === tier
+  );
+  const totalLine = total === void 0 ? "" : `    total: ${total.fileCount} file${plural(total.fileCount)}, ${total.lineCount} lines, ~${total.tokenEstimate} tokens (${report.encoding} estimate)`;
+  return [`  ${TIER_LABEL[tier]}`, totalLine, ...files.map((file) => renderFileLine(file, report))].filter((line) => line.length > 0).join("\n");
+}
+function renderFileLine(file, report) {
+  const share = report.proseShares.find((candidate) => candidate.path === file.path);
+  const shareText = share === void 0 ? "" : ` \xB7 ${renderProseShare(share)}`;
+  return `    ${file.path}: ${file.lineCount} lines, ~${file.tokenEstimate} tokens${shareText}`;
+}
+function renderProseShare(share) {
+  if (!share.countable) return "no countable line (blank or fenced content only)";
+  return `${share.listLines} list line${plural(share.listLines)}, ${share.proseLines} prose line${plural(share.proseLines)}`;
+}
+function renderDuplicationSection(report) {
+  if (report.duplication.length === 0) return "";
+  const lines = report.duplication.map((pair) => renderDuplicationPair(pair, report));
+  return ["Shared passages \u2014 exact repeated word sequences:", ...lines].join("\n");
+}
+function renderDuplicationPair(pair, report) {
+  const header = `  ${pair.left} <-> ${pair.right}: ${pair.passages.length} shared passage${plural(pair.passages.length)}, at least ${report.shingleLength} words each`;
+  const passageLines = pair.passages.map((passage) => `    "${passage.words.join(" ")}"`);
+  return [header, ...passageLines].join("\n");
+}
+function renderUnreadSection(report) {
+  if (report.unread.length === 0) return "";
+  return [
+    "Unread entries \u2014 excluded from measurements:",
+    ...report.unread.map((entry) => `  ${entry.path} (${entry.scope}): ${entry.reason}`)
+  ].join("\n");
+}
+function plural(count) {
+  return count === 1 ? "" : "s";
+}
+function renderFindingsSection(report) {
+  const header = `Findings \u2014 ${report.findings.length} action${plural(report.findings.length)}, measured against chosen guidelines:`;
+  if (report.findings.length === 0) {
+    return [header, "  nothing observed is over any stated guideline."].join("\n");
+  }
+  return [header, ...report.findings.map(renderFinding)].join("\n\n");
+}
+function renderFinding(finding) {
+  const savingText = finding.potentialTokensRemoved === null ? "" : ` \xB7 potential removal: up to ~${finding.potentialTokensRemoved} tokens`;
+  const shown = (value) => finding.guideline === "PROSE_SHARE" ? `${Math.round(value * 100)}% prose` : `${value}`;
+  return [
+    `  [${finding.guideline}] ${finding.subject}`,
+    `    observed: ${shown(finding.observed)} \xB7 guideline: ${shown(finding.guidelineValue)}${savingText}`,
+    `    action: ${finding.action}`
+  ].join("\n");
+}
+
+// src/cli/renderers/harness-json.renderer.ts
+function renderHarnessJsonReport(report) {
+  const projected = projectReport2(report);
+  assertEveryNumberFinite2(projected, "$");
+  return JSON.stringify(projected, null, 2);
+}
+function assertEveryNumberFinite2(value, path) {
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) {
+      throw new UnrenderableReportError(
+        `${path} is ${value}; JSON renders it as null, which this report reads as absence.`
+      );
+    }
+    return;
+  }
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => assertEveryNumberFinite2(item, `${path}[${index}]`));
+    return;
+  }
+  if (value !== null && typeof value === "object") {
+    for (const [key, member] of Object.entries(value)) {
+      assertEveryNumberFinite2(member, `${path}.${key}`);
+    }
+  }
+}
+function projectReport2(report) {
+  return {
+    schemaVersion: report.schemaVersion,
+    tool: report.tool,
+    encoding: report.encoding,
+    shingleLength: report.shingleLength,
+    listLineReading: report.listLineReading,
+    files: report.files.map(projectFile),
+    tierTotals: report.tierTotals.map(projectTierTotal),
+    proseShares: report.proseShares.map(projectProseShare),
+    duplication: report.duplication.map(projectDuplicationPair),
+    unread: report.unread.map((entry) => ({
+      path: entry.path,
+      scope: entry.scope,
+      reason: entry.reason
+    })),
+    findings: report.findings.map(projectFinding)
+  };
+}
+function projectFile(file) {
+  return {
+    path: file.path,
+    byteSize: file.byteSize,
+    lineCount: file.lineCount,
+    tokenEstimate: file.tokenEstimate,
+    tier: file.tier,
+    scope: file.scope
+  };
+}
+function projectTierTotal(total) {
+  return {
+    tier: total.tier,
+    scope: total.scope,
+    fileCount: total.fileCount,
+    lineCount: total.lineCount,
+    tokenEstimate: total.tokenEstimate
+  };
+}
+function projectProseShare(share) {
+  return share.countable ? {
+    path: share.path,
+    countable: true,
+    listLines: share.listLines,
+    proseLines: share.proseLines
+  } : { path: share.path, countable: false };
+}
+function projectDuplicationPair(pair) {
+  return {
+    left: pair.left,
+    right: pair.right,
+    passages: pair.passages.map((passage) => ({ words: passage.words }))
+  };
+}
+function projectFinding(finding) {
+  return {
+    guideline: finding.guideline,
+    subject: finding.subject,
+    observed: finding.observed,
+    guidelineValue: finding.guidelineValue,
+    action: finding.action,
+    potentialTokensRemoved: finding.potentialTokensRemoved
+  };
+}
+
+// src/cli/commands/harness.command.ts
+async function runHarness(argv2, io, options = {}) {
+  const budget = new AbortController();
+  try {
+    const args = parseHarnessArguments(argv2);
+    requireExistingSubject2(args.subjectPath);
+    const source = options.source ?? new ClaudeHarnessAdapter();
+    const encoder = options.encoder ?? new GptTokenizerEncoderAdapter();
+    const report = await auditHarness({
+      subjectPath: args.subjectPath,
+      source,
+      encoder,
+      signal: budget.signal
+    });
+    const rendered = args.json ? renderHarnessJsonReport(report) : renderHarnessHumanReport(report, { details: args.details });
+    io.stdout(`${rendered}
+`);
+    return 0;
+  } catch (error) {
+    io.stderr(`${messageOf2(error)}
+`);
+    return error instanceof UsageError ? 2 : 1;
+  } finally {
+    budget.abort();
+  }
+}
+function requireExistingSubject2(subjectPath) {
+  let stats;
+  try {
+    stats = statSync2(subjectPath);
+  } catch {
+    throw new UsageError(`Subject path '${subjectPath}' does not exist.`);
+  }
+  if (!stats.isDirectory() && !stats.isFile()) {
+    throw new UsageError(`Subject path '${subjectPath}' is neither a file nor a directory.`);
+  }
+}
+function messageOf2(error) {
+  return error instanceof Error ? error.message : String(error);
+}
+
 // src/cli/main.ts
 function coloursWanted() {
   const off = process.env.NO_COLOR;
@@ -11040,7 +12004,9 @@ function coloursWanted() {
   if (on !== void 0 && on !== "") return true;
   return process.stdout.isTTY === true;
 }
-var exitCode = await runAssess(process.argv.slice(2), {
+var argv = process.argv.slice(2);
+var run = argv[0] === "harness" ? runHarness : runAssess;
+var exitCode = await run(argv, {
   stdout: (text) => {
     process.stdout.write(text);
   },

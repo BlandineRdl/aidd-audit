@@ -41,6 +41,10 @@ export function runCliFresh(...args: readonly string[]): CliRun {
   return runCliWith({}, ...args)
 }
 
+export function runCliWithHome(args: readonly string[], home: string): CliRun {
+  return runCliWith({ HOME: home }, ...args)
+}
+
 // SAFETY: NO_COLOR and FORCE_COLOR are dropped from the inherited environment before `overrides`
 // are applied. A developer who exports either in their shell would otherwise change what the gate
 // asserts, and a suite that spawns a binary must not depend on who is running it.

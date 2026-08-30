@@ -486,17 +486,20 @@ class PoisonedForOneSubject implements EvidenceCollector {
   async collect(context: CollectorContext): Promise<CollectorCollection> {
     context.signal.throwIfAborted()
     if (!context.path.endsWith(this.subjectName)) return { observations: [], diagnostics: [] }
-    return { observations: [
-      {
-        axis: 'parallelism',
-        reading: 'SUSTAINED',
-        value: this.value,
-        kind: 'OBSERVED',
-        collector: this.id,
-        basis: 'a value this suite chose',
-        demonstration: null,
-      },
-    ], diagnostics: [] }
+    return {
+      observations: [
+        {
+          axis: 'parallelism',
+          reading: 'SUSTAINED',
+          value: this.value,
+          kind: 'OBSERVED',
+          collector: this.id,
+          basis: 'a value this suite chose',
+          demonstration: null,
+        },
+      ],
+      diagnostics: [],
+    }
   }
 }
 

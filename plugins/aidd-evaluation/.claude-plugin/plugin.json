@@ -1,7 +1,7 @@
 {
   "name": "aidd-evaluation",
-  "version": "0.1.0",
-  "description": "Évalue la maturité AIDD d’un projet à partir de preuves observables.",
+  "version": "0.2.0",
+  "description": "Évalue la maturité AIDD et audite le coût du contexte Claude d’un projet à partir de preuves observables.",
   "author": {
     "name": "BlandineRdl"
   }
