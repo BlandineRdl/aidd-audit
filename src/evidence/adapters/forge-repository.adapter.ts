@@ -85,6 +85,21 @@ export class ForgeRepositoryEvidenceCollector implements EvidenceCollector {
       )
     }
 
+    if (
+      metrics.demonstratedIntervention !== null &&
+      interventionScale?.kind === 'ordinal' &&
+      interventionScale.values.includes(metrics.demonstratedIntervention.value)
+    ) {
+      observations.push(
+        demonstrated(
+          'intervention',
+          metrics.demonstratedIntervention.value,
+          { share: metrics.demonstratedIntervention.share, unit: 'DELIVERIES' },
+          `corrective commits after opening, over ${basis}`,
+        ),
+      )
+    }
+
     if (metrics.parallelism !== null && parallelismScale?.kind === 'numeric') {
       observations.push(
         observation(
@@ -126,9 +141,15 @@ function observation(axis: AxisId, value: ObservedValue, basis: string): Observa
   }
 }
 
-// INVARIANT: a demonstrated value never travels without the share that earned it. Intervention has
-// no such observation by decision: the forge sees when a pull request was opened, which on a subject
-// with no review records a workflow habit rather than whether a human took over from the agent.
+// INVARIANT: a demonstrated value never travels without the share that earned it.
+//
+// INVARIANT: every axis this collector answers carries both readings, intervention included. It was
+// excluded once, on the ground that a pull request's opening records a workflow habit rather than
+// whether a human took over — but that objection tells against the *sustained* reading just as
+// hard, and this collector publishes that one. What actually needed guarding was the top of the
+// scale, and `readIntervention` guards it by passing no zero-touch share at all. Below that ceiling
+// a demonstrated reading states the same kind of fact as the other two axes: on this share of
+// deliveries, at most one correction was needed.
 function demonstrated(
   axis: AxisId,
   value: ObservedValue,

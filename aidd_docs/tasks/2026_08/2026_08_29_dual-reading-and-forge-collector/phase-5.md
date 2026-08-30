@@ -90,7 +90,8 @@ journey
 1. In `cli.md`, state that the sustained level is the conservative figure and the demonstrated one
    is a capability claim carrying its frequency.
 2. State that a demonstrated level is not a level the subject holds, and must not be quoted alone.
-3. State that the harness axis has one reading by nature, and intervention by decision.
+3. State that the harness axis has one reading by nature, and that every axis the forge answers —
+   intervention included — carries both.
 
 ## Test acceptance criteria
 

@@ -158,17 +158,37 @@ describe('the forge evidence collector', () => {
   )
 
   it(
-    'answers no reading at all on the intervention axis beyond the habitual one',
+    'answers both readings on intervention, as it does on every axis it owns',
     async () => {
       await ghAnswering(payload(TWELVE_DELIVERIES))
 
       const observations = await collectFrom()
 
-      // INVARIANT: by decision, not by omission. The forge sees when a pull request was opened,
-      // which on a subject with no review records a workflow habit rather than whether a human took
-      // over from the agent, so no rank is granted from it upward.
+      // INVARIANT: every axis this collector answers carries both readings. Excluding one of the
+      // three, on an objection that tells against its sustained reading just as hard, left a rule
+      // applied to two axes out of three for no reason that survived being written down.
       expect(on(observations, 'intervention', 'SUSTAINED')).toBeDefined()
-      expect(on(observations, 'intervention', 'DEMONSTRATED')).toBeUndefined()
+      expect(on(observations, 'intervention', 'DEMONSTRATED')).toMatchObject({
+        demonstration: { unit: 'DELIVERIES' },
+      })
+    },
+    A_LONG_TIME,
+  )
+
+  it(
+    'never demonstrates an intervention rank the corrective count cannot establish',
+    async () => {
+      // INVARIANT: every delivery here is clean, which is what pushing a branch then opening the
+      // pull request looks like on any repository, agent or not.
+      await ghAnswering(payload(TWELVE_DELIVERIES))
+
+      // INVARIANT: `never-once-framed` and above answer whether a human intervened *at all*, and no
+      // count of commits after opening sees that. The ceiling holds on the demonstrated reading
+      // exactly as it does on the sustained one — a share of clean deliveries is still not
+      // authorship.
+      expect(on(await collectFrom(), 'intervention', 'DEMONSTRATED')).toMatchObject({
+        value: 'key-steps',
+      })
     },
     A_LONG_TIME,
   )

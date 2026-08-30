@@ -20,6 +20,24 @@ import { AUTONOMOUS_INTERVENTION, ZERO_TOUCH_SHARE_FOR_AUTONOMY } from './autono
 const AFTER_THE_FACT_MOST_FROM = 2.5
 const AFTER_THE_FACT_SOME_FROM = 1.5
 
+// INVARIANT: The three ranks a corrective-commit count can establish, ascending. The two above them
+// answer whether a human intervened *at all*, which a correction count cannot see: a delivery with
+// no correction after opening is not a delivery no human touched. A source reading authorship
+// reaches those; this scale stops here.
+export const CORRECTED_INTERVENTION_RANKS = [
+  'after-the-fact-most',
+  'after-the-fact-some',
+  'key-steps',
+] as const
+
+export type CorrectedInterventionRank = (typeof CORRECTED_INTERVENTION_RANKS)[number]
+
+// INVARIANT: how far up the corrected ranks a value sits. `-1` names anything above them, which no
+// caller here produces: `interventionFor(corrections, null)` cannot return one.
+export function correctedRankOf(value: string): number {
+  return CORRECTED_INTERVENTION_RANKS.indexOf(value as CorrectedInterventionRank)
+}
+
 // INVARIANT: `zeroTouchShare` is the share of deliveries that took no corrective commit at all,
 // `null` when the source does not record it. It can only raise the answer, never lower it.
 export function interventionFor(

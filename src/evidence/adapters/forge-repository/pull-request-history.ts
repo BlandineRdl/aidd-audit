@@ -9,7 +9,11 @@ import {
   median,
   windowStartFrom,
 } from '../delivery-sample.js'
-import { interventionFor } from '../intervention-scale.js'
+import {
+  CORRECTED_INTERVENTION_RANKS,
+  correctedRankOf,
+  interventionFor,
+} from '../intervention-scale.js'
 import {
   bucketForFiles,
   bucketForLines,
@@ -22,6 +26,7 @@ export interface ForgeDerivedMetrics {
   readonly sizeBucket: string | null
   readonly demonstratedSize: DemonstratedValue<string> | null
   readonly intervention: string | null
+  readonly demonstratedIntervention: DemonstratedValue<string> | null
   readonly parallelism: number | null
   readonly demonstratedParallelism: DemonstratedValue<number> | null
 }
@@ -30,6 +35,7 @@ const UNRECOVERABLE: ForgeDerivedMetrics = {
   sizeBucket: null,
   demonstratedSize: null,
   intervention: null,
+  demonstratedIntervention: null,
   parallelism: null,
   demonstratedParallelism: null,
 }
@@ -124,6 +130,7 @@ export async function readForgeDerivedMetrics(
     sizeBucket: readSizeBucket(inWindow),
     demonstratedSize: readDemonstratedSize(bucketPerDelivery),
     intervention: readIntervention(inWindow),
+    demonstratedIntervention: readDemonstratedIntervention(inWindow),
     parallelism: readParallelism(requestsPerActiveDay),
     demonstratedParallelism: readDemonstratedParallelism(requestsPerActiveDay),
   }
@@ -292,6 +299,30 @@ function readIntervention(inWindow: readonly MergedPullRequest[]): string | null
   if (inWindow.length < MINIMUM_DELIVERED_CHANGES) return null
 
   return interventionFor(median(inWindow.map((request) => request.commitsAfterOpen)), null)
+}
+
+// INVARIANT: The highest corrected rank at least a third of deliveries reached, which is a
+// capability and not a habit: "on this share of deliveries, at most one correction was needed".
+// Applied per delivery through the same `interventionFor` the median goes through, so one delivery
+// and a whole window are read by one rule.
+//
+// LIMITATION: the ranks above `key-steps` stay out of reach here for the reason the sustained
+// reading gives — a delivery with no correction after opening is not a delivery no human touched,
+// and this source reads no authorship. What this reading adds is the frequency behind the median,
+// which on a bimodal history is the difference between "usually reworked" and "often clean, and
+// sometimes reworked heavily".
+function readDemonstratedIntervention(
+  inWindow: readonly MergedPullRequest[],
+): DemonstratedValue<string> | null {
+  const rankPerDelivery = inWindow.map((request) =>
+    correctedRankOf(interventionFor(request.commitsAfterOpen, null)),
+  )
+
+  return demonstratedFrom(
+    rankPerDelivery.length,
+    CORRECTED_INTERVENTION_RANKS,
+    (candidate) => rankPerDelivery.filter((rank) => rank >= correctedRankOf(candidate)).length,
+  )
 }
 
 // INVARIANT: How many distinct pull requests received a commit, on each day one did. This is the

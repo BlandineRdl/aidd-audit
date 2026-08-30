@@ -33,6 +33,10 @@ correctly so. Prose is never parsed.
 
 ## The four axes, measured from the forge over 108 deliveries
 
+These are the figures as first measured, over all 108 deliveries **including the bots**. They are
+kept as taken; what shipped reads the 87 human ones, and the section "the bots that are not anyone's"
+below records both the difference and why it goes that way.
+
 | axis | sustained (median) | demonstrated (share >= 1/3) |
 | ---- | ------------------ | --------------------------- |
 | size | **M** — 355.5 lines, 11.5 files | **L** — 39.8% of deliveries are L or XL |
@@ -40,9 +44,24 @@ correctly so. Prose is never parsed.
 | intervention | **key-steps** — median 1 commit after open | not read, see the plan's decisions |
 | parallelism | **2** | **3** — 40.0% of active days reach 3 or more |
 
-Expected verdicts: **sustained Blue, demonstrated Copper.** Blue is blocked at Green by size M.
-Copper is blocked at Silver by `loops` missing from the harness, which is a practice gap and not a
-measurement question.
+**What the shipped tool reports, over the 87 human deliveries:**
+
+| axis | sustained | demonstrated |
+| ---- | --------- | ------------ |
+| size | **L** — 742 lines, 14 files | **L** — 49% of deliveries |
+| harness | prompts, context-engineering, behavior | one reading, the axis is a set |
+| intervention | **after-the-fact-some** — median 2 commits after open | **key-steps** — 44% of deliveries |
+| parallelism | **2** | **3** — 42% of active days |
+
+Verdict: **sustained Blue, demonstrated Copper.** The sustained run is blocked at Green by
+intervention. The demonstrated run is not, because 44% of deliveries took at most one correction:
+size, intervention and parallelism all carry Copper on that reading. Silver is out on both counts
+that do not move — `never-once-framed` is above what any corrective count may grant, and `loops` is
+missing from the harness.
+
+That verdict read **demonstrated Blue** until 2026-08-30, when intervention was given its second
+reading; the section closing this file records why, and what the four-repository comparison says
+about it.
 
 ### Size distribution, 108 deliveries
 
@@ -174,8 +193,93 @@ twenty-one bot deliveries carried zero corrective commits and pulled the median 
 The subject's `key-steps` was bot-flattered, and its honest reading is `after-the-fact-some`.
 
 The subject stays **Blue**, and what blocks Green moved from a falsified size to a real practice gap
-on intervention. The demonstrated level falls back to Blue with it, since intervention has one
-reading and now blocks Green in both.
+on intervention. The demonstrated level fell back to Blue with it, because intervention had one
+reading at the time and blocked Green in both. That is the observation the last section of this file
+answers.
 
 A correction that improves one axis and worsens another is the shape to expect from removing a
 contaminant. A change that had only improved things would have deserved more suspicion than this one.
+
+## The correction count is measured twice, and neither reading is clean
+
+Recorded 2026-08-30, after the subject's owner described their own practice.
+
+```
+median corrections after opening, by committedDate : 2   → after-the-fact-some
+                                    by authoredDate : 1   → key-steps
+commits whose two dates differ                      : 99 of 642
+commits authored before the pull request opened, committed after : 38
+```
+
+**`committedDate` over-counts.** A rebase or an amend rewrites it to the moment of the rewrite, so
+work that predates the pull request is counted as a correction that followed it. Thirty-eight commits
+here are exactly that, and they carry the median from 1 to 2.
+
+**`authoredDate` under-counts.** `git commit --amend` on an older commit keeps the original author
+date, so a genuine correction made after opening disappears from the count.
+
+The two errors run in opposite directions and nothing makes them cancel. The direction decides which
+is safer: over-counting grades a practice down, which the report names as a practice gap and a reader
+can contest; under-counting grants a rank, and granting from an absence is what the conservative rule
+forbids outright.
+
+**The subject's owner settles it for this repository**: they almost never merge an `L`-sized delivery
+without a pass over it. Corrections are frequent and real, so a median of 1 states less intervention
+than actually happens, and `committedDate`'s 2 is the honest reading here. It also matches the
+referential's own illustration of Blue — *"quelques commits correctifs par PR"* — against Green's
+*"presque aucun commit correctif"*.
+
+**What this does not settle** is another repository, where the rebase habit could be heavy enough to
+invent an entire rank. Reading both dates and taking a commit as a correction only when *both* fall
+after the opening was considered: it excludes the rebase artefact and the amended correction alike,
+so it is the strictest of the three and the one to measure next, on subjects other than this one.
+
+
+## The demonstrated reading of intervention, and what four repositories say about it
+
+Recorded 2026-08-30, after the subject's owner asked why mc-tracker had stopped reading demonstrated
+Copper.
+
+**The answer was that intervention had been excluded from the demonstrated reading on purpose.** The
+plan's stated reason: the forge sees "no commit after the PR was opened", which on a subject with no
+review and minute-long merges records *when the pull request was opened*, not whether a human took
+over from the agent. The reason is sound, and it does not survive being applied evenly — the same
+objection tells against the *sustained* reading of intervention exactly as hard, and that one
+shipped. A rule applied to two axes out of three, on a ground that condemns all three or none, is a
+rule that was never derived.
+
+**What the objection actually argues for is a ceiling, not an exclusion.** `never-once-framed` and
+above assert that a human never intervened once the task was framed; no count of commits after
+opening can see that, on either reading. `interventionFor(corrections, null)` enforces it by passing
+no zero-touch share at all, so the forge stops at `key-steps` sustained *and* demonstrated. Below
+that ceiling, "on this share of deliveries at most one correction was needed" is the same kind of
+fact as a demonstrated size, measured over the same unit.
+
+**What it changes on mc-tracker.** The demonstrated level moves from Blue to Copper: 44% of the
+subject's 87 human deliveries took at most one correction, against a median of two. The owner's own
+account of the repository — multi-worktree work that happened, though not every day — is what the
+demonstrated reading exists to state, and it was the intervention axis alone that was withholding it.
+
+**The counter-argument, which stands.** Measured across four repositories, the demonstrated
+intervention saturates:
+
+```
+                 sustained                       demonstrated
+mc-tracker       blue    intervention a-t-f-some  copper  size L 49%  intervention key-steps 44%  parallelism 3 42%
+EquimApp         green   intervention key-steps   copper  size L 77%  intervention key-steps 86%  parallelism 3 40%
+Darkwaters       green   intervention key-steps   green   size XL 54% intervention key-steps 77%
+nfc-wms          null    (parallelism below floor) null   size L 91%  intervention key-steps 73%
+```
+
+Every one of the four demonstrates `key-steps`, because that is the forge's ceiling and any subject
+with a third of its deliveries near-clean reaches it. **As a level discriminator on the demonstrated
+run, the axis is therefore close to free** — it will rarely be the axis that blocks. What carries
+information is the share beside it, and the spread there is real: 44% on mc-tracker against 86% on
+EquimApp is the difference between a repository that usually needs a pass and one that usually does
+not, and no level names it.
+
+Two things follow, and neither is a reason to withhold the reading. The axis stops *blocking* a
+demonstrated level that size and parallelism already earned, which is what the reader is being told.
+And a ceiling that every subject reaches is an argument for a source that can see past it —
+authorship, which the live collector reads and the forge does not — not for pretending the axis has
+one reading.

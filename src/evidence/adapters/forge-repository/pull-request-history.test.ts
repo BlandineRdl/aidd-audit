@@ -178,6 +178,7 @@ describe('readForgeDerivedMetrics', () => {
         sizeBucket: null,
         demonstratedSize: null,
         intervention: null,
+        demonstratedIntervention: null,
         parallelism: null,
         demonstratedParallelism: null,
       })
@@ -350,6 +351,35 @@ describe('readForgeDerivedMetrics', () => {
   )
 
   it(
+    'demonstrates the rank a third of deliveries reached, where the median names a lower one',
+    async () => {
+      await ghAnswering([
+        page(
+          [
+            // INVARIANT: seven reworked heavily, five clean — the median lands on the reworked
+            // side while more than a third of the sample needed at most one correction.
+            ...[1, 2, 3, 4, 5, 6, 7].map((day) => ({
+              ...delivered(DAY(day), 50, 2),
+              commitDates: [DAY(day), DAY(day + 10), DAY(day + 11), DAY(day + 12)],
+            })),
+            ...[8, 9, 10, 11, 12].map((day) => delivered(DAY(day), 50, 2)),
+          ],
+          null,
+        ),
+      ])
+
+      // INVARIANT: this is the whole reason the axis gained a second reading. A bimodal history —
+      // often clean, sometimes reworked hard — is described by neither number alone, and the median
+      // reports only the half it lands in.
+      await expect(readForgeDerivedMetrics(SLUG, null, NEVER_ABORTED)).resolves.toMatchObject({
+        intervention: 'after-the-fact-most',
+        demonstratedIntervention: { value: 'key-steps' },
+      })
+    },
+    A_LONG_TIME,
+  )
+
+  it(
     'counts distinct pull requests touched on a day, not the busiest day',
     async () => {
       await ghAnswering([
@@ -394,6 +424,7 @@ describe('readForgeDerivedMetrics', () => {
         sizeBucket: null,
         demonstratedSize: null,
         intervention: null,
+        demonstratedIntervention: null,
         parallelism: null,
         demonstratedParallelism: null,
       })

@@ -1,8 +1,24 @@
 ---
-status: done
+status: done-with-two-criteria-unmet
 ---
 
-# Instruction: A GitHub forge collector, single reading
+# Instruction: A GitHub forge collector
+
+The title read "single reading" until 2026-08-30. The collector now answers both readings on all
+three of its axes; `measurements.md` records why intervention stopped being the exception.
+
+**Two acceptance criteria below are not met, and shipping without them was a decision rather than an
+oversight.**
+
+* **Criterion 1, the budget.** No collection timeout is set. `runAssess` holds an `AbortController`
+  and aborts it in `finally`, so an in-flight `gh` child is cancelled when the command returns, and
+  every collector honours `context.signal` — but nothing expires on its own. The number has not been
+  measured, and inventing one in the file that refuses to invent thresholds would be worse than the
+  gap. `cli.md` carries the same statement, so the omission is published rather than hidden.
+* **Criterion 4, the recorded payload.** `pull-request-history.test.ts` drives hand-built payloads
+  chosen to pin one decision each, not a captured window of the subject. The medians in
+  `measurements.md` were measured by hand against the live forge and are reproducible only against a
+  fixed forge state, which no fixture on disk currently holds.
 
 ## Architecture projection
 
