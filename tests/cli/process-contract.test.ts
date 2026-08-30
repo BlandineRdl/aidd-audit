@@ -3,7 +3,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, describe, expect, it } from 'vitest'
 import type { AssessmentReport } from '../../src/assessment/contracts/assessment-report.contract.js'
-import { runCli, runCliWith } from './spawn-cli.test-fixture.js'
+import type { HarnessAuditReport } from '../../src/harness/contracts/harness-audit-report.contract.js'
+import { runCli, runCliWith, runCliWithHome } from './spawn-cli.test-fixture.js'
 
 // INVARIANT: the exit code classifies responsibility, not error sub-type — `0` ran, `2` the
 // caller's fault, `1` ours. Observed by running the process, because what `runAssess` returns is
@@ -328,5 +329,99 @@ describe('9. colour follows the channel, never the report', () => {
 
     expect(off.stdout).not.toContain(ESCAPE)
     expect(off.stdout).toBe(runCli('assess', 'profiles/perceval').stdout)
+  })
+})
+
+// INVARIANT: the second command through the same built binary, reusing `runCli` so the two CLI
+// suites cannot drift on how the process is invoked. `harness.command.test.ts` owns what `runHarness`
+// returns in process; this suite owns what a real shell sees once it is bundled.
+let emptyHomeDir: string | undefined
+let harnessTempDir: string | undefined
+
+afterAll(() => {
+  if (emptyHomeDir !== undefined) rmSync(emptyHomeDir, { recursive: true, force: true })
+  if (harnessTempDir !== undefined) rmSync(harnessTempDir, { recursive: true, force: true })
+})
+
+function emptyHome(): string {
+  emptyHomeDir ??= mkdtempSync(join(tmpdir(), 'aidd-audit-empty-home-'))
+  return emptyHomeDir
+}
+
+function emptySubject(): string {
+  harnessTempDir ??= mkdtempSync(join(tmpdir(), 'aidd-audit-empty-subject-'))
+  return harnessTempDir
+}
+
+describe('10. harness — a successful audit exits 0 and publishes on stdout', () => {
+  it('writes the report to stdout and leaves stderr empty', () => {
+    const run = runCli('harness', '.')
+
+    expect(run.status).toBe(0)
+    expect(run.stderr).toBe('')
+    expect(run.stdout).not.toBe('')
+  })
+
+  it('ends stdout with exactly one newline', () => {
+    const { stdout } = runCli('harness', '.')
+
+    expect(stdout.endsWith('\n')).toBe(true)
+    expect(stdout.endsWith('\n\n')).toBe(false)
+  })
+})
+
+describe('11. harness --json publishes one parseable document', () => {
+  it('exits 0 and prints JSON a caller can pipe straight into a parser', () => {
+    const run = runCli('harness', '.', '--json')
+
+    expect(run.status).toBe(0)
+    expect(run.stderr).toBe('')
+
+    const report = JSON.parse(run.stdout) as HarnessAuditReport
+    expect(report.schemaVersion).toBe(1)
+    expect(report.tool).toBe('claude')
+  })
+})
+
+describe("12. harness — an unusable subject is the caller's fault, exit 2", () => {
+  it('names a path that does not exist, and publishes nothing', () => {
+    const run = runCli('harness', './this-path-does-not-exist')
+
+    expect(run.status).toBe(2)
+    expect(run.stdout).toBe('')
+    expect(run.stderr).toContain('./this-path-does-not-exist')
+  })
+})
+
+describe("13. harness — a malformed invocation is the caller's fault, exit 2", () => {
+  it('rejects an unknown flag, explaining on stderr and publishing nothing', () => {
+    const run = runCli('harness', '.', '--nope')
+
+    expect(run.status).toBe(2)
+    expect(run.stdout).toBe('')
+    expect(run.stderr).not.toBe('')
+  })
+
+  it('rejects no command word at all, naming both known commands', () => {
+    const run = runCli()
+
+    expect(run.status).toBe(2)
+    expect(run.stdout).toBe('')
+    expect(run.stderr).toContain('assess')
+    expect(run.stderr).toContain('harness')
+  })
+})
+
+describe('14. harness — a subject carrying no harness at all is still a success', () => {
+  it('exits 0 and says nothing was found to measure, with an empty HOME and an empty subject', () => {
+    // SAFETY: the machine reading comes from `homedir()`, which is the real developer machine this
+    // gate happens to run on. Without an empty HOME this assertion would depend on whatever that
+    // machine's own `~/.claude` holds, which is exactly the machine-only reproducibility this
+    // command is honest about rather than something a suite may assume.
+    const run = runCliWithHome(['harness', emptySubject()], emptyHome())
+
+    expect(run.status).toBe(0)
+    expect(run.stderr).toBe('')
+    expect(run.stdout).toContain('Nothing was found to measure')
   })
 })

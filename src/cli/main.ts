@@ -16,7 +16,7 @@ function coloursWanted(): boolean {
   return process.stdout.isTTY === true
 }
 
-// The only file that touches `process`, so `runAssess` stays testable in-process.
+// The only file that touches `process`, so both commands stay testable in-process.
 const argv = process.argv.slice(2)
 const run = argv[0] === 'harness' ? runHarness : runAssess
 const exitCode = await run(argv, {

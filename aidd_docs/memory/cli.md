@@ -5,6 +5,7 @@ The command-line tool: its commands, inputs, and distribution.
 ## Commands
 
 - `aidd-audit assess <path>` — assess a repository or a fixture bundle and report its highest proven maturity level. The single command of the MVP.
+- `aidd-audit harness <path> [--json]` — measure the cost and shape of a repository's Claude harness. Its separate Findings section compares measurements with named chosen guidelines; it never changes the maturity assessment.
 - **The CLI and the Claude plugin deliberately differ only at their user boundary.** The CLI keeps its explicit `assess <path>` operand, including `assess .` for the current directory. The plugin skill never asks for a path: it always invokes its bundled binary as `assess . --json`, so the project open in the session is the subject. Both paths reach `runAssess` and the same JSON contract; the skill only narrates that contract.
 - `runAssess(argv, io)` in `assess.command.ts` is the command itself: parse argv, `statSync` the subject, `loadMaturityModel`, `assessMaturity`, render, write to `io.stdout`. Importing the module runs nothing, which is what lets the suite drive it in process with a capturing `CommandIo`, no spawn and no build. `main.ts` is the only file that touches `process`: it calls `runAssess` with `process.argv` and real `process.stdout`/`stderr` writers, and assigns the result to `process.exitCode` — never `process.exit()`, which would truncate a pending write.
 - **No collection timeout is set, and it is now owed rather than merely absent.** `CollectorContext.signal` makes honouring the budget a collector's own duty, and all three production collectors honour it. `runAssess` holds an `AbortController` and aborts it in `finally`, so an in-flight `git` **or `gh`** child is cancelled when the command returns. The reason for no number used to be that nothing could hang; the forge changed that — a network round trip can, and twenty sequential pages have no ceiling in time. What has not changed is that no number here has been *measured*, and inventing one in the file that refuses to invent thresholds would be worse than the gap. Measuring it means timing real queries against real repositories. It shipped once as `new AbortController().signal` with the controller discarded on the same line, which this file described as a seam it was not — a memory can be wrong about code, and this one was.
@@ -100,6 +101,12 @@ A caller that only checks non-zero cannot tell "you typed it wrong" from "the to
 - **Not published.** `package.json` is `private: true`. The tool is built and run locally: `pnpm build`, then the `aidd-audit` bin from `dist/cli.js`.
 - The package name `aidd-audit` exists because `aidd` is already taken on npm by an unrelated package.
 - tsup produces one bundled entrypoint, so publishing later needs no restructuring — only dropping `private` and adding `files`.
+
+## Harness audit
+
+- Reports always-loaded and conditionally-loaded context separately, across subject and machine scopes.
+- Publishes unread imports and declarations explicitly instead of treating them as measurements of zero.
+- `potentialTokensRemoved` is an upper-bound estimate for a proposed edit, never a measured saving.
 
 ## Boundary
 
