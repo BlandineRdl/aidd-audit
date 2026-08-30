@@ -56,6 +56,32 @@ describe('a document the parser cannot turn into a model', () => {
     })
   })
 
+  describe('scale descriptions', () => {
+    it('rejects a scale missing the description of one of its terms', () => {
+      const source = mutate((document) => {
+        delete document.scales.size!.descriptions?.S
+      })
+      const run = () => parseMaturityModel(source)
+      expect(run).toThrow(/descriptions.*missing 'S'/)
+    })
+
+    it('rejects a description for a term the scale does not declare', () => {
+      const source = mutate((document) => {
+        document.scales.size!.descriptions!.XL = 'extra large'
+      })
+      const run = () => parseMaturityModel(source)
+      expect(run).toThrow(/descriptions.*XL.*not on its scale/)
+    })
+
+    it('rejects a description that is not a string', () => {
+      const source = mutateShape((document) => {
+        document.scales.size.descriptions.S = 1
+      })
+      const run = () => parseMaturityModel(source)
+      expect(run).toThrow(/descriptions\.S.*non-empty string/)
+    })
+  })
+
   describe('a requirement carrying both min and includes', () => {
     it('rejects it, rather than silently keeping includes and dropping min', () => {
       const source = mutate((document) => {

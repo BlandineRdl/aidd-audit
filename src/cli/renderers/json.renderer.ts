@@ -1,5 +1,6 @@
 import type {
   AssessmentReport,
+  AxisVocabularyReport,
   AxisReport,
   BlockingRequirement,
   CoverageReport,
@@ -60,8 +61,30 @@ function projectReport(report: AssessmentReport): AssessmentReport {
     demonstrated: report.demonstrated === null ? null : projectDemonstrated(report.demonstrated),
     levels: report.levels.map(projectLevel),
     blocking: report.blocking.map(projectBlockingRequirement),
+    vocabulary: report.vocabulary.map(projectVocabulary),
     coverage: projectCoverage(report.coverage),
     provenance: report.provenance.map(projectProvenanceEntry),
+  }
+}
+
+function projectVocabulary(vocabulary: AxisVocabularyReport): AxisVocabularyReport {
+  switch (vocabulary.kind) {
+    case 'ordinal':
+      return {
+        axis: vocabulary.axis,
+        kind: vocabulary.kind,
+        values: vocabulary.values,
+        descriptions: vocabulary.descriptions,
+      }
+    case 'set':
+      return {
+        axis: vocabulary.axis,
+        kind: vocabulary.kind,
+        members: vocabulary.members,
+        descriptions: vocabulary.descriptions,
+      }
+    case 'numeric':
+      return { axis: vocabulary.axis, kind: vocabulary.kind, description: vocabulary.description }
   }
 }
 
@@ -123,6 +146,7 @@ function projectRequirement(requirement: RequirementReport): RequirementReport {
         observed: requirement.observed,
         evidence: requirement.evidence,
         outcome: requirement.outcome,
+        ...(requirement.diagnostic === undefined ? {} : { diagnostic: requirement.diagnostic }),
       }
   }
 }

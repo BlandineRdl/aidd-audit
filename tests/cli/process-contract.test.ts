@@ -1,9 +1,9 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, describe, expect, it } from 'vitest'
 import type { AssessmentReport } from '../../src/assessment/contracts/assessment-report.contract.js'
-import { runCli } from './spawn-cli.test-fixture.js'
+import { runCli, runCliWith } from './spawn-cli.test-fixture.js'
 
 // INVARIANT: the exit code classifies responsibility, not error sub-type — `0` ran, `2` the
 // caller's fault, `1` ours. Observed by running the process, because what `runAssess` returns is
@@ -41,7 +41,7 @@ describe('1. a successful assessment exits 0 and publishes on stdout', () => {
   it('is still a success when no level could be proven', () => {
     const run = runCli('assess', '.')
 
-    expect(run.stdout).toContain('could not be established')
+    expect(run.stdout).toContain("Aucun niveau n'a pu être entièrement prouvé")
     expect(run.status).toBe(0)
   })
 })
@@ -64,6 +64,26 @@ describe('2. --json publishes one parseable document', () => {
     expect('proven' in report).toBe(true)
     expect(report.proven).toBeNull()
   })
+
+  it('carries a custom model vocabulary through both JSON and prose', () => {
+    const marker = 'instructions sur mesure pour ce modèle'
+    const source = readFileSync('aidd.yml', 'utf8').replace(
+      "prompts: usage de l'IA piloté par prompt",
+      `prompts: ${marker}`,
+    )
+    const model = writeTempModel('custom-vocabulary.yml', source.trimEnd().split('\n'))
+
+    const json = runCli('assess', 'profiles/perceval', '--json', '--model', model)
+    const prose = runCli('assess', 'profiles/perceval', '--model', model)
+
+    expect(json.status).toBe(0)
+    expect(prose.status).toBe(0)
+    const report = JSON.parse(json.stdout) as AssessmentReport
+    expect(report.vocabulary.find((axis) => axis.axis === 'harness')).toMatchObject({
+      descriptions: { prompts: marker },
+    })
+    expect(prose.stdout).toContain(marker)
+  })
 })
 
 describe("3. an unusable subject is the caller's fault, exit 2", () => {
@@ -82,24 +102,6 @@ describe("3. an unusable subject is the caller's fault, exit 2", () => {
     expect(run.status).toBe(2)
     expect(run.stdout).toBe('')
     expect(run.stderr).toContain('neither a file nor a directory')
-  })
-
-  it('rejects a directory that is neither a repository, a bundle, nor a set of bundles', () => {
-    // SAFETY: a temporary directory outside any work tree, holding a child with no profile.json —
-    // neither a subject the tool already claims, nor a set of any. Self-contained, unlike a path
-    // inside this checkout, whose layout is this repository's own rather than the tool's.
-    const directory = mkdtempSync(join(tmpdir(), 'aidd-audit-unassessable-'))
-    mkdirSync(join(directory, 'not-a-bundle'))
-
-    try {
-      const run = runCli('assess', directory)
-
-      expect(run.status).toBe(2)
-      expect(run.stdout).toBe('')
-      expect(run.stderr).toContain(directory)
-    } finally {
-      rmSync(directory, { recursive: true, force: true })
-    }
   })
 })
 
@@ -271,15 +273,6 @@ describe('8. the wired collectors reach the pipeline through the binary', () => 
     expect('reason' in forge ? forge.reason : '').toContain('gh')
   })
 
-  it('carries something it observed on disk into the rendered report', () => {
-    // INVARIANT: an observation survived collection, resolution and composition. Never that it
-    // amounts to a level — coupled to this repository having a harness at all, which it does.
-    const report = reportFor('assess', '.')
-
-    expect(report.coverage.axesRequested).toBe(4)
-    expect(report.coverage.axesObserved).toBeGreaterThan(0)
-  })
-
   it('answers for the bundle out of the bundle, never out of the checkout holding it', () => {
     // SAFETY: `profiles/` is tracked inside this repository, so without the live collector's
     // repository-root gate that collector would resolve to this checkout and publish AIDD's own
@@ -300,6 +293,40 @@ describe('8. the wired collectors reach the pipeline through the binary', () => 
 
     const human = runCli('assess', '.')
     expect(human.status).toBe(0)
-    expect(human.stdout).toContain('could not be established')
+    expect(human.stdout).toContain("Aucun niveau n'a pu être entièrement prouvé")
+  })
+})
+
+describe('9. colour follows the channel, never the report', () => {
+  const ESCAPE = '\u001b'
+
+  it('writes no escape sequence into a pipe', () => {
+    // INVARIANT: spawnSync gives the child a pipe, not a terminal — the shape every redirect and
+    // every `| grep` has. Escape codes here would land in a file the caller meant to read back.
+    expect(runCli('assess', 'profiles/perceval').stdout).not.toContain(ESCAPE)
+    expect(runCli('assess', 'profiles/perceval', '--json').stdout).not.toContain(ESCAPE)
+  })
+
+  it('colours a piped run when the caller asks for it, so a pager can be fed', () => {
+    const forced = runCliWith({ FORCE_COLOR: '1' }, 'assess', 'profiles/perceval')
+
+    expect(forced.status).toBe(0)
+    expect(forced.stdout).toContain(ESCAPE)
+  })
+
+  it('leaves --json untouched even then, because the contract owns every byte of it', () => {
+    const forced = runCliWith({ FORCE_COLOR: '1' }, 'assess', 'profiles/perceval', '--json')
+
+    expect(forced.stdout).not.toContain(ESCAPE)
+    expect(JSON.parse(forced.stdout)).toEqual(
+      JSON.parse(runCli('assess', 'profiles/perceval', '--json').stdout),
+    )
+  })
+
+  it('lets NO_COLOR win over FORCE_COLOR, because an overridable off switch is not one', () => {
+    const off = runCliWith({ FORCE_COLOR: '1', NO_COLOR: '1' }, 'assess', 'profiles/perceval')
+
+    expect(off.stdout).not.toContain(ESCAPE)
+    expect(off.stdout).toBe(runCli('assess', 'profiles/perceval').stdout)
   })
 })

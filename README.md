@@ -4,8 +4,11 @@
 rend le plus haut niveau que ce dossier peut **prouver**, les preuves derrière le verdict, et ce qui
 bloque le niveau suivant.
 
-Déterministe, entièrement hors ligne, aucun modèle de langage dans la décision. Le même dossier et
-le même modèle produisent toujours les mêmes octets sur la sortie standard.
+Déterministe, sans modèle de langage dans la décision. Les collecteurs locaux fonctionnent hors
+ligne ; un dépôt GitHub peut aussi interroger la forge pour les axes que Git seul ne peut pas voir.
+Le même dossier, le même modèle et le même état de forge produisent toujours le même rapport ;
+sur un pipe, une redirection ou une capture, ses octets sont identiques. Un terminal peut ajouter
+de la couleur, sans changer son contenu.
 
 > **Le principe qui gouverne tout :** ne demande pas ce que tu peux observer, et ne prétends pas
 > savoir ce que tu ne peux pas prouver.
@@ -16,7 +19,7 @@ le même modèle produisent toujours les mêmes octets sur la sortie standard.
 | --- | --- |
 | Node.js | >= 24 |
 | pnpm | 11 (épinglé par `packageManager`) |
-| Réseau | nécessaire à l'installation, jamais à l'exécution |
+| Réseau | nécessaire à l'installation ; optionnel à l'exécution, mais requis par le collecteur de forge |
 
 ## Installation
 
@@ -31,10 +34,48 @@ pnpm build      # produit dist/cli.js
 node dist/cli.js assess profiles/bohort
 ```
 
+Le CLI attend toujours le dossier à évaluer. Pour évaluer le projet courant :
+
+```bash
+node dist/cli.js assess .
+```
+
 | Option | Effet |
 | --- | --- |
 | `--json` | publie le contrat de rapport versionné au lieu de l'explication en prose |
 | `--model <chemin>` | évalue contre un modèle de maturité personnalisé au lieu de l'`aidd.yml` fourni |
+
+## Plugin Claude Code
+
+Le plugin audite toujours le projet ouvert dans Claude Code : l'utilisateur ne fournit aucun
+chemin. La skill lance son binaire embarqué comme ceci :
+
+```bash
+node "$CLAUDE_PLUGIN_ROOT/bin/cli.js" assess . --json
+```
+
+Elle lit exclusivement le contrat JSON puis le raconte en français ; elle ne calcule ni ne
+modifie jamais le verdict. Le bundle du plugin est construit séparément afin de garder le build
+local léger :
+
+```bash
+pnpm build:standalone
+```
+
+Cette commande produit `plugins/aidd-evaluation/bin/cli.js` et place `aidd.yml` à côté. Les deux
+fichiers font partie du plugin et doivent être publiés ensemble.
+
+Ce dépôt est aussi son propre marketplace. Une fois les fichiers poussés sur GitHub, et le dépôt
+rendu public ou accessible aux participants, ils installent le plugin sans cloner ni construire le
+dépôt :
+
+```text
+/plugin marketplace add BlandineRdl/aidd-audit
+/plugin install aidd-evaluation@aidd-evaluation
+```
+
+Ils lancent ensuite `/aidd-evaluation:aidd-evaluation` dans Claude Code ; elle évalue
+automatiquement le projet ouvert.
 
 Les quatre profils de référence sont livrés avec le dépôt :
 
@@ -50,29 +91,37 @@ node dist/cli.js assess profiles/arthur      # Copper
 `perceval` se décrit comme « plutôt avancé ». L'outil lit ce qu'il a fait, pas ce qu'il en dit.
 
 ```
-AIDD maturity assessment for profiles/perceval
-Model: aidd (schema v1)
+Maturité AIDD · profiles/perceval
+Modèle aidd (schéma v1) · collecteurs : live-repository, fixture-bundle
 
-Proven level: Red (rank 1)
-  Taille: MET
-    required: S · observed: S (CONFIRMED)
-  Harness: MET
-    required: prompts · observed: prompts (CONFIRMED)
-  ...
+Niveau prouvé : Red (rang 1)
+  ✓ Taille
+      requis atteint : changement petit ou trivial (S) (CONFIRMED)
+  ✓ Harness
+      requis atteint : usage de l'IA piloté par prompt (CONFIRMED)
+  ✓ Intervention
+      requis atteint : après coup, sur la majorité des livraisons (after-the-fact-most) (CONFIRMED)
+  ✓ En parallèle
+      requis atteint : 1 médiane de chantiers actifs par jour (minimum 1) (CONFIRMED)
 
-Next level: Blue (rank 2)
-  Harness: NOT_MET (practice gap)
-    required: prompts, context-engineering · observed: prompts (CONFIRMED)
-  ...
-
-Blocking requirements:
-  [practice gap] Harness at Blue: observed prompts does not reach the required prompts, context-engineering.
+Pour atteindre Blue (rang 2) :
+  ✗ Taille
+      [écart de pratique] aujourd’hui : changement petit ou trivial (S) (CONFIRMED)
+          pour Blue : changement de complexité moyenne (M).
+  ✗ Harness
+      [écart de pratique] manque : mémoire, architecture et conventions du projet (context-engineering) (CONFIRMED)
+  ✗ Intervention
+      [écart de pratique] aujourd’hui : après coup, sur la majorité des livraisons (after-the-fact-most) (CONFIRMED)
+          pour Blue : après coup, sur une partie des livraisons (after-the-fact-some).
+  Déjà au niveau requis pour Blue : En parallèle.
 ```
 
-Trois choses figurent sur chaque ligne, et aucune n'est une opinion :
+La prose résume les exigences déjà satisfaites une seule fois. Pour un écart, elle expose ce qui
+manque ; les identifiants techniques restent entre parenthèses et le JSON conserve les valeurs
+brutes.
 
-* **`required`** : ce que le modèle exige à ce niveau, tel quel depuis `aidd.yml`.
-* **`observed`** : ce qui a réellement été lu dans le dossier.
+* **`requis atteint`** : ce que le modèle exige et que le dossier a démontré.
+* **`manque`** ou **`requis` / `observé`** : l'écart de pratique concret à combler.
 * **le statut de preuve** : `CONFIRMED` signifie observé, pas déclaré. Ce qu'un développeur dit de
   lui-même n'atteint jamais cette colonne.
 
@@ -82,27 +131,27 @@ Cette distinction est tout le produit, et la sortie la garde visible.
 
 | | Signification | Ce qui peut être recommandé |
 | --- | --- | --- |
-| `NOT_MET`, écart de pratique | la pratique a été observée et n'atteint pas le seuil | améliorer la pratique |
-| `UNPROVEN`, écart de preuve | rien n'a pu être observé, ni dans un sens ni dans l'autre | fournir la preuve manquante, rien d'autre |
+| `✗`, écart de pratique | la pratique a été observée et n'atteint pas le seuil | améliorer la pratique |
+| `?`, écart de preuve | rien n'a pu être observé, ni dans un sens ni dans l'autre | fournir la preuve manquante, rien d'autre |
 
-Un niveau se gagne par la preuve, il ne se déduit jamais d'une information absente. Évaluer ce
-dépôt lui-même donne le second cas :
+Un niveau se gagne par la preuve, il ne se déduit jamais d'une information absente. Quand un axe
+ne peut pas être observé, la sortie garde explicitement cet écart de preuve :
 
 ```
-Proven level: could not be established. No level's requirements were fully proven.
+Niveau prouvé : aucun. Aucun niveau n'a pu être entièrement prouvé.
 
-Evidence coverage: 2 of 4 axes confirmed (2 observed).
-
-  Intervention: UNPROVEN (evidence gap)
-    no observation was made (UNKNOWN) — the requirement was never tested
-
-Blocking requirements:
-  [evidence gap] Intervention at White: asked live-repository, fixture-bundle, and no value was observed.
+Pour atteindre White (rang 0) :
+  ? <axe>
+      [écart de preuve] échantillon insuffisant : 3 jours actifs de PR observés, minimum 5 requis
 ```
 
-`could not be established` ne veut **pas** dire « sous le niveau le plus bas ». Cela veut dire que
-la preuve manquait pour trancher, et que l'outil le dit au lieu de deviner. La section **Limites**
-explique pourquoi un dépôt Git vivant tombe ici.
+« Aucun niveau n'a pu être entièrement prouvé » ne veut **pas** dire « sous le niveau le plus
+bas ». Cela veut dire que la preuve manquait pour trancher, et que l'outil le dit au lieu de
+deviner. La section **Limites** explique quelles sources peuvent manquer.
+
+Quand le rapport publie un diagnostic structuré, comme un échantillon de PR trop court, il explique
+la mesure manquante. Sans diagnostic, il conserve l'explication générale : le collecteur interrogé
+n'a produit aucune valeur. Ces deux cas restent des écarts de preuve, jamais des écarts de pratique.
 
 ## Ce qui est mesuré
 
@@ -111,7 +160,7 @@ Sept niveaux cumulatifs, White, Red, Blue, Green, Copper, Silver, Gold, sur quat
 | Axe | Question |
 | --- | --- |
 | Taille | quelle taille de changement est déléguée à l'IA |
-| Harness | ce qui est installé autour de l'IA : `prompts`, `context-engineering`, `behavior`, `loops` |
+| Harness | ce qui est installé autour de l'IA : `prompts`, contexte du projet, règles et garde-fous (`behavior`), boucles de validation (`loops`) |
 | Intervention | à quel point le développeur reprend la main tôt et souvent |
 | En parallèle | combien de flux de travail avancent en même temps |
 
@@ -121,15 +170,19 @@ C'est vérifié au chargement du modèle, pas supposé.
 
 * `aidd.yml` est la seule forme du modèle que le programme lit. `--model` la remplace.
 * `levels/aidd.md` documente la même grille pour un lecteur humain, et n'est jamais chargé.
+* Chaque valeur ordinale ou membre d'ensemble porte aussi sa description dans `aidd.yml`. Le
+  rapport JSON publie cette vocabulaire par axe et la prose conserve le token brut en l'expliquant,
+  par exemple `key-steps (intervention humaine aux étapes clés)` ou
+  `behavior : règles, agents, hooks et garde-fous`. Un modèle passé avec `--model` apporte ses
+  propres descriptions ; le renderer n'en invente aucune.
 
 ## Limites, annoncées d'emblée
 
-* **Un dépôt Git vivant ne peut pas être classé.** L'axe `Intervention` compte le travail correctif
-  qui arrive *après* l'ouverture d'un changement à la revue. Ouvrir un changement est une notion de
-  forge, et aucun historique Git local ne la porte, les commits de merge compris. Un seul axe
-  inobservable suffit à laisser tous les niveaux non prouvés : `assess <un dépôt>` ne rend donc
-  aucun niveau. C'est la règle conservatrice qui fait son travail, pas un défaut. Un collecteur de
-  forge lèvera ce plafond, derrière la même interface.
+* **Un dépôt Git vivant n'est classable que sur ce que ses sources rendent observable.** Avec une
+  origine GitHub, le collecteur de forge lit les pull requests pour `Taille`, `Intervention` et
+  `En parallèle`. Sans accès à la forge, ces axes restent `UNKNOWN` au lieu d'être devinés ; le
+  rapport sort tout de même avec le code `0`, mais peut ne prouver aucun niveau. Git local seul ne
+  porte pas toutes les informations temporelles de revue.
 * **Ce sont les dossiers de profil enregistrés qui sont classés**, parce qu'eux portent cette trace.
 * **Ce qu'un développeur déclare n'est recevable pour rien.** `declaratif.md` et ce que le manifeste
   affirme de lui-même sont lus comme des déclarations, et une déclaration n'atteint jamais

@@ -28,7 +28,8 @@ const AXES_IN_THE_MODEL = 4
 
 function capturingIo(): { io: CommandIo; stdout: () => string } {
   const out: string[] = []
-  return { io: { stdout: (text) => out.push(text), stderr: () => {} }, stdout: () => out.join('') }
+  const io: CommandIo = { stdout: (text) => out.push(text), stderr: () => {}, colours: false }
+  return { io, stdout: () => out.join('') }
 }
 
 async function reportFor(profile: string): Promise<AssessmentReport> {

@@ -1,6 +1,10 @@
 import type { AxisId, AxisVocabulary } from '../models/axis.model.js'
 import type { Observation, ObservedValue } from '../models/observation.model.js'
-import type { CollectorContext, EvidenceCollector } from '../ports/evidence-collector.port.js'
+import {
+  type CollectorCollection,
+  type CollectorContext,
+  type EvidenceCollector,
+} from '../ports/evidence-collector.port.js'
 import { readGitDerivedMetrics, hasAiAttributionTrailer } from './live-repository/git-history.js'
 import { decidedCapabilities } from './harness/decided-capabilities.js'
 import { scanHarness } from './harness/harness-scan.js'
@@ -31,7 +35,7 @@ export class LiveRepositoryEvidenceCollector implements EvidenceCollector {
     this.supportedAxes = supportedAxes
   }
 
-  async collect(context: CollectorContext): Promise<readonly Observation[]> {
+  async collect(context: CollectorContext): Promise<CollectorCollection> {
     context.signal.throwIfAborted()
 
     // SAFETY: This collector reads one subject kind: a repository. Outside a work tree nothing is
@@ -40,7 +44,7 @@ export class LiveRepositoryEvidenceCollector implements EvidenceCollector {
     // surrounding repository's harness as that subject's own evidence. A fixture bundle tracked in
     // this repository is exactly that case. Either way nothing is emitted, which is UNKNOWN, an
     // evidence gap, and never an observation that the subject lacks a practice.
-    if (!(await isRepositoryRoot(context.path, context.signal))) return []
+    if (!(await isRepositoryRoot(context.path, context.signal))) return emptyCollection()
 
     // INVARIANT: narrowing the vocabulary is the whole of the narrowing, because both sources
     // already return before they spawn anything when the scales they need are absent.
@@ -52,8 +56,12 @@ export class LiveRepositoryEvidenceCollector implements EvidenceCollector {
     // The two sources fail independently, and one unreadable source must not cost the other.
     const [harness, git] = await Promise.all([collectHarness(asked), collectGitDerived(asked)])
 
-    return [...harness, ...git]
+    return { observations: [...harness, ...git], diagnostics: [] }
   }
+}
+
+function emptyCollection(): CollectorCollection {
+  return { observations: [], diagnostics: [] }
 }
 
 async function collectHarness(context: CollectorContext): Promise<readonly Observation[]> {

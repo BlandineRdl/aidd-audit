@@ -59,11 +59,13 @@ async function collectFrom(
   path: string,
   vocabulary: readonly AxisVocabulary[] = AIDD_VOCABULARY,
 ): Promise<readonly Observation[]> {
-  return new FixtureBundleEvidenceCollector().collect({
-    path,
-    vocabulary,
-    signal: new AbortController().signal,
-  })
+  return (
+    await new FixtureBundleEvidenceCollector().collect({
+      path,
+      vocabulary,
+      signal: new AbortController().signal,
+    })
+  ).observations
 }
 
 function valueFor(observations: readonly Observation[], axis: string): unknown {

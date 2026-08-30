@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { renderHumanReport, renderHumanReports } from './human.renderer.js'
+import { renderHumanReport } from './human.renderer.js'
+import { colouredText } from './text-style.js'
 import {
   assessmentReport,
   axisReport,
@@ -13,18 +14,31 @@ import {
 } from './assessment-report.test-fixture.js'
 
 const provenParagraph = (output: string) =>
-  output.split('\n\n').find((paragraph) => paragraph.startsWith('Proven level:'))
+  output.split('\n\n').find((paragraph) => paragraph.startsWith('Niveau prouvé :'))
 
 const coverageParagraph = (output: string) =>
-  output.split('\n\n').find((paragraph) => paragraph.startsWith('Evidence coverage:'))
+  output.split('\n\n').find((paragraph) => paragraph.startsWith('Couverture :'))
 
 const incompleteCollectorsParagraph = (output: string) =>
   output
     .split('\n\n')
-    .find((paragraph) => paragraph.startsWith('Collectors that did not complete:'))
+    .find((paragraph) => paragraph.startsWith('Collecteurs sans réponse complète :'))
 
-const blockerLine = (output: string, kind: 'practice' | 'evidence') =>
-  output.split('\n').find((line) => line.includes(`[${kind} gap]`))
+const gapLine = (output: string, kind: 'pratique' | 'preuve') =>
+  output.split('\n').find((line) => line.includes(`[écart de ${kind}]`))
+
+// The lines an axis owns: the marked axis line, then every requirement line beneath it.
+const axisDetail = (output: string, label: string) => {
+  const lines = output.split('\n')
+  const start = lines.findIndex((line) => /^ {2}[✓✗?] /.test(line) && line.endsWith(` ${label}`))
+  if (start < 0) throw new Error(`no axis line for ${label} in:\n${output}`)
+  const detail: string[] = []
+  for (const line of lines.slice(start + 1)) {
+    if (!line.startsWith('      ')) break
+    detail.push(line)
+  }
+  return detail.join('\n')
+}
 
 describe('1. a proven level exists', () => {
   const copper = levelReport({ id: 'copper', rank: 4, label: 'Copper' })
@@ -33,18 +47,18 @@ describe('1. a proven level exists', () => {
   const output = renderHumanReport(report)
 
   it('names the proven level', () => {
-    expect(output).toContain('Proven level: Green (rank 3)')
+    expect(output).toContain('Niveau prouvé : Green (rang 3)')
   })
 
   it('names the next level', () => {
-    expect(output).toContain('Next level: Copper (rank 4)')
+    expect(output).toContain('Pour atteindre Copper (rang 4) :')
   })
 })
 
 describe('2. no level can be proven', () => {
   it('states that AIDD could not establish a maturity level', () => {
     const output = renderHumanReport(assessmentReport({ proven: null, levels: [] }))
-    expect(provenParagraph(output)).toContain('could not be established')
+    expect(provenParagraph(output)).toContain("Aucun niveau n'a pu être entièrement prouvé")
   })
 
   it('never names White as the proven result, even though the same word may legitimately name a blocked level', () => {
@@ -80,9 +94,10 @@ describe('2. no level can be proven', () => {
       provenance: [{ collector: 'fixture-collector', status: 'COMPLETED', axes: ['size'] }],
     })
     const output = renderHumanReport(report)
-    expect(provenParagraph(output)).not.toMatch(/evidence|insufficient/i)
-    expect(coverageParagraph(output)).toContain('4 of 4 axes confirmed')
-    expect(blockerLine(output, 'practice')).toContain('does not reach')
+    expect(provenParagraph(output)).not.toMatch(/preuve|insuffisan/i)
+    expect(coverageParagraph(output)).toContain('4/4 axes confirmés')
+    expect(gapLine(output, 'pratique')).toContain('aujourd’hui : small (S)')
+    expect(gapLine(output, 'preuve')).toBeUndefined()
   })
 })
 
@@ -103,15 +118,66 @@ describe('3. a practice gap blocks progression', () => {
     levels: [blue],
     blocking: [practiceBlocker('blue', 'size')],
   })
-  const line = blockerLine(renderHumanReport(report), 'practice')
+  const output = renderHumanReport(report)
+  const line = gapLine(output, 'pratique')
 
   it('says the observed practice is below what the requirement asks', () => {
-    expect(line).toMatch(/does not reach|below/)
+    // INVARIANT: the gap kind is stated on the requirement line itself, so the values beside it
+    // are read as a shortfall and never as an absence of evidence.
+    expect(line).toBeDefined()
+    expect(line).not.toContain('[écart de preuve]')
+    expect(axisDetail(output, 'Taille')).toContain('[écart de pratique]')
   })
 
-  it('shows the observed value against the threshold', () => {
-    expect(line).toContain('observed M')
-    expect(line).toContain('required L')
+  it('states today’s practice, then the target for the next level', () => {
+    expect(line).toContain('aujourd’hui : medium (M)')
+    expect(axisDetail(output, 'Taille')).toContain('pour Blue : large (L).')
+  })
+
+  it('keeps ordinal codes discreetly beside their model-owned human meaning', () => {
+    expect(line).toContain('medium (M)')
+    expect(axisDetail(output, 'Taille')).toContain('large (L)')
+  })
+
+  it('names only the missing set capability for a harness practice gap', () => {
+    const output = renderHumanReport(
+      assessmentReport({
+        proven: null,
+        next: levelReport({
+          axes: [
+            axisReport({
+              axis: 'harness',
+              label: 'Harness',
+              outcome: 'NOT_MET',
+              requirements: [notMetRequirement('harness', ['prompts', 'behavior'], ['prompts'])],
+            }),
+          ],
+        }),
+        levels: [],
+      }),
+    )
+    expect(axisDetail(output, 'Harness')).toContain('manque : guardrails (behavior)')
+    expect(axisDetail(output, 'Harness')).not.toContain('observé')
+  })
+
+  it('uses the numeric description carried by the report instead of a bare number', () => {
+    const output = renderHumanReport(
+      assessmentReport({
+        proven: null,
+        next: levelReport({
+          axes: [
+            axisReport({
+              axis: 'parallelism',
+              label: 'En parallèle',
+              requirements: [metRequirement('parallelism', 3, 7.5)],
+            }),
+          ],
+        }),
+        levels: [],
+      }),
+    )
+    expect(axisDetail(output, 'En parallèle')).toContain('7.5 active work per day')
+    expect(axisDetail(output, 'En parallèle')).toContain('minimum 3')
   })
 })
 
@@ -136,26 +202,60 @@ describe('4. an evidence gap blocks progression', () => {
   }
 
   it.each([
-    ['UNKNOWN', 'and no value was observed'],
-    ['CLAIMED', 'the claim could not be independently confirmed'],
-    ['CONFLICTING', 'observed evidence disagrees'],
+    ['UNKNOWN', 'aucune valeur observée'],
+    ['CLAIMED', "la déclaration n'a pas pu être confirmée indépendamment"],
+    ['CONFLICTING', 'les observations se contredisent'],
   ] as const)('explains a %s evidence gap in its own terms', (evidence, explanation) => {
-    const line = blockerLine(renderHumanReport(buildReport(evidence)), 'evidence')
+    const line = gapLine(renderHumanReport(buildReport(evidence)), 'preuve')
     expect(line).toContain(explanation)
   })
 
   it('never explains two different evidence statuses the same way', () => {
     const explanations = (['UNKNOWN', 'CLAIMED', 'CONFLICTING'] as const).map((evidence) =>
-      blockerLine(renderHumanReport(buildReport(evidence)), 'evidence'),
+      gapLine(renderHumanReport(buildReport(evidence)), 'preuve'),
     )
     expect(new Set(explanations).size).toBe(explanations.length)
+  })
+
+  it('names an insufficient active-day sample as evidence, not a practice gap', () => {
+    const diagnostic = {
+      collector: 'forge-repository',
+      axis: 'parallelism',
+      reason: 'INSUFFICIENT_ACTIVE_DAYS' as const,
+      observed: 3,
+      minimum: 5,
+    }
+    const blue = levelReport({
+      axes: [
+        axisReport({
+          axis: 'parallelism',
+          label: 'En parallèle',
+          outcome: 'UNPROVEN',
+          requirements: [unprovenRequirement('parallelism', 1, 'UNKNOWN', null, diagnostic)],
+        }),
+      ],
+    })
+    const output = renderHumanReport(
+      assessmentReport({
+        proven: null,
+        next: blue,
+        levels: [blue],
+        blocking: [evidenceBlocker('blue', 'parallelism')],
+      }),
+    )
+
+    expect(output).toContain(
+      'échantillon insuffisant : 3 jours actifs de PR observés, minimum 5 requis',
+    )
+    expect(output).not.toContain('[écart de pratique]')
   })
 
   it.each(['UNKNOWN', 'CLAIMED', 'CONFLICTING'] as const)(
     'never recommends changing the practice for a %s gap, and never says it falls short',
     (evidence) => {
-      const line = blockerLine(renderHumanReport(buildReport(evidence)), 'evidence')
-      expect(line).not.toMatch(/\b(improve|fix|change|below)\b|does not reach|falls short/i)
+      const line = gapLine(renderHumanReport(buildReport(evidence)), 'preuve')
+      expect(line).not.toContain('[écart de pratique]')
+      expect(line).not.toMatch(/\b(améliorer|corriger|changer)\b|en deçà|n'atteint pas|insuffisan/i)
     },
   )
 })
@@ -184,16 +284,16 @@ describe('5. the two gaps never read alike', () => {
   const output = renderHumanReport(report)
 
   it('produces two distinct lines for the same axis', () => {
-    const practice = blockerLine(output, 'practice')
-    const evidence = blockerLine(output, 'evidence')
+    const practice = gapLine(output, 'pratique')
+    const evidence = gapLine(output, 'preuve')
     expect(practice).toBeDefined()
     expect(evidence).toBeDefined()
     expect(practice).not.toEqual(evidence)
   })
 
   it('tags each line with its own gap kind, so a future refactor cannot collapse them', () => {
-    expect(output).toContain('[practice gap]')
-    expect(output).toContain('[evidence gap]')
+    expect(output).toContain('[écart de pratique]')
+    expect(output).toContain('[écart de preuve]')
   })
 })
 
@@ -212,8 +312,8 @@ describe('6. a null-proven report names what is missing', () => {
   const output = renderHumanReport(report)
 
   it('reports axes observed and confirmed against axes requested', () => {
-    expect(coverageParagraph(output)).toContain('1 of 4 axes confirmed')
-    expect(coverageParagraph(output)).toContain('2 observed')
+    expect(coverageParagraph(output)).toContain('1/4 axes confirmés')
+    expect(coverageParagraph(output)).toContain('2/4 observés')
   })
 
   it('names every provenance entry that did not complete, with its reason and its axes', () => {
@@ -233,7 +333,7 @@ describe('6. a null-proven report names what is missing', () => {
   })
 })
 
-describe('7. an ambiguous threshold is never guessed', () => {
+describe('7. an axis carrying several requirements renders every one, so no threshold is chosen', () => {
   const blue = levelReport({
     axes: [
       axisReport({
@@ -251,19 +351,23 @@ describe('7. an ambiguous threshold is never guessed', () => {
     levels: [blue],
     blocking: [practiceBlocker('blue', 'size')],
   })
-  const line = blockerLine(renderHumanReport(report), 'practice')
+  const output = renderHumanReport(report)
+  const detail = axisDetail(output, 'Taille')
 
-  it('renders the blocker without quoting either threshold', () => {
-    expect(line).not.toContain('required')
+  it('quotes both thresholds rather than choosing between them', () => {
+    expect(detail).toContain('pour Blue : medium (M).')
+    expect(detail).toContain('pour Blue : large (L).')
   })
 
   it('still names the axis and the level', () => {
-    expect(line).toContain('Taille')
-    expect(line).toContain('Blue')
+    expect(output).toContain('Taille')
+    expect(output).toContain('Pour atteindre Blue')
   })
 
-  it('still states that the practice does not meet the requirement, instead of an empty line', () => {
-    expect(line).toContain('the observed practice does not meet the requirement')
+  it('states that each observed value does not meet its requirement', () => {
+    expect(detail.split('\n').filter((line) => line.includes('[écart de pratique]'))).toHaveLength(
+      2,
+    )
   })
 })
 
@@ -274,8 +378,8 @@ describe('8. a blocker naming an id the report no longer carries still renders',
       levels: [levelReport()],
       blocking: [practiceBlocker('ghost-level', 'ghost-axis')],
     })
-    const line = blockerLine(renderHumanReport(report), 'practice')
-    expect(line).toContain('ghost-axis at ghost-level')
+    const line = gapLine(renderHumanReport(report), 'pratique')
+    expect(line).toContain('ghost-axis à ghost-level')
   })
 
   it('falls back to the raw level and axis id for an evidence gap', () => {
@@ -284,14 +388,14 @@ describe('8. a blocker naming an id the report no longer carries still renders',
       levels: [levelReport()],
       blocking: [evidenceBlocker('ghost-level', 'ghost-axis')],
     })
-    const line = blockerLine(renderHumanReport(report), 'evidence')
-    expect(line).toContain('ghost-axis at ghost-level')
+    const line = gapLine(renderHumanReport(report), 'preuve')
+    expect(line).toContain('ghost-axis à ghost-level')
   })
 })
 
 describe('10. no collector ran at all', () => {
   const noCollectorsParagraph = (output: string) =>
-    output.split('\n\n').find((paragraph) => paragraph.startsWith('No collector ran'))
+    output.split('\n\n').find((paragraph) => paragraph.startsWith('Aucun collecteur'))
 
   it('says plainly that nothing was observed, distinct from the practice and evidence gaps', () => {
     const blue = levelReport()
@@ -303,8 +407,8 @@ describe('10. no collector ran at all', () => {
       provenance: [],
     })
     const output = renderHumanReport(report)
-    expect(noCollectorsParagraph(output)).toContain('No collector ran')
-    expect(noCollectorsParagraph(output)).toContain('did not look')
+    expect(noCollectorsParagraph(output)).toContain("Aucun collecteur n'a tourné")
+    expect(noCollectorsParagraph(output)).toContain("n'a pas regardé")
   })
 
   it('is silent once at least one collector ran, even if none completed', () => {
@@ -325,7 +429,7 @@ describe('10. no collector ran at all', () => {
   })
 })
 
-describe('9. the axis outcomes are glossed', () => {
+describe('9. the axis outcomes are marked and their gaps glossed', () => {
   // Rendered as `next`: the engine never proves a level carrying a NOT_MET axis.
   const blue = levelReport({
     outcome: 'NOT_MET',
@@ -348,15 +452,23 @@ describe('9. the axis outcomes are glossed', () => {
   const output = renderHumanReport(assessmentReport({ proven: null, next: blue, levels: [blue] }))
 
   it('leaves MET unglossed', () => {
-    expect(output).toContain('Taille: MET')
+    expect(output).toContain('✓ Taille')
+    expect(axisDetail(output, 'Taille')).not.toContain('[écart')
   })
 
   it('glosses NOT_MET as a practice gap', () => {
-    expect(output).toMatch(/Harness: NOT_MET.*practice gap/)
+    expect(output).toContain('✗ Harness')
+    expect(axisDetail(output, 'Harness')).toContain('[écart de pratique]')
   })
 
   it('glosses UNPROVEN as an evidence gap', () => {
-    expect(output).toMatch(/En parallèle: UNPROVEN.*evidence gap/)
+    expect(output).toContain('? En parallèle')
+    expect(axisDetail(output, 'En parallèle')).toContain('[écart de preuve]')
+  })
+
+  it('marks the three outcomes differently, so an axis is placed before it is read', () => {
+    expect(new Set(['✓', '✗', '?']).size).toBe(3)
+    expect(output).not.toMatch(/MET|UNPROVEN/)
   })
 })
 
@@ -380,13 +492,13 @@ describe('a collector that did not complete is always reported, proven level or 
   const paragraph = incompleteCollectorsParagraph(output)
 
   it('names the collector even though a level is proven', () => {
-    expect(output).toContain('Proven level: Green (rank 3)')
+    expect(output).toContain('Niveau prouvé : Green (rang 3)')
     expect(paragraph).toBeDefined()
     expect(paragraph).toContain('live-repository')
   })
 
   it('glosses TIMED_OUT into words instead of the raw enum token', () => {
-    expect(paragraph).toContain('timed out')
+    expect(paragraph).toContain('délai dépassé')
     expect(paragraph).not.toMatch(/TIMED_OUT|timed_out/)
   })
 
@@ -401,20 +513,13 @@ describe('a collector that did not complete is always reported, proven level or 
   it('never renders the trivially-full coverage counts for a proven level', () => {
     expect(coverageParagraph(output)).toBeUndefined()
   })
+
+  it('names in the header the collectors that did complete', () => {
+    expect(output.split('\n\n')[0]).toContain('collecteurs : fixture-collector')
+  })
 })
 
 describe('11. every axis names what was observed against what its level required', () => {
-  const axisDetail = (output: string, label: string) => {
-    const lines = output.split('\n')
-    const start = lines.findIndex((line) => line.trimStart().startsWith(`${label}:`))
-    const detail: string[] = []
-    for (const line of lines.slice(start + 1)) {
-      if (!line.startsWith('    ')) break
-      detail.push(line)
-    }
-    return detail.join('\n')
-  }
-
   const blue = levelReport({
     axes: [
       axisReport({
@@ -433,12 +538,65 @@ describe('11. every axis names what was observed against what its level required
   })
   const output = renderHumanReport(assessmentReport({ proven: null, next: blue, levels: [blue] }))
 
-  it('names the observed value, so a reader learns what AIDD saw and not only its verdict', () => {
-    expect(axisDetail(output, 'Harness')).toContain('prompts, behavior')
+  it('summarises a satisfied set requirement once instead of repeating the same descriptions', () => {
+    expect(axisDetail(output, 'Harness')).toContain('requis atteint : prompts')
   })
 
   it('names what the level required, next to it', () => {
-    expect(axisDetail(output, 'Harness')).toContain('required: prompts')
+    expect(axisDetail(output, 'Harness')).toContain('requis atteint')
+  })
+
+  it('uses the report vocabulary to explain raw scale terms', () => {
+    const output = renderHumanReport(
+      assessmentReport({
+        proven: null,
+        next: blue,
+        levels: [blue],
+        vocabulary: [
+          {
+            axis: 'harness',
+            kind: 'set',
+            members: ['prompts', 'behavior'],
+            descriptions: { prompts: 'custom prompts', behavior: 'custom guardrails' },
+          },
+        ],
+      }),
+    )
+    expect(axisDetail(output, 'Harness')).toContain('custom prompts')
+    expect(axisDetail(output, 'Harness')).not.toContain('règles, agents')
+  })
+
+  it('explains an ordinal token from the same report vocabulary', () => {
+    const intervention = axisReport({
+      axis: 'intervention',
+      label: 'Intervention',
+      requirements: [metRequirement('intervention', 'key-steps', 'key-steps')],
+    })
+    const level = levelReport({ axes: [intervention] })
+    const output = renderHumanReport(
+      assessmentReport({
+        proven: level,
+        next: null,
+        levels: [level],
+        vocabulary: [
+          {
+            axis: 'intervention',
+            kind: 'ordinal',
+            values: ['key-steps'],
+            descriptions: { 'key-steps': 'custom key steps' },
+          },
+        ],
+      }),
+    )
+    expect(axisDetail(output, 'Intervention')).toContain('custom key steps (key-steps)')
+  })
+
+  it('leaves a term absent from report vocabulary raw instead of inventing a description', () => {
+    const output = renderHumanReport(
+      assessmentReport({ proven: null, next: blue, levels: [blue], vocabulary: [] }),
+    )
+    expect(axisDetail(output, 'Harness')).toContain('observé prompts, behavior')
+    expect(axisDetail(output, 'Harness')).not.toContain('guardrails')
   })
 
   it('carries the evidence status, so a claim is never read as a confirmed observation', () => {
@@ -458,7 +616,7 @@ describe('11. every axis names what was observed against what its level required
         levels: [],
       }),
     )
-    expect(axisDetail(claimed, 'Taille')).toContain('observed: M')
+    expect(axisDetail(claimed, 'Taille')).toContain('observé M')
     expect(axisDetail(claimed, 'Taille')).toContain('(CLAIMED)')
   })
 
@@ -480,9 +638,9 @@ describe('11. every axis names what was observed against what its level required
         levels: [],
       }),
     )
-    expect(unobserved).toContain('no observation was made')
-    expect(unobserved).not.toContain('observed:')
-    expect(axisDetail(empty, 'Harness')).toContain('observed: an empty set')
+    expect(unobserved).toContain('aucune observation')
+    expect(unobserved).not.toContain('requis')
+    expect(axisDetail(empty, 'Harness')).toContain('manque : prompts')
   })
 
   it('renders an empty requirement as the empty set, not as a blank', () => {
@@ -505,8 +663,8 @@ describe('11. every axis names what was observed against what its level required
         levels: [],
       }),
     )
-    expect(axisDetail(white, 'Harness')).toContain('required: an empty set')
-    expect(axisDetail(white, 'Harness')).not.toMatch(/required: *·/)
+    expect(axisDetail(white, 'Harness')).toContain("requis l'ensemble vide")
+    expect(axisDetail(white, 'Harness')).not.toMatch(/requis *·/)
   })
 
   it('details every requirement when an axis carries more than one', () => {
@@ -529,8 +687,8 @@ describe('11. every axis names what was observed against what its level required
         levels: [],
       }),
     )
-    expect(axisDetail(twofold, 'Taille')).toContain('required: M')
-    expect(axisDetail(twofold, 'Taille')).toContain('required: L')
+    expect(axisDetail(twofold, 'Taille')).toContain('pour Blue : medium (M).')
+    expect(axisDetail(twofold, 'Taille')).toContain('pour Blue : large (L).')
   })
 
   it('carries CONFIRMED into prose too, so the happy path is not the unlabelled one', () => {
@@ -539,8 +697,8 @@ describe('11. every axis names what was observed against what its level required
 
   it('never states a threshold for a requirement no observation was compared against', () => {
     const detail = axisDetail(output, 'Taille')
-    expect(detail).not.toContain('required:')
-    expect(detail).toContain('never tested')
+    expect(detail).not.toContain('requis')
+    expect(detail).toContain('aucune observation')
   })
 
   it('details the proven level too, not only the next one', () => {
@@ -560,7 +718,69 @@ describe('11. every axis names what was observed against what its level required
     const proven = renderHumanReport(
       assessmentReport({ proven: green, next: null, levels: [green] }),
     )
-    expect(axisDetail(proven, 'Harness')).toContain('prompts, loops')
+    expect(axisDetail(proven, 'Harness')).toContain('requis atteint : prompts')
+  })
+})
+
+describe('13. an axis the proven level already detailed is named, never printed twice', () => {
+  const harnessAt = (threshold: readonly string[]) =>
+    axisReport({
+      axis: 'harness',
+      label: 'Harness',
+      outcome: 'MET',
+      requirements: [metRequirement('harness', threshold, ['prompts', 'behavior'])],
+    })
+
+  const reportWith = (nextHarness: ReturnType<typeof harnessAt>) => {
+    const green = levelReport({
+      id: 'green',
+      rank: 3,
+      label: 'Green',
+      axes: [harnessAt(['prompts'])],
+    })
+    const copper = levelReport({
+      id: 'copper',
+      rank: 4,
+      label: 'Copper',
+      axes: [
+        nextHarness,
+        axisReport({
+          axis: 'size',
+          label: 'Taille',
+          outcome: 'NOT_MET',
+          requirements: [notMetRequirement('size', 'L', 'M')],
+        }),
+      ],
+    })
+    return assessmentReport({
+      proven: green,
+      next: copper,
+      levels: [green, copper],
+      blocking: [practiceBlocker('copper', 'size')],
+    })
+  }
+
+  it('names an axis whose requirement is word for word the one already printed', () => {
+    const output = renderHumanReport(reportWith(harnessAt(['prompts'])))
+    expect(output).toContain('Déjà au niveau requis pour Copper : Harness.')
+    expect(output.split('requis atteint : prompts')).toHaveLength(2)
+  })
+
+  it('prints an axis in full when the higher level raised its threshold, even though it is met', () => {
+    // INVARIANT: the collapse is by identity, never by outcome. A level that asks more and still
+    // gets it states a different fact, and a reader of prose learns every fact `--json` publishes.
+    const output = renderHumanReport(reportWith(harnessAt(['prompts', 'behavior'])))
+    expect(output).not.toContain('Déjà satisfaits')
+    expect(output).toContain('requis atteint : prompts ; guardrails')
+  })
+
+  it('collapses nothing when no level was proven, since nothing was printed above', () => {
+    const copper = levelReport({ id: 'copper', rank: 4, label: 'Copper' })
+    const output = renderHumanReport(
+      assessmentReport({ proven: null, next: copper, levels: [copper] }),
+    )
+    expect(output).not.toContain('Déjà satisfaits')
+    expect(output).toContain('✓ Harness')
   })
 })
 
@@ -584,13 +804,13 @@ describe('12. what the subject reached is reported beneath what it holds, never 
     )
 
   const demonstratedParagraph = (output: string) =>
-    output.split('\n\n').find((paragraph) => paragraph.startsWith('Demonstrated:'))
+    output.split('\n\n').find((paragraph) => paragraph.startsWith('Démontré :'))
 
   it('names the demonstrated level only after the proven one', () => {
     const output = withDemonstrated()
 
     // INVARIANT: a reader quoting the first level they meet must quote the one the subject holds.
-    expect(output.indexOf('Proven level:')).toBeLessThan(output.indexOf('Demonstrated:'))
+    expect(output.indexOf('Niveau prouvé :')).toBeLessThan(output.indexOf('Démontré :'))
   })
 
   it('never states a demonstrated value without the share that earned it', () => {
@@ -601,18 +821,18 @@ describe('12. what the subject reached is reported beneath what it holds, never 
     // rather than once for the paragraph — the level line included. That line carries no share of
     // its own, so it must not read as a finished sentence: it ends in a colon and is followed by at
     // least one line that does carry one.
-    expect(level).toMatch(/reached on:$/)
+    expect(level).toMatch(/atteint sur :$/)
     expect(axes.length).toBeGreaterThan(0)
     for (const line of axes) {
-      expect(line).toMatch(/reached on \d+% of /)
+      expect(line).toMatch(/atteint sur \d+% des /)
     }
   })
 
   it('names what each share counts, because the two axes do not count the same occasions', () => {
     const paragraph = demonstratedParagraph(withDemonstrated()) ?? ''
 
-    expect(paragraph).toContain('reached on 40% of delivered changes')
-    expect(paragraph).toContain('reached on 40% of active days')
+    expect(paragraph).toContain('atteint sur 40% des livraisons')
+    expect(paragraph).toContain('atteint sur 40% des jours actifs')
   })
 
   it('renders the share as a whole percentage, never as a fraction', () => {
@@ -637,48 +857,89 @@ describe('12. what the subject reached is reported beneath what it holds, never 
     // INVARIANT: no ceiling without a floor. Printed here it would be the only level in a document
     // that says the subject could not be classified, handing a rank-4 label to a subject the tool
     // declined to place — the "quoted alone" failure this section exists to prevent.
-    expect(output).toContain('could not be established')
-    expect(output).not.toContain('Demonstrated:')
+    expect(output).toContain("Aucun niveau n'a pu être entièrement prouvé")
+    expect(output).not.toContain('Démontré :')
   })
 
   it('says nothing at all when the subject demonstrated no more than it holds', () => {
     // INVARIANT: the ordinary case. Every bundle and every source recording a median without its
     // distribution lands here, and must read exactly as it did before this section existed.
-    expect(withDemonstrated(blue, blue)).not.toContain('Demonstrated:')
-    expect(renderHumanReport(assessmentReport({ demonstrated: null }))).not.toContain(
-      'Demonstrated:',
-    )
+    expect(withDemonstrated(blue, blue)).not.toContain('Démontré :')
+    expect(renderHumanReport(assessmentReport({ demonstrated: null }))).not.toContain('Démontré :')
   })
 })
 
-describe('13. many reports render separated and attributable', () => {
-  it('contains each report’s own rendering, with its own subject line, in the same order', () => {
-    const first = assessmentReport({ subject: { path: '/repo/first' } })
-    const second = assessmentReport({ subject: { path: '/repo/second' } })
+const ESCAPE = '\u001b'
+const stripped = (text: string) => text.replaceAll(/\u001b\[[0-9;]*m/g, '')
 
-    const output = renderHumanReports([first, second])
-    const firstIndex = output.indexOf('/repo/first')
-    const secondIndex = output.indexOf('/repo/second')
+describe('14. colour dresses the report and decides nothing about it', () => {
+  const green = levelReport({ id: 'green', rank: 3, label: 'Green' })
+  const copper = levelReport({
+    id: 'copper',
+    rank: 4,
+    label: 'Copper',
+    outcome: 'NOT_MET',
+    axes: [
+      axisReport({
+        axis: 'size',
+        label: 'Taille',
+        outcome: 'NOT_MET',
+        requirements: [notMetRequirement('size', 'L', 'M')],
+      }),
+      axisReport({
+        axis: 'harness',
+        label: 'Harness',
+        outcome: 'UNPROVEN',
+        requirements: [unprovenRequirement('harness', ['prompts'], 'UNKNOWN')],
+      }),
+    ],
+  })
+  const report = assessmentReport({
+    proven: green,
+    next: copper,
+    levels: [green, copper],
+    blocking: [practiceBlocker('copper', 'size'), evidenceBlocker('copper', 'harness')],
+  })
+  const plain = renderHumanReport(report)
+  const coloured = renderHumanReport(report, colouredText)
 
-    expect(output).toContain(renderHumanReport(first))
-    expect(output).toContain(renderHumanReport(second))
-    expect(firstIndex).toBeGreaterThanOrEqual(0)
-    expect(secondIndex).toBeGreaterThan(firstIndex)
+  it('never emits an escape sequence when no style is asked for', () => {
+    // INVARIANT: the default is what a pipe, a redirect and every captured run receive. A report
+    // that coloured itself unasked would put escape codes into a file and into `| grep`.
+    expect(plain).not.toContain(ESCAPE)
   })
 
-  it('separates reports with a line no single report ever produces on its own', () => {
-    const first = assessmentReport({ subject: { path: '/repo/first' } })
-    const second = assessmentReport({ subject: { path: '/repo/second' } })
-    // A line of repeated punctuation, not the section breaks a single report joins on.
-    const separatorLine = /^[=]{2,}$/m
-
-    expect(renderHumanReport(first)).not.toMatch(separatorLine)
-    expect(renderHumanReports([first, second])).toMatch(separatorLine)
+  it('says exactly the same words in colour as without it', () => {
+    // INVARIANT: the strongest form of "presentation only" — strip the codes and the two renderings
+    // are the same bytes. A style that added a word, dropped one, or reordered a line fails here
+    // without any assertion having to name what it did.
+    expect(stripped(coloured)).toBe(plain)
   })
 
-  it('renders one report identically to the single-report entry point', () => {
-    const report = assessmentReport()
+  it('actually colours the report it is asked to colour', () => {
+    expect(coloured).toContain(ESCAPE)
+  })
 
-    expect(renderHumanReports([report])).toBe(renderHumanReport(report))
+  it('gives the two gaps different colours, as it gives them different words', () => {
+    const lines = coloured.split('\n')
+    const practice = lines.find((line) => line.includes('[écart de pratique]'))
+    const evidence = lines.find((line) => line.includes('[écart de preuve]'))
+
+    // INVARIANT: colour is the faster channel, so a reader who scans before reading must still see
+    // two kinds of gap. Sharing a colour here would collapse for that reader what the words keep.
+    expect(codesIn(practice ?? '')).not.toEqual(codesIn(evidence ?? ''))
+  })
+
+  it('never dresses a satisfied axis as a gap', () => {
+    const satisfied = codesIn(coloured.split('\n').find((line) => line.includes('✓')) ?? '')
+    const failed = codesIn(coloured.split('\n').find((line) => line.includes('✗')) ?? '')
+
+    // INVARIANT: a satisfied axis is coloured too, and not with a gap's colour. Asserting only
+    // that the two differ passes for a `✓` nothing dressed at all — a different bug wearing this
+    // one's clothes.
+    expect(satisfied).not.toEqual([])
+    expect(satisfied).not.toEqual(failed)
   })
 })
+
+const codesIn = (line: string) => [...line.matchAll(/\u001b\[([0-9;]*)m/g)].map((match) => match[1])
