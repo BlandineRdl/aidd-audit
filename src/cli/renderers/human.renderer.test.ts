@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { renderHumanReport } from './human.renderer.js'
+import { renderHumanReport, renderHumanReports } from './human.renderer.js'
 import {
   assessmentReport,
   axisReport,
@@ -648,5 +648,37 @@ describe('12. what the subject reached is reported beneath what it holds, never 
     expect(renderHumanReport(assessmentReport({ demonstrated: null }))).not.toContain(
       'Demonstrated:',
     )
+  })
+})
+
+describe('13. many reports render separated and attributable', () => {
+  it('contains each report’s own rendering, with its own subject line, in the same order', () => {
+    const first = assessmentReport({ subject: { path: '/repo/first' } })
+    const second = assessmentReport({ subject: { path: '/repo/second' } })
+
+    const output = renderHumanReports([first, second])
+    const firstIndex = output.indexOf('/repo/first')
+    const secondIndex = output.indexOf('/repo/second')
+
+    expect(output).toContain(renderHumanReport(first))
+    expect(output).toContain(renderHumanReport(second))
+    expect(firstIndex).toBeGreaterThanOrEqual(0)
+    expect(secondIndex).toBeGreaterThan(firstIndex)
+  })
+
+  it('separates reports with a line no single report ever produces on its own', () => {
+    const first = assessmentReport({ subject: { path: '/repo/first' } })
+    const second = assessmentReport({ subject: { path: '/repo/second' } })
+    // A line of repeated punctuation, not the section breaks a single report joins on.
+    const separatorLine = /^[=]{2,}$/m
+
+    expect(renderHumanReport(first)).not.toMatch(separatorLine)
+    expect(renderHumanReports([first, second])).toMatch(separatorLine)
+  })
+
+  it('renders one report identically to the single-report entry point', () => {
+    const report = assessmentReport()
+
+    expect(renderHumanReports([report])).toBe(renderHumanReport(report))
   })
 })

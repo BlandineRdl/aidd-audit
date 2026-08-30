@@ -1,4 +1,5 @@
 import { type Stats, statSync } from 'node:fs'
+import type { AssessmentReport } from '../../assessment/contracts/assessment-report.contract.js'
 import { assessMaturity } from '../../assessment/usecases/assess-maturity.usecase.js'
 import { FixtureBundleEvidenceCollector } from '../../evidence/adapters/fixture-bundle.adapter.js'
 import { ForgeRepositoryEvidenceCollector } from '../../evidence/adapters/forge-repository.adapter.js'
@@ -13,8 +14,9 @@ import { loadMaturityModel } from '../../maturity/loading/load-maturity-model.js
 import { InvalidMaturityModelError } from '../../maturity/models/invalid-maturity-model.error.js'
 import { parseAssessArguments } from '../parsing/assess-arguments.js'
 import { canonicalModelPath } from '../bootstrap/canonical-model-path.js'
-import { renderHumanReport } from '../renderers/human.renderer.js'
-import { renderJsonReport } from '../renderers/json.renderer.js'
+import { renderHumanReport, renderHumanReports } from '../renderers/human.renderer.js'
+import { renderJsonReport, renderJsonReports } from '../renderers/json.renderer.js'
+import { resolveSubjects } from '../subjects/resolve-subjects.js'
 import { UsageError } from '../usage.error.js'
 
 export interface CommandIo {
@@ -25,8 +27,14 @@ export interface CommandIo {
 // SAFETY: Only a work-tree root gets a forge. `git remote get-url` run inside a checkout answers for
 // the enclosing repository, so a bundle tracked in one would be handed that repository's pull
 // requests as its own evidence — the fault the live collector's own root check exists to prevent.
-async function forgeFor(subjectPath: string, signal: AbortSignal): Promise<RepositorySlug | null> {
-  if (!(await isRepositoryRoot(subjectPath, signal))) return null
+// `isWorkTreeRoot` is decided by the caller — resolution's own answer for a lone subject, a fresh
+// per-member question for a set — so this asks nothing and spawns nothing.
+async function forgeFor(
+  subjectPath: string,
+  isWorkTreeRoot: boolean,
+  signal: AbortSignal,
+): Promise<RepositorySlug | null> {
+  if (!isWorkTreeRoot) return null
   return repositorySlug(subjectPath, signal)
 }
 
@@ -79,18 +87,34 @@ export async function runAssess(
     const args = parseAssessArguments(argv)
     requireExistingSubject(args.subjectPath)
 
+    const resolved = await resolveSubjects(args.subjectPath, budget.signal)
+
     const model = loadMaturityModel(args.modelPath ?? canonicalModelPath())
 
-    const report = await assessMaturity({
-      subjectPath: args.subjectPath,
-      model,
-      collectors:
-        options.collectors ?? collectorsFor(await forgeFor(args.subjectPath, budget.signal)),
-      signal: budget.signal,
-    })
+    const reports: AssessmentReport[] = []
+    for (const subjectPath of resolved.subjects) {
+      // SAFETY: a set's member may be its own work-tree root — a bundle is free to be a git
+      // repository nested inside a plain directory — so the question is asked of the member, never
+      // inherited from the directory that failed it. Inheriting it dropped that member's forge and
+      // handed the live collector three axes a better source owned, which is a route to
+      // CONFLICTING. A lone subject reuses the answer resolution already spawned `git` for.
+      const isWorkTreeRoot = resolved.isSet
+        ? await isRepositoryRoot(subjectPath, budget.signal)
+        : resolved.isWorkTreeRoot
 
-    const rendered = args.json ? renderJsonReport(report) : renderHumanReport(report)
-    io.stdout(`${rendered}\n`)
+      reports.push(
+        await assessMaturity({
+          subjectPath,
+          model,
+          collectors:
+            options.collectors ??
+            collectorsFor(await forgeFor(subjectPath, isWorkTreeRoot, budget.signal)),
+          signal: budget.signal,
+        }),
+      )
+    }
+
+    io.stdout(`${renderReports(reports, resolved.isSet, args.json)}\n`)
     return 0
   } catch (error) {
     io.stderr(`${messageOf(error)}\n`)
@@ -98,6 +122,23 @@ export async function runAssess(
   } finally {
     budget.abort()
   }
+}
+
+// INVARIANT: a lone subject renders exactly what it renders today — the single-report entry
+// point, untouched — so a report a caller could already name alone never changes shape by sitting
+// inside a set. The branch is `resolved.isSet`, never the length of `reports`: a set of exactly
+// one bundle is still a set, and must still publish the many-report shape — an array under
+// `--json`, not the bare object a lone subject publishes.
+function renderReports(
+  reports: readonly AssessmentReport[],
+  isSet: boolean,
+  json: boolean,
+): string {
+  const [only] = reports
+  if (!isSet && only !== undefined) {
+    return json ? renderJsonReport(only) : renderHumanReport(only)
+  }
+  return json ? renderJsonReports(reports) : renderHumanReports(reports)
 }
 
 // Never reads inside the subject: a failure met during collection is the collector's.

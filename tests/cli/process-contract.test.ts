@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, describe, expect, it } from 'vitest'
@@ -82,6 +82,24 @@ describe("3. an unusable subject is the caller's fault, exit 2", () => {
     expect(run.status).toBe(2)
     expect(run.stdout).toBe('')
     expect(run.stderr).toContain('neither a file nor a directory')
+  })
+
+  it('rejects a directory that is neither a repository, a bundle, nor a set of bundles', () => {
+    // SAFETY: a temporary directory outside any work tree, holding a child with no profile.json —
+    // neither a subject the tool already claims, nor a set of any. Self-contained, unlike a path
+    // inside this checkout, whose layout is this repository's own rather than the tool's.
+    const directory = mkdtempSync(join(tmpdir(), 'aidd-audit-unassessable-'))
+    mkdirSync(join(directory, 'not-a-bundle'))
+
+    try {
+      const run = runCli('assess', directory)
+
+      expect(run.status).toBe(2)
+      expect(run.stdout).toBe('')
+      expect(run.stderr).toContain(directory)
+    } finally {
+      rmSync(directory, { recursive: true, force: true })
+    }
   })
 })
 
