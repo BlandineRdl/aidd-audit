@@ -8,7 +8,7 @@
     {
       "name": "aidd-evaluation",
       "source": "./plugins/aidd-evaluation",
-      "description": "Évalue la maturité AIDD d’un projet à partir de preuves observables."
+      "description": "Évalue la maturité AIDD et audite le coût du contexte Claude d’un projet à partir de preuves observables."
     }
   ]
 }

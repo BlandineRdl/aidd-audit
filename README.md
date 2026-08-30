@@ -99,8 +99,13 @@ dépôt :
 /plugin install aidd-evaluation@aidd-evaluation
 ```
 
-Ils lancent ensuite `/aidd-evaluation:aidd-evaluation` dans Claude Code ; elle évalue
-automatiquement le projet ouvert.
+Ils lancent ensuite l'une des deux skills dans Claude Code ; elles travaillent toujours sur le
+projet ouvert :
+
+```text
+/aidd-evaluation:aidd-evaluation  # évalue la maturité AIDD
+/aidd-evaluation:aidd-harness     # audite le coût et la forme du contexte Claude
+```
 
 Les quatre profils de référence sont livrés avec le dépôt :
 
