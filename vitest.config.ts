@@ -13,5 +13,10 @@ export default defineConfig({
     exclude: ['node_modules/**', 'dist/**', 'profiles/**'],
     // dist/ is shared and rebuilt with clean: true, so no suite may build it.
     globalSetup: ['tests/build-cli-bundle.test-setup.ts'],
+    // SAFETY: four tests/cli/ suites spawn dist/cli.js, several times per test, and vitest runs
+    // files in parallel. Each spawn evaluates the token encoder's vocabulary because main.ts
+    // imports the harness command statically — see the note there — which pushes a spawn-heavy
+    // test past the 5000ms default under load and fails a passing test rather than a broken one.
+    testTimeout: 15000,
   },
 })

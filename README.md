@@ -45,6 +45,31 @@ node dist/cli.js assess .
 | `--json` | publie le contrat de rapport versionné au lieu de l'explication en prose |
 | `--model <chemin>` | évalue contre un modèle de maturité personnalisé au lieu de l'`aidd.yml` fourni |
 
+## Audit du harness Claude
+
+`harness` audite le contexte Claude chargé autour d'un projet ; il ne modifie jamais le niveau de
+maturité rendu par `assess`.
+
+```bash
+node dist/cli.js harness .
+node dist/cli.js harness . --details
+node dist/cli.js harness . --json
+```
+
+Le rapport sépare les fichiers toujours chargés des fichiers conditionnels, distingue le projet de
+la configuration personnelle de la machine, et estime leurs tokens. Sa section **Findings** compare
+chaque mesure à une guideline nommée, puis propose une action précise. Lorsqu'une réduction est
+possible, `potentialTokensRemoved` est une borne haute de tokens potentiellement retirés par cette
+action — ce n'est pas une économie mesurée.
+
+Un import ou une déclaration illisible est publié comme `unread`, jamais silencieusement interprété
+comme une absence. L'audit couvre actuellement la configuration Claude et reste intentionnellement
+séparé du contrat de maturité `assess`.
+
+La sortie par défaut commence par les totaux et les actions. `--details` ajoute l'inventaire de
+chaque fichier, sa forme prose/liste et les passages répétés ; `--json` publie toujours l'inventaire
+complet pour les outils.
+
 ## Plugin Claude Code
 
 Le plugin audite toujours le projet ouvert dans Claude Code : l'utilisateur ne fournit aucun
@@ -74,8 +99,13 @@ dépôt :
 /plugin install aidd-evaluation@aidd-evaluation
 ```
 
-Ils lancent ensuite `/aidd-evaluation:aidd-evaluation` dans Claude Code ; elle évalue
-automatiquement le projet ouvert.
+Ils lancent ensuite l'une des deux skills dans Claude Code ; elles travaillent toujours sur le
+projet ouvert :
+
+```text
+/aidd-evaluation:aidd-evaluation  # évalue la maturité AIDD
+/aidd-evaluation:aidd-harness     # audite le coût et la forme du contexte Claude
+```
 
 Les quatre profils de référence sont livrés avec le dépôt :
 

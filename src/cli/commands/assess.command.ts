@@ -131,7 +131,8 @@ function renderReports(
 ): string {
   const [only] = reports
   const style = colours ? colouredText : plainText
-  if (!isSet && only !== undefined) return json ? renderJsonReport(only) : renderHumanReport(only, style)
+  if (!isSet && only !== undefined)
+    return json ? renderJsonReport(only) : renderHumanReport(only, style)
   return json ? renderJsonReports(reports) : renderHumanReports(reports, style)
 }
 

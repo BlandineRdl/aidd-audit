@@ -1,4 +1,5 @@
 import { runAssess } from './commands/assess.command.js'
+import { runHarness } from './commands/harness.command.js'
 
 // SAFETY: NO_COLOR wins over FORCE_COLOR. An off switch another variable can override is not an off
 // switch, and a caller that set it has said what it wants louder than an inherited environment can.
@@ -15,8 +16,10 @@ function coloursWanted(): boolean {
   return process.stdout.isTTY === true
 }
 
-// The only file that touches `process`, so `runAssess` stays testable in-process.
-const exitCode = await runAssess(process.argv.slice(2), {
+// The only file that touches `process`, so both commands stay testable in-process.
+const argv = process.argv.slice(2)
+const run = argv[0] === 'harness' ? runHarness : runAssess
+const exitCode = await run(argv, {
   stdout: (text) => {
     process.stdout.write(text)
   },

@@ -1,3 +1,4 @@
+import { commandOperandsFor } from './command-name.js'
 import { UsageError } from '../usage.error.js'
 
 const USAGE_LINE = 'usage: aidd-audit assess <path> [--json] [--model <path>]'
@@ -11,11 +12,7 @@ export interface AssessArguments {
 // COMPAT: hand-rolled rather than `node:util`'s `parseArgs`, which doesn't let a caller shape its
 // rejection messages.
 export function parseAssessArguments(argv: readonly string[]): AssessArguments {
-  const command = argv[0]
-  if (command !== 'assess') {
-    const what = command === undefined ? 'No command given.' : `Unknown command '${command}'.`
-    throw usageError(what)
-  }
+  const operands = commandOperandsFor(argv, 'assess')
 
   let subjectPath: string | undefined
   let modelPath: string | null = null
@@ -24,7 +21,6 @@ export function parseAssessArguments(argv: readonly string[]): AssessArguments {
 
   // INVARIANT: `entries()` yields the token itself, so no branch is needed for an index that cannot
   // be empty. A flag's value is the one position genuinely absent — when the flag ends the line.
-  const operands = argv.slice(1)
   let valueConsumedAt = -1
 
   for (const [index, token] of operands.entries()) {
