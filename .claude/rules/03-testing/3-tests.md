@@ -20,7 +20,10 @@ A suite proves observable behavior, and is itself only as good as what it would 
 
 - Chicago-style: run the real deterministic collaborators together.
 - Fake only architectural boundaries outside the behavior under test.
-- Never mock an internal collaborator.
+- An internal input seam may use a faithful in-memory implementation when its production
+  translation has its own integration suite. Keep the consumer test on observable interface
+  behavior, and name the translation test separately.
+- Never mock an internal collaborator outside that documented seam.
 - Never assert call order.
 - Never assert an implementation detail.
 

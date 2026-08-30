@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { promisify } from 'node:util'
 import { gitEnvironment } from './live-repository/git-process.js'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterAll, describe, expect, it } from 'vitest'
 import type { AxisVocabulary } from '../models/axis.model.js'
 import type { Observation } from '../models/observation.model.js'
 import type { CollectorContext } from '../ports/evidence-collector.port.js'
@@ -61,7 +61,7 @@ const HISTORY_ONLY: readonly AxisVocabulary[] = [
 
 const workspaces: string[] = []
 
-afterEach(async () => {
+afterAll(async () => {
   await Promise.all(workspaces.splice(0).map((path) => rm(path, { recursive: true, force: true })))
 })
 
@@ -111,7 +111,7 @@ function day(index: number): string {
 // INVARIANT: past the minimum sample on both Git-derived axes, so a null from either is the
 // adapter's doing and not the history's. `trailer`, when given, is carried by every commit each
 // change absorbs, which is what makes the change one an agent authored alone.
-async function repositoryDeliveringSixChanges(
+async function buildRepositoryDeliveringSixChanges(
   files: Readonly<Record<string, string>> = {},
   executable: readonly string[] = [],
   trailer: string | null = null,
@@ -139,6 +139,25 @@ async function repositoryDeliveringSixChanges(
     )
   }
 
+  return repository
+}
+
+// INVARIANT: Collection is read-only, so assertions differing only in which observation they read
+// may share one history. The fixture survives the file and is removed in `afterAll`; callers that
+// write a repository keep using `initRepository` and retain their isolation.
+const deliveredRepositories = new Map<string, Promise<string>>()
+
+function repositoryDeliveringSixChanges(
+  files: Readonly<Record<string, string>> = {},
+  executable: readonly string[] = [],
+  trailer: string | null = null,
+): Promise<string> {
+  const key = JSON.stringify([files, executable, trailer])
+  let repository = deliveredRepositories.get(key)
+  if (repository === undefined) {
+    repository = buildRepositoryDeliveringSixChanges(files, executable, trailer)
+    deliveredRepositories.set(key, repository)
+  }
   return repository
 }
 

@@ -37,7 +37,7 @@ How this project is tested: TDD boundaries, doubles, and validation.
 | `tests/cli/self-assessment.test.ts` | AIDD assessed by its own shipped binary: that the verdict follows from evidence, that prose and `--json` agree, that no path spelling changes it | **one**, and only one: a refusing `gh` on the child's PATH, so the gate never reaches the network. Nothing is faked *for* AIDD's benefit — a source is withheld, which can only cost it axes — but the forge is consequently never exercised here |
 | `live-repository.adapter` and its modules | what a local repository can prove: the first-parent walk, the zero-touch share behind `intervention`, the delivery-record share that withholds the branch-derived axes, cancellation | none — real temporary Git repositories and the real filesystem |
 | `fixture-bundle.adapter` and its modules | what a recorded bundle can prove: the delivery record, the recorded tree, cancellation | none — real temporary directories and the real filesystem |
-| `harness/harness-scan` | the harness set both adapters read: the name tables, the `loops` recogniser, what makes a member undecidable | none — a real tree behind the `HarnessTree` seam |
+| `harness/harness-scan` | the harness set both adapters read: the name tables, the `loops` recogniser, what makes a member undecidable | a faithful in-memory `HarnessTree`; `tracked-tree.test.ts` owns the Git-to-tree translation |
 | `harness/shell-tokens` | what the shell hides (comments, quotes, expansions, continuations) and where a word may be a command | none — a source string in, tokens and marks out |
 | `harness/shell-loop` | the three answers about a loop: retry proven, decidably iterating, undecidable | none — a source string in, a `MemberScan` out |
 | `fixture-bundle/bundle-tree` | the recorded tree: what `repo-context/` rebases to, that no mode is recorded, cancellation | none — real temporary directories |
@@ -59,6 +59,44 @@ The division across three suites: `process-contract.test.ts` owns the exit codes
 `src/cli/assess.command.test.ts` sits beside `assess.command.ts`, per **Where a test lives** above, and drives `runAssess(argv, io)` with a capturing `CommandIo` — two in-memory string arrays, no spawn and no build. It asserts stdout, stderr and the exit code only, never which function ran. `main.ts` is never imported by any suite; it is reached only by spawning the built binary, which both suites in `tests/cli/` now do.
 
 **The suite is Unix-only, and that is the suite's constraint, not the product's.** `live-repository.adapter.test.ts` writes `#!/bin/sh` shims onto `PATH`, reads `command -v git` and `chmod`s to `0755`; `git-process.test.ts` installs a git alias running `sh -c 'sleep …'`. None of it has a Windows equivalent, and none of it constrains `dist/cli.js`, which is why no `os` field appears in `package.json` — declaring one there would refuse the install on a platform the tool itself runs on.
+
+### Real repositories are built once, and together
+
+`git-history.test.ts` builds some seventy temporary Git repositories, and building them is `git`
+process time — 2 072 spawns at roughly 26ms each on macOS, nothing about it computation. Three
+things keep that off the clock, and each is load-bearing:
+
+* **A pristine template, copied.** `git init` plus the three configs every fixture needs is four
+  processes. The template pays for them once; `initRepository` is then an `fs.cp` of a pristine
+  `.git`, which holds no absolute path and is byte-for-byte the repository those four commands
+  would have produced.
+* **One named builder per history, memoised, all started together in `beforeAll`.** Two tests
+  naming the same history share the one repository. Eight build at a time — seventy released at
+  once would put seventy `git` processes on the machine.
+* **A test that writes to its fixture takes `aCopyOf` it.** `readGitDerivedMetrics` and
+  `hasAiAttributionTrailer` only read, and that is the whole licence for sharing; the two tests
+  that mutate — the re-merge absorbing no commit, and the deliberately broken ref — must not be
+  the reason a sibling turns red.
+
+**66.35s to 22.5s, with the suite's discriminating power measured rather than assumed.** Four
+production constants were neutered one at a time and the file went red on each; the
+`MINIMUM_DELIVERED_CHANGES` 5→4 neuter gave `3 failed | 76 passed` against both the new file and
+the pre-refactor one. A fixture refactor that is not checked this way is a refactor that may have
+made tests vacuous, and a green suite would say nothing about it.
+
+The cost: parallel construction is more sensitive to machine load than the serial version was, so
+the figure varies between about 22s and 36s where it used to sit steadily at 66s.
+
+`harness-scan.test.ts` is a direct consumer test now: **161 cases complete in about 34ms** on the
+in-memory `HarnessTree` it receives. The tree is faithful to the entire interface the scan can
+observe — path, regular-file and executable flags, plus bounded probes and reads — so the scan no
+longer creates a Git repository to vary a name or source string.
+
+`tracked-tree.test.ts` owns the source-specific translation: repository-root resolution, Git's
+recorded executable bit, disappeared tracked files, untracked files and symlinks. The symlink case
+also pins `scanHarness`'s `regularFile` guard: making that guard a no-op makes its consumer test
+red. The testing rule and architecture record this narrow exception explicitly, so it is neither a
+hidden mock nor a second production abstraction.
 
 ## Mutation testing is a command, not a habit
 

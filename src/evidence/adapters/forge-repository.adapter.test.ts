@@ -12,7 +12,7 @@ import { ForgeRepositoryEvidenceCollector } from './forge-repository.adapter.js'
 // owns.
 
 const NEVER_ABORTED = new AbortController().signal
-const A_LONG_TIME = 60_000
+const A_LONG_TIME = 15_000
 const SLUG = { owner: 'an-owner', name: 'a-repository' }
 
 const FULL_VOCABULARY: readonly AxisVocabulary[] = [

@@ -5,7 +5,7 @@ import type {
   LevelReport,
   RequirementReport,
 } from '../../src/assessment/contracts/assessment-report.contract.js'
-import { REPO_ROOT, runCli } from './spawn-cli.test-fixture.js'
+import { REPO_ROOT, runCli, runCliFresh } from './spawn-cli.test-fixture.js'
 
 // INVARIANT: AIDD assessing AIDD tests the capability and its invariants, never the state of this
 // checkout or of the collector set. `process-contract.test.ts` owns the exit codes;
@@ -158,7 +158,9 @@ describe('4. nothing about this repository is special-cased', () => {
   })
 
   it('produces byte-identical output on a second run of the same subject', () => {
-    expect(runCli('assess', '.').stdout).toBe(runCli('assess', '.').stdout)
-    expect(runCli('assess', '.', '--json').stdout).toBe(runCli('assess', '.', '--json').stdout)
+    expect(runCliFresh('assess', '.').stdout).toBe(runCliFresh('assess', '.').stdout)
+    expect(runCliFresh('assess', '.', '--json').stdout).toBe(
+      runCliFresh('assess', '.', '--json').stdout,
+    )
   })
 })
