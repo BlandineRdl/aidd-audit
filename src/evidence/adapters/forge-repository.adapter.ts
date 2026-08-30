@@ -1,9 +1,15 @@
 import type { AxisId, AxisVocabulary } from '../models/axis.model.js'
+import type { CollectorDiagnostic } from '../models/collector-diagnostic.model.js'
 import type { Demonstration, Observation, ObservedValue } from '../models/observation.model.js'
-import type { CollectorContext, EvidenceCollector } from '../ports/evidence-collector.port.js'
+import {
+  type CollectorCollection,
+  type CollectorContext,
+  type EvidenceCollector,
+} from '../ports/evidence-collector.port.js'
 import { readForgeDerivedMetrics } from './forge-repository/pull-request-history.js'
 import type { RepositorySlug } from './forge-repository/repository-slug.js'
 import { mostRecentCommitDate } from './live-repository/git-process.js'
+import { MINIMUM_ACTIVE_DAYS } from './delivery-sample.js'
 
 const COLLECTOR_ID = 'forge-repository'
 
@@ -22,7 +28,7 @@ export class ForgeRepositoryEvidenceCollector implements EvidenceCollector {
 
   constructor(private readonly slug: RepositorySlug) {}
 
-  async collect(context: CollectorContext): Promise<readonly Observation[]> {
+  async collect(context: CollectorContext): Promise<CollectorCollection> {
     context.signal.throwIfAborted()
 
     const sizeScale = scaleFor(context.vocabulary, 'size')
@@ -33,7 +39,7 @@ export class ForgeRepositoryEvidenceCollector implements EvidenceCollector {
       interventionScale === undefined &&
       parallelismScale === undefined
     ) {
-      return []
+      return { observations: [], diagnostics: [] }
     }
 
     // INVARIANT: the subject's own most recent activity ends the window, not this source's newest
@@ -121,7 +127,23 @@ export class ForgeRepositoryEvidenceCollector implements EvidenceCollector {
       )
     }
 
-    return observations
+    const diagnostics: CollectorDiagnostic[] = []
+    if (
+      parallelismScale?.kind === 'numeric' &&
+      metrics.parallelism === null &&
+      metrics.activeDays !== null &&
+      metrics.activeDays < MINIMUM_ACTIVE_DAYS
+    ) {
+      diagnostics.push({
+        collector: COLLECTOR_ID,
+        axis: 'parallelism',
+        reason: 'INSUFFICIENT_ACTIVE_DAYS',
+        observed: metrics.activeDays,
+        minimum: MINIMUM_ACTIVE_DAYS,
+      })
+    }
+
+    return { observations, diagnostics }
   }
 }
 

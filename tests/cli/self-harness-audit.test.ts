@@ -162,6 +162,6 @@ describe('5. the existing maturity assessment of this repository is unchanged by
     // history, and the forge is refused by this suite's own PATH, the same result
     // `self-assessment.test.ts` pins. Pinned here only as "harness landing did not change it", never
     // as a fact this suite owns.
-    expect(run.stdout).toContain('could not be established')
+    expect(run.stdout).toContain('[écart de preuve]')
   })
 })

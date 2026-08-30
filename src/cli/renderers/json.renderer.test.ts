@@ -7,7 +7,7 @@ import type {
   ProvenanceEntry,
   RequirementReport,
 } from '../../assessment/contracts/assessment-report.contract.js'
-import { renderJsonReport } from './json.renderer.js'
+import { renderJsonReport, renderJsonReports } from './json.renderer.js'
 import { UnrenderableReportError } from './unrenderable-report.error.js'
 import {
   assessmentReport,
@@ -83,6 +83,44 @@ describe('4. observed: null on an unproven requirement is preserved', () => {
     const requirement = parsed.levels[0].axes[0].requirements[0]
     expect('observed' in requirement).toBe(true)
     expect(requirement.observed).toBeNull()
+  })
+
+  it('allows an explicit evidence diagnostic through the public JSON contract', () => {
+    const diagnostic = {
+      collector: 'forge-repository',
+      axis: 'parallelism',
+      reason: 'INSUFFICIENT_ACTIVE_DAYS' as const,
+      observed: 3,
+      minimum: 5,
+    }
+    const blue = levelReport({
+      axes: [
+        axisReport({
+          axis: 'parallelism',
+          requirements: [unprovenRequirement('parallelism', 1, 'UNKNOWN', null, diagnostic)],
+        }),
+      ],
+    })
+
+    const parsed = JSON.parse(renderJsonReport(assessmentReport({ next: blue, levels: [blue] })))
+    expect(parsed.levels[0].axes[0].requirements[0].diagnostic).toEqual(diagnostic)
+  })
+})
+
+describe('4.1 model vocabulary is published as report data', () => {
+  it('keeps raw values and their loaded descriptions', () => {
+    const parsed = JSON.parse(renderJsonReport(assessmentReport()))
+    expect(parsed.vocabulary).toContainEqual({
+      axis: 'harness',
+      kind: 'set',
+      members: ['prompts', 'behavior'],
+      descriptions: { prompts: 'prompts', behavior: 'guardrails' },
+    })
+    expect(parsed.vocabulary).toContainEqual({
+      axis: 'parallelism',
+      kind: 'numeric',
+      description: 'active work per day',
+    })
   })
 })
 
@@ -189,6 +227,7 @@ describe('6. rendering is deterministic', () => {
       provenance: [provenanceB],
       coverage: { ...reportA.coverage },
       blocking: [blockerB],
+      vocabulary: reportA.vocabulary,
       levels: [levelB],
       demonstrated: null,
       next: null,
@@ -444,5 +483,36 @@ describe('12. a non-finite number is refused, never published as null', () => {
     })
     const parsed = JSON.parse(renderJsonReport(report))
     expect(parsed.coverage).toEqual({ axesRequested: 4, axesObserved: 0, axesConfirmed: 0 })
+  })
+})
+
+describe('13. many reports render as an array of the same documents', () => {
+  it('parses as an array whose every element deep-equals that subject’s own single-report document', () => {
+    const first = assessmentReport({ subject: { path: '/repo/first' } })
+    const second = assessmentReport({ subject: { path: '/repo/second' } })
+
+    const parsed = JSON.parse(renderJsonReports([first, second]))
+
+    expect(parsed).toEqual([
+      JSON.parse(renderJsonReport(first)),
+      JSON.parse(renderJsonReport(second)),
+    ])
+  })
+
+  it('refuses the whole array when any one report carries a non-finite number, naming its index', () => {
+    const ok = assessmentReport({ subject: { path: '/repo/ok' } })
+    const broken = assessmentReport({
+      subject: { path: '/repo/broken' },
+      coverage: { axesRequested: 4, axesObserved: Number.NaN, axesConfirmed: 1 },
+    })
+
+    expect(() => renderJsonReports([ok, broken])).toThrow(UnrenderableReportError)
+    expect(() => renderJsonReports([ok, broken])).toThrow(/\$\[1\]\./)
+  })
+
+  it('leaves the single-report entry point unchanged', () => {
+    const report = assessmentReport()
+
+    expect(JSON.parse(renderJsonReport(report))).toEqual(JSON.parse(renderJsonReports([report]))[0])
   })
 })

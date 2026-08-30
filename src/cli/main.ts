@@ -1,16 +1,24 @@
 import { runAssess } from './commands/assess.command.js'
 import { runHarness } from './commands/harness.command.js'
 
-// The only file that touches `process`, so `runAssess` and `runHarness` stay testable in-process.
+// SAFETY: NO_COLOR wins over FORCE_COLOR. An off switch another variable can override is not an off
+// switch, and a caller that set it has said what it wants louder than an inherited environment can.
+// Both are read as set-and-non-empty, per no-color.org.
+//
+// INVARIANT: without either, colour follows the terminal. A pipe, a file and a captured run get the
+// same bytes they got before colour existed, so `assess . | grep`, a redirect and the gate are all
+// unaffected.
+function coloursWanted(): boolean {
+  const off = process.env.NO_COLOR
+  if (off !== undefined && off !== '') return false
+  const on = process.env.FORCE_COLOR
+  if (on !== undefined && on !== '') return true
+  return process.stdout.isTTY === true
+}
+
+// The only file that touches `process`, so `runAssess` stays testable in-process.
 const argv = process.argv.slice(2)
-
-// LIMITATION: importing the harness command statically evaluates the token encoder's vocabulary on
-// every invocation, including an `assess` that never counts a token, and costs it roughly 0.11s.
-// Importing it dynamically removes that cost and splits the bundle into three files, which breaks
-// the single `dist/cli.js` entry point `architecture.md` states. The cost is paid deliberately: it
-// changes no published byte and no exit code, and the one-file property is the one consumers see.
 const run = argv[0] === 'harness' ? runHarness : runAssess
-
 const exitCode = await run(argv, {
   stdout: (text) => {
     process.stdout.write(text)
@@ -18,6 +26,7 @@ const exitCode = await run(argv, {
   stderr: (text) => {
     process.stderr.write(text)
   },
+  colours: coloursWanted(),
 })
 
 // Never process.exit(): it truncates a pending write.

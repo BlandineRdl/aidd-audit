@@ -1,4 +1,5 @@
 import { type Stats, statSync } from 'node:fs'
+import type { AssessmentReport } from '../../assessment/contracts/assessment-report.contract.js'
 import { assessMaturity } from '../../assessment/usecases/assess-maturity.usecase.js'
 import { FixtureBundleEvidenceCollector } from '../../evidence/adapters/fixture-bundle.adapter.js'
 import { ForgeRepositoryEvidenceCollector } from '../../evidence/adapters/forge-repository.adapter.js'
@@ -13,20 +14,31 @@ import { loadMaturityModel } from '../../maturity/loading/load-maturity-model.js
 import { InvalidMaturityModelError } from '../../maturity/models/invalid-maturity-model.error.js'
 import { parseAssessArguments } from '../parsing/assess-arguments.js'
 import { canonicalModelPath } from '../bootstrap/canonical-model-path.js'
-import { renderHumanReport } from '../renderers/human.renderer.js'
-import { renderJsonReport } from '../renderers/json.renderer.js'
+import { renderHumanReport, renderHumanReports } from '../renderers/human.renderer.js'
+import { colouredText, plainText } from '../renderers/text-style.js'
+import { renderJsonReport, renderJsonReports } from '../renderers/json.renderer.js'
+import { resolveSubjects } from '../subjects/resolve-subjects.js'
 import { UsageError } from '../usage.error.js'
 
 export interface CommandIo {
   stdout(text: string): void
   stderr(text: string): void
+
+  // INVARIANT: colour is a property of the channel, never of the report. It is stated by whoever
+  // owns the streams — only `main.ts` knows whether one is a terminal — so `runAssess` decides
+  // nothing about presentation and a captured run is plain without asking for it.
+  readonly colours: boolean
 }
 
 // SAFETY: Only a work-tree root gets a forge. `git remote get-url` run inside a checkout answers for
 // the enclosing repository, so a bundle tracked in one would be handed that repository's pull
 // requests as its own evidence — the fault the live collector's own root check exists to prevent.
-async function forgeFor(subjectPath: string, signal: AbortSignal): Promise<RepositorySlug | null> {
-  if (!(await isRepositoryRoot(subjectPath, signal))) return null
+async function forgeFor(
+  subjectPath: string,
+  isWorkTreeRoot: boolean,
+  signal: AbortSignal,
+): Promise<RepositorySlug | null> {
+  if (!isWorkTreeRoot) return null
   return repositorySlug(subjectPath, signal)
 }
 
@@ -79,17 +91,28 @@ export async function runAssess(
     const args = parseAssessArguments(argv)
     requireExistingSubject(args.subjectPath)
 
+    const resolved = await resolveSubjects(args.subjectPath, budget.signal)
     const model = loadMaturityModel(args.modelPath ?? canonicalModelPath())
+    const reports: AssessmentReport[] = []
+    for (const subjectPath of resolved.subjects) {
+      const isWorkTreeRoot = resolved.isSet
+        ? await isRepositoryRoot(subjectPath, budget.signal)
+        : resolved.isWorkTreeRoot
+      reports.push(
+        await assessMaturity({
+          subjectPath,
+          model,
+          collectors:
+            options.collectors ??
+            collectorsFor(await forgeFor(subjectPath, isWorkTreeRoot, budget.signal)),
+          signal: budget.signal,
+        }),
+      )
+    }
 
-    const report = await assessMaturity({
-      subjectPath: args.subjectPath,
-      model,
-      collectors:
-        options.collectors ?? collectorsFor(await forgeFor(args.subjectPath, budget.signal)),
-      signal: budget.signal,
-    })
-
-    const rendered = args.json ? renderJsonReport(report) : renderHumanReport(report)
+    // INVARIANT: colour dresses the explanation only. The contract is the machine-readable
+    // channel, and every byte of it is the contract's.
+    const rendered = renderReports(reports, resolved.isSet, args.json, io.colours)
     io.stdout(`${rendered}\n`)
     return 0
   } catch (error) {
@@ -98,6 +121,19 @@ export async function runAssess(
   } finally {
     budget.abort()
   }
+}
+
+function renderReports(
+  reports: readonly AssessmentReport[],
+  isSet: boolean,
+  json: boolean,
+  colours: boolean,
+): string {
+  const [only] = reports
+  const style = colours ? colouredText : plainText
+  if (!isSet && only !== undefined)
+    return json ? renderJsonReport(only) : renderHumanReport(only, style)
+  return json ? renderJsonReports(reports) : renderHumanReports(reports, style)
 }
 
 // Never reads inside the subject: a failure met during collection is the collector's.

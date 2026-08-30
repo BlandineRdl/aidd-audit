@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { promisify } from 'node:util'
 import { gitEnvironment } from './live-repository/git-process.js'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterAll, describe, expect, it } from 'vitest'
 import type { AxisVocabulary } from '../models/axis.model.js'
 import type { Observation } from '../models/observation.model.js'
 import type { CollectorContext } from '../ports/evidence-collector.port.js'
@@ -61,7 +61,7 @@ const HISTORY_ONLY: readonly AxisVocabulary[] = [
 
 const workspaces: string[] = []
 
-afterEach(async () => {
+afterAll(async () => {
   await Promise.all(workspaces.splice(0).map((path) => rm(path, { recursive: true, force: true })))
 })
 
@@ -111,7 +111,7 @@ function day(index: number): string {
 // INVARIANT: past the minimum sample on both Git-derived axes, so a null from either is the
 // adapter's doing and not the history's. `trailer`, when given, is carried by every commit each
 // change absorbs, which is what makes the change one an agent authored alone.
-async function repositoryDeliveringSixChanges(
+async function buildRepositoryDeliveringSixChanges(
   files: Readonly<Record<string, string>> = {},
   executable: readonly string[] = [],
   trailer: string | null = null,
@@ -139,6 +139,25 @@ async function repositoryDeliveringSixChanges(
     )
   }
 
+  return repository
+}
+
+// INVARIANT: Collection is read-only, so assertions differing only in which observation they read
+// may share one history. The fixture survives the file and is removed in `afterAll`; callers that
+// write a repository keep using `initRepository` and retain their isolation.
+const deliveredRepositories = new Map<string, Promise<string>>()
+
+function repositoryDeliveringSixChanges(
+  files: Readonly<Record<string, string>> = {},
+  executable: readonly string[] = [],
+  trailer: string | null = null,
+): Promise<string> {
+  const key = JSON.stringify([files, executable, trailer])
+  let repository = deliveredRepositories.get(key)
+  if (repository === undefined) {
+    repository = buildRepositoryDeliveringSixChanges(files, executable, trailer)
+    deliveredRepositories.set(key, repository)
+  }
   return repository
 }
 
@@ -232,7 +251,7 @@ async function collectWithTheBudgetSpentInsideItsFirstSource(
       budget.abort(reason)
     }
 
-    return await collecting
+    return (await collecting).observations
   } finally {
     git.restore()
   }
@@ -251,7 +270,7 @@ describe('the live repository evidence collector', () => {
     const notARepository = await emptyDirectory()
     await write(notARepository, { 'CLAUDE.md': 'project memory\n' })
 
-    const observations = await new LiveRepositoryEvidenceCollector().collect(
+    const { observations } = await new LiveRepositoryEvidenceCollector().collect(
       contextFor(notARepository),
     )
 
@@ -266,7 +285,7 @@ describe('the live repository evidence collector', () => {
     await mkdir(inside, { recursive: true })
     await write(repository, { 'nested/README.md': 'a subject of its own\n' })
 
-    const observations = await new LiveRepositoryEvidenceCollector().collect(contextFor(inside))
+    const { observations } = await new LiveRepositoryEvidenceCollector().collect(contextFor(inside))
 
     // INVARIANT: answering would publish the surrounding repository's harness as this subject's
     // evidence. Emitting nothing is an evidence gap, never a practice one.
@@ -277,7 +296,7 @@ describe('the live repository evidence collector', () => {
     const collector = new LiveRepositoryEvidenceCollector()
     const repository = await repositoryDeliveringSixChanges({ 'CLAUDE.md': 'project memory\n' })
 
-    const observations = await collector.collect(contextFor(repository))
+    const { observations } = await collector.collect(contextFor(repository))
 
     // INVARIANT: supportedAxes is what a collector may attempt, never what it delivered. Provenance
     // says who was asked, evidence says who answered. Here nothing carries an agent trailer, and
@@ -290,7 +309,7 @@ describe('the live repository evidence collector', () => {
   it('observes autonomy when every delivered change is attributed to an agent alone', async () => {
     const repository = await repositoryDeliveringSixChanges({}, [], AGENT_TRAILER)
 
-    const observations = await new LiveRepositoryEvidenceCollector().collect(
+    const { observations } = await new LiveRepositoryEvidenceCollector().collect(
       contextFor(repository, AUTONOMY_VOCABULARY),
     )
 
@@ -302,7 +321,7 @@ describe('the live repository evidence collector', () => {
   it('drops an intervention value the loaded model has no name for', async () => {
     const repository = await repositoryDeliveringSixChanges({}, [], AGENT_TRAILER)
 
-    const observations = await new LiveRepositoryEvidenceCollector().collect(
+    const { observations } = await new LiveRepositoryEvidenceCollector().collect(
       contextFor(repository, FULL_VOCABULARY),
     )
 
@@ -320,7 +339,9 @@ describe('the live repository evidence collector', () => {
   it('publishes every observation as its own, and as observed rather than declared', async () => {
     const repository = await repositoryDeliveringSixChanges({ 'CLAUDE.md': 'project memory\n' })
 
-    const observations = await new LiveRepositoryEvidenceCollector().collect(contextFor(repository))
+    const { observations } = await new LiveRepositoryEvidenceCollector().collect(
+      contextFor(repository),
+    )
 
     // Prose is never parsed, so this adapter has no declarative source by construction.
     expect(observations.map((observation) => observation.kind)).toEqual(
@@ -335,7 +356,7 @@ describe('the live repository evidence collector', () => {
   it('answers the axes on the model it was handed, and stays silent on the rest', async () => {
     const repository = await repositoryDeliveringSixChanges({ 'CLAUDE.md': 'project memory\n' })
 
-    const observations = await new LiveRepositoryEvidenceCollector().collect(
+    const { observations } = await new LiveRepositoryEvidenceCollector().collect(
       contextFor(repository, [{ axis: 'harness', kind: 'set', members: ['context-engineering'] }]),
     )
 
@@ -348,7 +369,9 @@ describe('the live repository evidence collector', () => {
       'session.md': 'a working session\n',
     })
 
-    const [harness] = await new LiveRepositoryEvidenceCollector().collect(
+    const {
+      observations: [harness],
+    } = await new LiveRepositoryEvidenceCollector().collect(
       contextFor(repository, [{ axis: 'harness', kind: 'set', members: ['prompts'] }]),
     )
 
@@ -366,7 +389,9 @@ describe('the live repository evidence collector', () => {
       ['tools/agent-loop.py'],
     )
 
-    const observations = await new LiveRepositoryEvidenceCollector().collect(contextFor(repository))
+    const { observations } = await new LiveRepositoryEvidenceCollector().collect(
+      contextFor(repository),
+    )
 
     // INVARIANT: publishing the set without `loops` would report a practice gap nobody observed.
     // Withholding it is UNKNOWN, which is what the situation is.
@@ -389,7 +414,9 @@ describe('the live repository evidence collector', () => {
 
     // INVARIANT: failing to decide a term the engine cannot rank hides nothing the report could
     // have carried, so it costs the axis nothing.
-    const [harness] = await new LiveRepositoryEvidenceCollector().collect(
+    const {
+      observations: [harness],
+    } = await new LiveRepositoryEvidenceCollector().collect(
       contextFor(repository, [
         { axis: 'harness', kind: 'set', members: ['prompts', 'context-engineering'] },
       ]),
@@ -404,7 +431,9 @@ describe('the live repository evidence collector', () => {
     await git(repository, ['add', '-A'])
     await git(repository, ['commit', '-q', '-m', 'chore: initial commit'], day(0))
 
-    const observations = await new LiveRepositoryEvidenceCollector().collect(contextFor(repository))
+    const { observations } = await new LiveRepositoryEvidenceCollector().collect(
+      contextFor(repository),
+    )
 
     // INVARIANT: the two sources fail independently — one unreadable source must not cost the
     // other.

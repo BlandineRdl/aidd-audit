@@ -33,17 +33,33 @@ export interface CliRun {
   readonly stderr: string
 }
 
-function spawnCli(
-  args: readonly string[],
-  envOverrides: Readonly<Record<string, string>> = {},
+export function runCli(...args: readonly string[]): CliRun {
+  return runCliWith({}, ...args)
+}
+
+export function runCliFresh(...args: readonly string[]): CliRun {
+  return runCliWith({}, ...args)
+}
+
+export function runCliWithHome(args: readonly string[], home: string): CliRun {
+  return runCliWith({ HOME: home }, ...args)
+}
+
+// SAFETY: NO_COLOR and FORCE_COLOR are dropped from the inherited environment before `overrides`
+// are applied. A developer who exports either in their shell would otherwise change what the gate
+// asserts, and a suite that spawns a binary must not depend on who is running it.
+export function runCliWith(
+  overrides: Readonly<Record<string, string>>,
+  ...args: readonly string[]
 ): CliRun {
+  const { NO_COLOR: _off, FORCE_COLOR: _on, ...inherited } = process.env
   const result = spawnSync(process.execPath, [BUNDLE, ...args], {
     cwd: REPO_ROOT,
     encoding: 'utf8',
     env: {
-      ...process.env,
+      ...inherited,
       PATH: `${directoryHoldingARefusingGh()}:${process.env.PATH ?? ''}`,
-      ...envOverrides,
+      ...overrides,
     },
   })
   if (result.error !== undefined) throw result.error
@@ -52,15 +68,4 @@ function spawnCli(
     throw new Error(`aidd-audit was killed by ${result.signal ?? 'an unknown signal'}.`)
   }
   return { status: result.status, stdout: result.stdout, stderr: result.stderr }
-}
-
-export function runCli(...args: readonly string[]): CliRun {
-  return spawnCli(args)
-}
-
-// INVARIANT: the harness command reads the machine's own configuration from `homedir()`, so a suite
-// wanting a machine reading with nothing in it — never the real developer machine this gate happens
-// to run on — must give the child its own empty HOME rather than rely on the caller's.
-export function runCliWithHome(args: readonly string[], home: string): CliRun {
-  return spawnCli(args, { HOME: home })
 }

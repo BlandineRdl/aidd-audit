@@ -24,6 +24,8 @@ interface TestScale {
   kind: string
   values?: string[]
   members?: string[]
+  descriptions?: Record<string, string>
+  description?: string
 }
 
 interface TestDocument {
@@ -48,9 +50,17 @@ const validDocument: TestDocument = {
   schemaVersion: 1,
   id: 'test',
   scales: {
-    size: { kind: 'ordinal', values: ['S', 'L'] },
-    harness: { kind: 'set', members: ['prompts', 'behavior'] },
-    parallelism: { kind: 'numeric' },
+    size: {
+      kind: 'ordinal',
+      values: ['S', 'L'],
+      descriptions: { S: 'small', L: 'large' },
+    },
+    harness: {
+      kind: 'set',
+      members: ['prompts', 'behavior'],
+      descriptions: { prompts: 'prompts', behavior: 'guardrails' },
+    },
+    parallelism: { kind: 'numeric', description: 'active work per day' },
   },
   axes: [
     { id: 'size', label: 'Size', scale: 'size' },

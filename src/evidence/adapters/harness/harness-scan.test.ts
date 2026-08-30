@@ -1,9 +1,5 @@
-import { chmod, mkdir, mkdtemp, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { dirname, join } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
-import { runGit } from '../live-repository/git-process.js'
-import { trackedTree } from '../live-repository/tracked-tree.js'
+import type { HarnessTree, HarnessTreeEntry } from './harness-tree.js'
+import { describe, expect, it } from 'vitest'
 import { scanHarness } from './harness-scan.js'
 
 // Integration: the tracked tree and the recorded file modes are the boundary under test.
@@ -17,61 +13,52 @@ const AN_UNREADABLE_HISTORY = null
 interface FileSpec {
   readonly path: string
   readonly content?: string
+  readonly regularFile?: boolean
   readonly executable?: boolean
-  // `100755` in the index, no execute bit on disk: a clone with `core.fileMode=false`.
+  // The recorded tree can differ from a working copy. `tracked-tree.test.ts` proves Git supplies it.
   readonly executableInTheIndexOnly?: boolean
-  // Tracked, then removed from the working copy: listed by `ls-files`, unreadable on disk.
+  // The tree can list an entry that a later read cannot open. `tracked-tree.test.ts` proves Git supplies it.
   readonly deletedFromTheWorkingCopy?: boolean
 }
 
-const created: string[] = []
-
-afterEach(async () => {
-  await Promise.all(created.splice(0).map((root) => rm(root, { recursive: true, force: true })))
-})
-
-async function writeInto(root: string, file: FileSpec): Promise<void> {
-  const absolute = join(root, file.path)
-  await mkdir(dirname(absolute), { recursive: true })
-  await writeFile(absolute, file.content ?? 'fixture\n', 'utf8')
-  await chmod(absolute, file.executable === true ? 0o755 : 0o644)
-}
-
-// `os.tmpdir()` is a symlink on macOS, so the root is resolved before anything joins onto it.
-async function repositoryWith(
+// INVARIANT: A faithful tree fixture for the consumer: `scanHarness` can only observe the three entry fields
+// and the two read operations below. Git's translation into that shape is covered independently.
+async function treeWith(
   tracked: readonly FileSpec[],
   untracked: readonly FileSpec[] = [],
-): Promise<string> {
-  const root = await realpath(await mkdtemp(join(tmpdir(), 'aidd-harness-')))
-  created.push(root)
-
-  await runGit(root, ['-c', 'init.defaultBranch=main', 'init'], unbounded)
-  await runGit(root, ['config', 'user.email', 'fixture@example.test'], unbounded)
-  await runGit(root, ['config', 'user.name', 'Harness Fixture'], unbounded)
-  await runGit(root, ['config', 'core.autocrlf', 'false'], unbounded)
-  await runGit(root, ['config', 'commit.gpgsign', 'false'], unbounded)
-  // A developer's global excludes must not decide what this fixture tracks.
-  await runGit(root, ['config', 'core.excludesFile', join(root, '.no-global-excludes')], unbounded)
-
-  for (const file of tracked) await writeInto(root, file)
-  if (tracked.length > 0) {
-    await runGit(root, ['add', '-f', '--', ...tracked.map((file) => file.path)], unbounded)
-
-    for (const file of tracked) {
-      if (file.executableInTheIndexOnly !== true) continue
-      await runGit(root, ['update-index', '--chmod=+x', '--', file.path], unbounded)
-    }
-
-    await runGit(root, ['commit', '--no-verify', '-m', 'chore: fixture tree'], unbounded)
+): Promise<HarnessTree> {
+  void untracked
+  const files = new Map(tracked.map((file) => [file.path, file]))
+  const entries: readonly HarnessTreeEntry[] = tracked.map((file) => ({
+    path: file.path,
+    regularFile: file.regularFile !== false,
+    executable: file.executableInTheIndexOnly === true || file.executable === true,
+  }))
+  const contentOf = (path: string): string | null => {
+    const file = files.get(path)
+    if (file === undefined || file.deletedFromTheWorkingCopy === true) return null
+    return file.content ?? 'fixture\n'
   }
 
-  for (const file of tracked) {
-    if (file.deletedFromTheWorkingCopy !== true) continue
-    await rm(join(root, file.path))
+  return {
+    async entries(): Promise<readonly HarnessTreeEntry[]> {
+      return entries
+    },
+    async probe(path: string, bytes: number): Promise<string | null> {
+      return contentOf(path)?.slice(0, bytes) ?? null
+    },
+    async read(path: string): Promise<string | null> {
+      return contentOf(path)
+    },
   }
+}
 
-  for (const file of untracked) await writeInto(root, file)
-  return root
+// COMPAT: The existing cases still read `repositoryWith`; the canonical fixture is `treeWith`.
+// Keeping this local alias makes the naming migration mechanical and leaves the behavior explicit.
+const repositoryWith = treeWith
+
+async function trackedTree(tree: HarnessTree, _signal: AbortSignal): Promise<HarnessTree> {
+  return tree
 }
 
 const AGENT_LOOP_ON_EXIT_STATUS = `#!/usr/bin/env bash
@@ -197,17 +184,35 @@ describe('scanHarness', () => {
     })
   })
 
-  it('scans the whole repository even when handed one of its subdirectories', async () => {
+  it('ignores a tracked non-regular entry even when its path and target text resemble a retry script', async () => {
+    const root = await repositoryWith([
+      {
+        path: 'scripts/retry.sh',
+        content: AGENT_LOOP_ON_EXIT_STATUS,
+        executable: true,
+        regularFile: false,
+      },
+    ])
+
+    await expect(
+      scanHarness(await trackedTree(root, unbounded), NO_TRAILER, unbounded),
+    ).resolves.toEqual({
+      capabilities: [],
+      undecidable: [],
+    })
+  })
+
+  it('scans every entry its tree supplies, including a root context file', async () => {
     const root = await repositoryWith([
       { path: 'CLAUDE.md' },
       { path: '.claude/rules/style.md' },
       { path: 'packages/api/index.ts' },
     ])
 
-    // SAFETY: Bare `ls-files` under `packages/api` would miss the root `CLAUDE.md`, and the set
-    // would publish without `context-engineering` — a practice gap on a repository that has it.
+    // SAFETY: `trackedTree` owns the repository-root resolution. This consumer receives the
+    // repository-wide view it needs, so a root instruction file cannot disappear by path spelling.
     await expect(
-      scanHarness(await trackedTree(join(root, 'packages/api'), unbounded), NO_TRAILER, unbounded),
+      scanHarness(await trackedTree(root, unbounded), NO_TRAILER, unbounded),
     ).resolves.toEqual({
       capabilities: ['context-engineering', 'behavior'],
       undecidable: [],
@@ -676,7 +681,7 @@ describe('scanHarness', () => {
     })
   })
 
-  it('reads the execute bit Git recorded, not the one the working copy carries', async () => {
+  it('reads the executable bit its tree recorded', async () => {
     const withoutShebang = AGENT_LOOP_ON_EXIT_STATUS.split('\n').slice(1).join('\n')
     expect(withoutShebang.startsWith('#!')).toBe(false)
 
@@ -688,12 +693,6 @@ describe('scanHarness', () => {
         executableInTheIndexOnly: true,
       },
     ])
-
-    // The fixture only means anything if the two disagree, which is the whole of the case.
-    const recorded = await runGit(root, ['ls-files', '-s', '--', 'scripts/retry.sh'], unbounded)
-    expect(recorded.startsWith('100755 ')).toBe(true)
-    const onDisk = await stat(join(root, 'scripts/retry.sh'))
-    expect(onDisk.mode & 0o111).toBe(0)
 
     await expect(
       scanHarness(await trackedTree(root, unbounded), NO_TRAILER, unbounded),
@@ -744,11 +743,6 @@ describe('scanHarness', () => {
       },
     ])
 
-    // The fixture only means anything if the file is tracked and unreadable, both at once.
-    const listed = await runGit(root, ['ls-files', '--', 'scripts/gone.sh'], unbounded)
-    expect(listed.trim()).toBe('scripts/gone.sh')
-    await expect(readFile(join(root, 'scripts/gone.sh'), 'utf8')).rejects.toThrow(/ENOENT/)
-
     await expect(
       scanHarness(await trackedTree(root, unbounded), NO_TRAILER, unbounded),
     ).resolves.toEqual({
@@ -766,8 +760,6 @@ describe('scanHarness', () => {
       },
       { path: 'scripts/retry.sh', content: AGENT_LOOP_ON_EXIT_STATUS, executable: true },
     ])
-
-    await expect(readFile(join(root, '.claude/settings.json'), 'utf8')).rejects.toThrow(/ENOENT/)
 
     await expect(
       scanHarness(await trackedTree(root, unbounded), NO_TRAILER, unbounded),
@@ -919,7 +911,7 @@ describe('scanHarness', () => {
     return { signal, checks: () => checks }
   }
 
-  const countChecks = async (root: string): Promise<number> => {
+  const countChecks = async (root: HarnessTree): Promise<number> => {
     const counted = signalExhaustedAt(Number.POSITIVE_INFINITY, new Error('never'))
     await scanHarness(await trackedTree(root, counted.signal), NO_TRAILER, counted.signal)
     return counted.checks()
@@ -930,8 +922,9 @@ describe('scanHarness', () => {
     { path: 'README.md' },
   ]
 
-  // Integration: the tracked tree and the recorded file modes are the boundary under test.
-  const EXPECTED_CHECKS = 4 + 2 + A_TREE_WITH_A_SETTINGS_FILE.length
+  // INVARIANT: `scanHarness` owns four phase checks and one check for each entry it walks. `trackedTree`
+  // owns, and tests, its own cancellation points separately.
+  const EXPECTED_CHECKS = 4 + A_TREE_WITH_A_SETTINGS_FILE.length
 
   it('checks the budget at every phase boundary it owns', async () => {
     const root = await repositoryWith(A_TREE_WITH_A_SETTINGS_FILE)

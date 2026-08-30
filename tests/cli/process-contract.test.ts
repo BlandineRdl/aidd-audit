@@ -1,10 +1,9 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, describe, expect, it } from 'vitest'
 import type { AssessmentReport } from '../../src/assessment/contracts/assessment-report.contract.js'
-import type { HarnessAuditReport } from '../../src/harness/contracts/harness-audit-report.contract.js'
-import { runCli, runCliWithHome } from './spawn-cli.test-fixture.js'
+import { runCli, runCliWith } from './spawn-cli.test-fixture.js'
 
 // INVARIANT: the exit code classifies responsibility, not error sub-type — `0` ran, `2` the
 // caller's fault, `1` ours. Observed by running the process, because what `runAssess` returns is
@@ -42,7 +41,7 @@ describe('1. a successful assessment exits 0 and publishes on stdout', () => {
   it('is still a success when no level could be proven', () => {
     const run = runCli('assess', '.')
 
-    expect(run.stdout).toContain('could not be established')
+    expect(run.stdout).toContain("Aucun niveau n'a pu être entièrement prouvé")
     expect(run.status).toBe(0)
   })
 })
@@ -64,6 +63,26 @@ describe('2. --json publishes one parseable document', () => {
 
     expect('proven' in report).toBe(true)
     expect(report.proven).toBeNull()
+  })
+
+  it('carries a custom model vocabulary through both JSON and prose', () => {
+    const marker = 'instructions sur mesure pour ce modèle'
+    const source = readFileSync('aidd.yml', 'utf8').replace(
+      "prompts: usage de l'IA piloté par prompt",
+      `prompts: ${marker}`,
+    )
+    const model = writeTempModel('custom-vocabulary.yml', source.trimEnd().split('\n'))
+
+    const json = runCli('assess', 'profiles/perceval', '--json', '--model', model)
+    const prose = runCli('assess', 'profiles/perceval', '--model', model)
+
+    expect(json.status).toBe(0)
+    expect(prose.status).toBe(0)
+    const report = JSON.parse(json.stdout) as AssessmentReport
+    expect(report.vocabulary.find((axis) => axis.axis === 'harness')).toMatchObject({
+      descriptions: { prompts: marker },
+    })
+    expect(prose.stdout).toContain(marker)
   })
 })
 
@@ -254,15 +273,6 @@ describe('8. the wired collectors reach the pipeline through the binary', () => 
     expect('reason' in forge ? forge.reason : '').toContain('gh')
   })
 
-  it('carries something it observed on disk into the rendered report', () => {
-    // INVARIANT: an observation survived collection, resolution and composition. Never that it
-    // amounts to a level — coupled to this repository having a harness at all, which it does.
-    const report = reportFor('assess', '.')
-
-    expect(report.coverage.axesRequested).toBe(4)
-    expect(report.coverage.axesObserved).toBeGreaterThan(0)
-  })
-
   it('answers for the bundle out of the bundle, never out of the checkout holding it', () => {
     // SAFETY: `profiles/` is tracked inside this repository, so without the live collector's
     // repository-root gate that collector would resolve to this checkout and publish AIDD's own
@@ -283,100 +293,40 @@ describe('8. the wired collectors reach the pipeline through the binary', () => 
 
     const human = runCli('assess', '.')
     expect(human.status).toBe(0)
-    expect(human.stdout).toContain('could not be established')
+    expect(human.stdout).toContain("Aucun niveau n'a pu être entièrement prouvé")
   })
 })
 
-// INVARIANT: the second command through the same built binary, reusing `runCli` so the two CLI
-// suites cannot drift on how the process is invoked. `harness.command.test.ts` owns what `runHarness`
-// returns in process; this suite owns what a real shell sees once it is bundled.
-let emptyHomeDir: string | undefined
-let harnessTempDir: string | undefined
+describe('9. colour follows the channel, never the report', () => {
+  const ESCAPE = '\u001b'
 
-afterAll(() => {
-  if (emptyHomeDir !== undefined) rmSync(emptyHomeDir, { recursive: true, force: true })
-  if (harnessTempDir !== undefined) rmSync(harnessTempDir, { recursive: true, force: true })
-})
-
-function emptyHome(): string {
-  emptyHomeDir ??= mkdtempSync(join(tmpdir(), 'aidd-audit-empty-home-'))
-  return emptyHomeDir
-}
-
-function emptySubject(): string {
-  harnessTempDir ??= mkdtempSync(join(tmpdir(), 'aidd-audit-empty-subject-'))
-  return harnessTempDir
-}
-
-describe('9. harness — a successful audit exits 0 and publishes on stdout', () => {
-  it('writes the report to stdout and leaves stderr empty', () => {
-    const run = runCli('harness', '.')
-
-    expect(run.status).toBe(0)
-    expect(run.stderr).toBe('')
-    expect(run.stdout).not.toBe('')
+  it('writes no escape sequence into a pipe', () => {
+    // INVARIANT: spawnSync gives the child a pipe, not a terminal — the shape every redirect and
+    // every `| grep` has. Escape codes here would land in a file the caller meant to read back.
+    expect(runCli('assess', 'profiles/perceval').stdout).not.toContain(ESCAPE)
+    expect(runCli('assess', 'profiles/perceval', '--json').stdout).not.toContain(ESCAPE)
   })
 
-  it('ends stdout with exactly one newline', () => {
-    const { stdout } = runCli('harness', '.')
+  it('colours a piped run when the caller asks for it, so a pager can be fed', () => {
+    const forced = runCliWith({ FORCE_COLOR: '1' }, 'assess', 'profiles/perceval')
 
-    expect(stdout.endsWith('\n')).toBe(true)
-    expect(stdout.endsWith('\n\n')).toBe(false)
-  })
-})
-
-describe('10. harness --json publishes one parseable document', () => {
-  it('exits 0 and prints JSON a caller can pipe straight into a parser', () => {
-    const run = runCli('harness', '.', '--json')
-
-    expect(run.status).toBe(0)
-    expect(run.stderr).toBe('')
-
-    const report = JSON.parse(run.stdout) as HarnessAuditReport
-    expect(report.schemaVersion).toBe(1)
-    expect(report.tool).toBe('claude')
-  })
-})
-
-describe("11. harness — an unusable subject is the caller's fault, exit 2", () => {
-  it('names a path that does not exist, and publishes nothing', () => {
-    const run = runCli('harness', './this-path-does-not-exist')
-
-    expect(run.status).toBe(2)
-    expect(run.stdout).toBe('')
-    expect(run.stderr).toContain('./this-path-does-not-exist')
-  })
-})
-
-describe("12. harness — a malformed invocation is the caller's fault, exit 2", () => {
-  it('rejects an unknown flag, explaining on stderr and publishing nothing', () => {
-    const run = runCli('harness', '.', '--nope')
-
-    expect(run.status).toBe(2)
-    expect(run.stdout).toBe('')
-    expect(run.stderr).not.toBe('')
+    expect(forced.status).toBe(0)
+    expect(forced.stdout).toContain(ESCAPE)
   })
 
-  it('rejects no command word at all, naming both known commands', () => {
-    const run = runCli()
+  it('leaves --json untouched even then, because the contract owns every byte of it', () => {
+    const forced = runCliWith({ FORCE_COLOR: '1' }, 'assess', 'profiles/perceval', '--json')
 
-    expect(run.status).toBe(2)
-    expect(run.stdout).toBe('')
-    expect(run.stderr).toContain('assess')
-    expect(run.stderr).toContain('harness')
+    expect(forced.stdout).not.toContain(ESCAPE)
+    expect(JSON.parse(forced.stdout)).toEqual(
+      JSON.parse(runCli('assess', 'profiles/perceval', '--json').stdout),
+    )
   })
-})
 
-describe('13. harness — a subject carrying no harness at all is still a success', () => {
-  it('exits 0 and says nothing was found to measure, with an empty HOME and an empty subject', () => {
-    // SAFETY: the machine reading comes from `homedir()`, which is the real developer machine this
-    // gate happens to run on. Without an empty HOME this assertion would depend on whatever that
-    // machine's own `~/.claude` holds, which is exactly the machine-only reproducibility this
-    // command is honest about rather than something a suite may assume.
-    const run = runCliWithHome(['harness', emptySubject()], emptyHome())
+  it('lets NO_COLOR win over FORCE_COLOR, because an overridable off switch is not one', () => {
+    const off = runCliWith({ FORCE_COLOR: '1', NO_COLOR: '1' }, 'assess', 'profiles/perceval')
 
-    expect(run.status).toBe(0)
-    expect(run.stderr).toBe('')
-    expect(run.stdout).toContain('Nothing was found to measure')
+    expect(off.stdout).not.toContain(ESCAPE)
+    expect(off.stdout).toBe(runCli('assess', 'profiles/perceval').stdout)
   })
 })

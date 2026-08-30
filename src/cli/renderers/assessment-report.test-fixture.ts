@@ -3,6 +3,7 @@ import type {
   AxisReport,
   BlockingRequirement,
   EvidenceStatus,
+  EvidenceGapDiagnostic,
   LevelReport,
   ObservedValue,
   ProvenanceEntry,
@@ -36,7 +37,15 @@ export const unprovenRequirement = (
   threshold: Threshold,
   evidence: Unproven,
   observed: ObservedValue | null = null,
-): RequirementReport => ({ axis, threshold, observed, evidence, outcome: 'UNPROVEN' })
+  diagnostic?: EvidenceGapDiagnostic,
+): RequirementReport => ({
+  axis,
+  threshold,
+  observed,
+  evidence,
+  outcome: 'UNPROVEN',
+  ...(diagnostic === undefined ? {} : { diagnostic }),
+})
 
 export const axisReport = (overrides: Partial<AxisReport> = {}): AxisReport => ({
   axis: 'size',
@@ -99,6 +108,21 @@ const validReport: AssessmentReport = {
   demonstrated: null,
   levels: [provenLevel],
   blocking: [],
+  vocabulary: [
+    {
+      axis: 'size',
+      kind: 'ordinal',
+      values: ['none', 'S', 'M', 'L'],
+      descriptions: { none: 'none', S: 'small', M: 'medium', L: 'large' },
+    },
+    {
+      axis: 'harness',
+      kind: 'set',
+      members: ['prompts', 'behavior'],
+      descriptions: { prompts: 'prompts', behavior: 'guardrails' },
+    },
+    { axis: 'parallelism', kind: 'numeric', description: 'active work per day' },
+  ],
   coverage: { axesRequested: 3, axesObserved: 3, axesConfirmed: 3 },
   provenance: [
     {

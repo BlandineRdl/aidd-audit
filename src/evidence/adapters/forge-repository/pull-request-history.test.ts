@@ -10,7 +10,7 @@ import { readForgeDerivedMetrics } from './pull-request-history.js'
 // and would drift the day the schema does without anything saying so.
 
 const NEVER_ABORTED = new AbortController().signal
-const A_LONG_TIME = 60_000
+const A_LONG_TIME = 15_000
 const SLUG = { owner: 'an-owner', name: 'a-repository' }
 
 const workspaces: string[] = []
@@ -181,6 +181,7 @@ describe('readForgeDerivedMetrics', () => {
         demonstratedIntervention: null,
         parallelism: null,
         demonstratedParallelism: null,
+        activeDays: 4,
       })
     },
     A_LONG_TIME,
@@ -427,6 +428,7 @@ describe('readForgeDerivedMetrics', () => {
         demonstratedIntervention: null,
         parallelism: null,
         demonstratedParallelism: null,
+        activeDays: null,
       })
     },
     A_LONG_TIME,

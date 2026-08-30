@@ -1,5 +1,6 @@
 import type {
   AssessmentReport,
+  AxisVocabularyReport,
   AxisReport,
   BlockingRequirement,
   CoverageReport,
@@ -12,9 +13,22 @@ import type {
 import { UnrenderableReportError } from './unrenderable-report.error.js'
 
 export function renderJsonReport(report: AssessmentReport): string {
-  const projected = projectReport(report)
-  assertEveryNumberFinite(projected, '$')
+  return JSON.stringify(projectValidated(report, '$'), null, 2)
+}
+
+// INVARIANT: every element is the same projection a single-report call would publish for that
+// subject, so the array reading adds no shape a consumer of the existing route has not already
+// seen. Every report is validated before any is stringified, so a refusal on the last one leaves
+// nothing published for the ones before it.
+export function renderJsonReports(reports: readonly AssessmentReport[]): string {
+  const projected = reports.map((report, index) => projectValidated(report, `$[${index}]`))
   return JSON.stringify(projected, null, 2)
+}
+
+function projectValidated(report: AssessmentReport, path: string): AssessmentReport {
+  const projected = projectReport(report)
+  assertEveryNumberFinite(projected, path)
+  return projected
 }
 
 function assertEveryNumberFinite(value: unknown, path: string): void {
@@ -47,8 +61,30 @@ function projectReport(report: AssessmentReport): AssessmentReport {
     demonstrated: report.demonstrated === null ? null : projectDemonstrated(report.demonstrated),
     levels: report.levels.map(projectLevel),
     blocking: report.blocking.map(projectBlockingRequirement),
+    vocabulary: report.vocabulary.map(projectVocabulary),
     coverage: projectCoverage(report.coverage),
     provenance: report.provenance.map(projectProvenanceEntry),
+  }
+}
+
+function projectVocabulary(vocabulary: AxisVocabularyReport): AxisVocabularyReport {
+  switch (vocabulary.kind) {
+    case 'ordinal':
+      return {
+        axis: vocabulary.axis,
+        kind: vocabulary.kind,
+        values: vocabulary.values,
+        descriptions: vocabulary.descriptions,
+      }
+    case 'set':
+      return {
+        axis: vocabulary.axis,
+        kind: vocabulary.kind,
+        members: vocabulary.members,
+        descriptions: vocabulary.descriptions,
+      }
+    case 'numeric':
+      return { axis: vocabulary.axis, kind: vocabulary.kind, description: vocabulary.description }
   }
 }
 
@@ -110,6 +146,7 @@ function projectRequirement(requirement: RequirementReport): RequirementReport {
         observed: requirement.observed,
         evidence: requirement.evidence,
         outcome: requirement.outcome,
+        ...(requirement.diagnostic === undefined ? {} : { diagnostic: requirement.diagnostic }),
       }
   }
 }

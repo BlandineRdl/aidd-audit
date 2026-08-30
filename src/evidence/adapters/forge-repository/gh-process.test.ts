@@ -7,7 +7,7 @@ import { GhCommandFailedError, runGh } from './gh-process.js'
 // Integration against a stub `gh` on PATH: the spawn is the boundary under test.
 
 const NEVER_ABORTED = new AbortController().signal
-const A_LONG_TIME = 60_000
+const A_LONG_TIME = 15_000
 
 const workspaces: string[] = []
 let restorePath: string | undefined
@@ -101,11 +101,11 @@ describe('runGh', () => {
     async () => {
       // SAFETY: a truncated page of pull requests would publish a median computed from part of the
       // window, which reads exactly like a smaller repository.
-      await ghRunning('head -c 100000000 /dev/zero | tr "\\0" "x"')
+      await ghRunning('head -c 1024 /dev/zero | tr "\\0" "x"')
 
       // INVARIANT: the class and a fragment, never a bare `toThrow()` — that would pass for any
       // rejection at all, the stub failing to find `tr` included.
-      const overflowing = runGh(['api'], NEVER_ABORTED)
+      const overflowing = runGh(['api'], NEVER_ABORTED, 128)
       await expect(overflowing).rejects.toBeInstanceOf(GhCommandFailedError)
       await expect(overflowing).rejects.toThrow(/maxBuffer/i)
     },

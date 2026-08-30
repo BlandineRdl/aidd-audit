@@ -39,6 +39,7 @@ function capturingIo(): { io: CommandIo; stdout: () => string; stderr: () => str
     io: {
       stdout: (text) => out.push(text),
       stderr: (text) => err.push(text),
+      colours: false,
     },
     stdout: () => out.join(''),
     stderr: () => err.join(''),

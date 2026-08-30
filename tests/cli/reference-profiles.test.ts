@@ -28,7 +28,8 @@ const AXES_IN_THE_MODEL = 4
 
 function capturingIo(): { io: CommandIo; stdout: () => string } {
   const out: string[] = []
-  return { io: { stdout: (text) => out.push(text), stderr: () => {} }, stdout: () => out.join('') }
+  const io: CommandIo = { stdout: (text) => out.push(text), stderr: () => {}, colours: false }
+  return { io, stdout: () => out.join('') }
 }
 
 async function reportFor(profile: string): Promise<AssessmentReport> {
@@ -85,6 +86,26 @@ describe('every reference profile reaches the level its bundle proves', () => {
 
     expect(exitCode).toBe(0)
     expect(stdout()).toContain(EXPECTED_LEVEL.arthur)
+  })
+})
+
+describe('the reference profiles assessed as one set', () => {
+  it('publishes one document per profile, in name order, unchanged from naming each alone', async () => {
+    const { io, stdout } = capturingIo()
+
+    const exitCode = await runAssess(['assess', 'profiles', '--json'], io)
+
+    expect(exitCode).toBe(0)
+    const set = JSON.parse(stdout()) as readonly AssessmentReport[]
+    const names = Object.keys(EXPECTED_LEVEL).sort()
+
+    expect(set.map((report) => report.subject.path)).toEqual(
+      names.map((name) => `profiles/${name}`),
+    )
+
+    for (const [index, name] of names.entries()) {
+      expect(set[index]).toEqual(await reportFor(name))
+    }
   })
 })
 

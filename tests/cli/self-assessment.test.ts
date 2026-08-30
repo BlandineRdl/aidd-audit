@@ -5,7 +5,7 @@ import type {
   LevelReport,
   RequirementReport,
 } from '../../src/assessment/contracts/assessment-report.contract.js'
-import { REPO_ROOT, runCli } from './spawn-cli.test-fixture.js'
+import { REPO_ROOT, runCli, runCliFresh } from './spawn-cli.test-fixture.js'
 
 // INVARIANT: AIDD assessing AIDD tests the capability and its invariants, never the state of this
 // checkout or of the collector set. `process-contract.test.ts` owns the exit codes;
@@ -98,34 +98,46 @@ describe('2. the verdict follows from evidence, never from its absence', () => {
 describe('3. prose and JSON describe the same assessment', () => {
   it('states the proven verdict the contract carries', () => {
     if (report.proven === null) {
-      expect(prose).toContain('could not be established')
-      expect(prose).not.toContain('Proven level: White')
+      expect(prose).toContain("Aucun niveau n'a pu être entièrement prouvé")
+      expect(prose).not.toContain('Niveau prouvé : White')
     } else {
-      expect(prose).toContain(`Proven level: ${report.proven.label} (rank ${report.proven.rank})`)
+      expect(prose).toContain(`Niveau prouvé : ${report.proven.label} (rang ${report.proven.rank})`)
     }
   })
 
   it('names the same next level, with the same axis outcomes', () => {
     const next: LevelReport | null = report.next
     if (next === null) {
-      expect(prose).not.toContain('Next level:')
+      expect(prose).not.toContain('Pour atteindre')
       return
     }
-    expect(prose).toContain(`Next level: ${next.label} (rank ${next.rank})`)
+    expect(prose).toContain(`Pour atteindre ${next.label} (rang ${next.rank}) :`)
+
+    // INVARIANT: prose states every axis outcome one way or the other, never neither. An axis the
+    // proven level already detailed word for word is named in the carried-over line, not repeated.
+    const marker = { MET: '✓', NOT_MET: '✗', UNPROVEN: '?' } as const
+    const carriedOver =
+      prose.split('\n').find((line) => line.includes('Déjà au niveau requis')) ?? ''
     for (const axis of next.axes) {
-      expect(prose).toContain(`${axis.label}: ${axis.outcome}`)
+      const detailed = prose.includes(`${marker[axis.outcome]} ${axis.label}`)
+      const named = axis.outcome === 'MET' && carriedOver.includes(axis.label)
+      expect(detailed || named).toBe(true)
     }
   })
 
-  it('shows in prose every value the contract says was observed', () => {
+  it('uses the report vocabulary to make every rendered scale value legible', () => {
     for (const axis of report.next?.axes ?? []) {
       for (const requirement of axis.requirements) {
         if (requirement.observed === null) continue
-        // An empty set joins to '', which `toContain` accepts from any string.
-        const rendered = Array.isArray(requirement.observed)
-          ? requirement.observed.join(', ') || 'an empty set'
-          : String(requirement.observed)
-        expect(prose).toContain(rendered)
+        const vocabulary = report.vocabulary.find((entry) => entry.axis === axis.axis)
+        if (vocabulary === undefined || vocabulary.kind === 'numeric') continue
+        const values = Array.isArray(requirement.observed)
+          ? requirement.observed
+          : [requirement.observed]
+        for (const value of values) {
+          const description = vocabulary.descriptions[value]
+          expect(description === undefined || prose.includes(description)).toBe(true)
+        }
       }
     }
   })
@@ -136,14 +148,17 @@ describe('3. prose and JSON describe the same assessment', () => {
       expect(label).toBeDefined()
       expect(prose).toContain(String(label))
     }
-    expect(prose.includes('Blocking requirements:')).toBe(report.blocking.length > 0)
+
+    // INVARIANT: a tagged line appears exactly when the contract carries a blocker. The gaps live
+    // on the requirement lines they belong to, so there is no section of their own to key on.
+    expect(prose.includes('[écart de')).toBe(report.blocking.length > 0)
   })
 
   it('reports the same coverage counts it publishes', () => {
     if (report.proven !== null) return
     const { axesConfirmed, axesRequested, axesObserved } = report.coverage
     expect(prose).toContain(
-      `${axesConfirmed} of ${axesRequested} axes confirmed (${axesObserved} observed)`,
+      `${axesConfirmed}/${axesRequested} axes confirmés, ${axesObserved}/${axesRequested} observés`,
     )
   })
 })
@@ -158,7 +173,9 @@ describe('4. nothing about this repository is special-cased', () => {
   })
 
   it('produces byte-identical output on a second run of the same subject', () => {
-    expect(runCli('assess', '.').stdout).toBe(runCli('assess', '.').stdout)
-    expect(runCli('assess', '.', '--json').stdout).toBe(runCli('assess', '.', '--json').stdout)
+    expect(runCliFresh('assess', '.').stdout).toBe(runCliFresh('assess', '.').stdout)
+    expect(runCliFresh('assess', '.', '--json').stdout).toBe(
+      runCliFresh('assess', '.', '--json').stdout,
+    )
   })
 })

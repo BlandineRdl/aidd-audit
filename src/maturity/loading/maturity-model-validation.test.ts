@@ -67,6 +67,13 @@ describe('a well-formed model that does not hold together', () => {
   })
 
   describe('a threshold off its axis vocabulary', () => {
+    it('rejects a numeric scale with no unit description', () => {
+      const source = mutate((document) => {
+        delete document.scales.parallelism?.description
+      })
+      expect(() => parseMaturityModel(source)).toThrow(/parallelism'.description.*non-empty string/)
+    })
+
     it('rejects an ordinal minimum absent from the scale values', () => {
       const source = mutate((document) => {
         pick(
@@ -107,7 +114,7 @@ describe('a well-formed model that does not hold together', () => {
 
     it('rejects a numeric-scale minimum that is not a number', () => {
       const source = mutate((document) => {
-        document.scales.size = { kind: 'numeric' }
+        document.scales.size = { kind: 'numeric', description: 'a numeric size' }
         for (const level of document.levels ?? []) {
           pick(level.requirements, (r) => r.axis === 'size').min = 'not-a-number'
         }
