@@ -12,9 +12,22 @@ import type {
 import { UnrenderableReportError } from './unrenderable-report.error.js'
 
 export function renderJsonReport(report: AssessmentReport): string {
-  const projected = projectReport(report)
-  assertEveryNumberFinite(projected, '$')
+  return JSON.stringify(projectValidated(report, '$'), null, 2)
+}
+
+// INVARIANT: every element is the same projection a single-report call would publish for that
+// subject, so the array reading adds no shape a consumer of the existing route has not already
+// seen. Every report is validated before any is stringified, so a refusal on the last one leaves
+// nothing published for the ones before it.
+export function renderJsonReports(reports: readonly AssessmentReport[]): string {
+  const projected = reports.map((report, index) => projectValidated(report, `$[${index}]`))
   return JSON.stringify(projected, null, 2)
+}
+
+function projectValidated(report: AssessmentReport, path: string): AssessmentReport {
+  const projected = projectReport(report)
+  assertEveryNumberFinite(projected, path)
+  return projected
 }
 
 function assertEveryNumberFinite(value: unknown, path: string): void {

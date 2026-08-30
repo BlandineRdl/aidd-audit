@@ -88,6 +88,26 @@ describe('every reference profile reaches the level its bundle proves', () => {
   })
 })
 
+describe('the reference profiles assessed as one set', () => {
+  it('publishes one document per profile, in name order, unchanged from naming each alone', async () => {
+    const { io, stdout } = capturingIo()
+
+    const exitCode = await runAssess(['assess', 'profiles', '--json'], io)
+
+    expect(exitCode).toBe(0)
+    const set = JSON.parse(stdout()) as readonly AssessmentReport[]
+    const names = Object.keys(EXPECTED_LEVEL).sort()
+
+    expect(set.map((report) => report.subject.path)).toEqual(
+      names.map((name) => `profiles/${name}`),
+    )
+
+    for (const [index, name] of names.entries()) {
+      expect(set[index]).toEqual(await reportFor(name))
+    }
+  })
+})
+
 describe('the production graph holds no knowledge of any profile', () => {
   const FORBIDDEN = [...Object.keys(EXPECTED_LEVEL), 'profiles/']
 

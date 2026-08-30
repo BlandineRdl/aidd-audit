@@ -27,6 +27,15 @@ export function renderHumanReport(report: AssessmentReport): string {
   return sections.filter((section) => section.length > 0).join('\n\n')
 }
 
+// INVARIANT: the separator is a line no single report ever produces itself — every section inside
+// one report joins on a blank line alone, never a rule — so a reader can always tell a report
+// boundary from a section break within one report.
+const REPORT_SEPARATOR = `\n\n${'='.repeat(72)}\n\n`
+
+export function renderHumanReports(reports: readonly AssessmentReport[]): string {
+  return reports.map(renderHumanReport).join(REPORT_SEPARATOR)
+}
+
 function renderHeader(report: AssessmentReport): string {
   return [
     `AIDD maturity assessment for ${report.subject.path}`,

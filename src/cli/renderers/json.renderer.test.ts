@@ -7,7 +7,7 @@ import type {
   ProvenanceEntry,
   RequirementReport,
 } from '../../assessment/contracts/assessment-report.contract.js'
-import { renderJsonReport } from './json.renderer.js'
+import { renderJsonReport, renderJsonReports } from './json.renderer.js'
 import { UnrenderableReportError } from './unrenderable-report.error.js'
 import {
   assessmentReport,
@@ -444,5 +444,36 @@ describe('12. a non-finite number is refused, never published as null', () => {
     })
     const parsed = JSON.parse(renderJsonReport(report))
     expect(parsed.coverage).toEqual({ axesRequested: 4, axesObserved: 0, axesConfirmed: 0 })
+  })
+})
+
+describe('13. many reports render as an array of the same documents', () => {
+  it('parses as an array whose every element deep-equals that subject’s own single-report document', () => {
+    const first = assessmentReport({ subject: { path: '/repo/first' } })
+    const second = assessmentReport({ subject: { path: '/repo/second' } })
+
+    const parsed = JSON.parse(renderJsonReports([first, second]))
+
+    expect(parsed).toEqual([
+      JSON.parse(renderJsonReport(first)),
+      JSON.parse(renderJsonReport(second)),
+    ])
+  })
+
+  it('refuses the whole array when any one report carries a non-finite number, naming its index', () => {
+    const ok = assessmentReport({ subject: { path: '/repo/ok' } })
+    const broken = assessmentReport({
+      subject: { path: '/repo/broken' },
+      coverage: { axesRequested: 4, axesObserved: Number.NaN, axesConfirmed: 1 },
+    })
+
+    expect(() => renderJsonReports([ok, broken])).toThrow(UnrenderableReportError)
+    expect(() => renderJsonReports([ok, broken])).toThrow(/\$\[1\]\./)
+  })
+
+  it('leaves the single-report entry point unchanged', () => {
+    const report = assessmentReport()
+
+    expect(JSON.parse(renderJsonReport(report))).toEqual(JSON.parse(renderJsonReports([report]))[0])
   })
 })
