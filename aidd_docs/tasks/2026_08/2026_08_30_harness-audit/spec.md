@@ -51,7 +51,9 @@ chosen rather than measured.
   is, and both renderings state that reading rather than assume it.
 - A subject path that names nothing, and a malformed invocation, are the caller's fault; a harness
   the tool cannot read is reported as an absence of measurement, never as a measurement of zero.
-- Both a human rendering and a machine rendering exist, and they state the same facts.
+- Both a human rendering and a machine rendering exist. The concise human rendering states the
+  tier totals and Findings; `--details` states every fact in the machine rendering, while `--json`
+  always remains complete.
 - Nothing is committed, pushed, or opened as a pull request.
 
 ## Non-goals
@@ -78,14 +80,15 @@ chosen rather than measured.
   path-scoped rule files, with the two tiers never added together into a headline figure.
 - Running the audit on a repository holding no harness at all produces a report that says nothing
   was found to measure, exits as a success, and names no figure of zero.
-- Every file the audit counted is listed with its own length and its own token estimate, so a
-  reader can reproduce the tier totals by adding the lines they see.
+- `harness --details` lists every file the audit counted with its own length and token estimate, so
+  a reader can reproduce the tier totals by adding the lines they see. The default prose instead
+  starts with the three separate totals and actionable Findings.
 - The audit names at least one pair of files sharing repeated content when run against a subject
   that has one, and names the shared content's size, without stating whether that is acceptable.
-- Each measured file carries a prose-versus-list figure, and the report states what it counted as
-  a list line.
-- The machine rendering and the human rendering of the same subject carry the same figures, and
-  neither carries a figure the other lacks.
+- In `--details`, each measured file carries a prose-versus-list figure and the report states what
+  it counted as a list line.
+- The machine rendering and `--details` human rendering of the same subject carry the same figures,
+  and neither carries a figure the other lacks.
 - Running the audit twice on the same subject, on different machines, produces identical output
   bytes.
 - Running the audit with the network disabled produces the same output as running it with the

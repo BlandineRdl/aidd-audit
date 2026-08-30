@@ -36,11 +36,15 @@ function reportFor(...args: readonly string[]): HarnessAuditReport {
 
 let report: HarnessAuditReport
 let prose: string
+let detailedProse: string
 
+// SAFETY: this acceptance setup spawns the bundled CLI three times. Under parallel spawn-heavy
+// suites, its ordinary work can exceed Vitest's 10-second hook default without an assertion failing.
 beforeAll(() => {
   report = reportFor('harness', '.')
   prose = runCli('harness', '.').stdout
-})
+  detailedProse = runCli('harness', '.', '--details').stdout
+}, 30_000)
 
 describe('1. the shipped CLI audits the harness it ships from', () => {
   it('runs through the production pipeline to a published report', () => {
@@ -79,7 +83,7 @@ describe('2. the report names no maturity level and confines advice to Findings'
   // section is now expected to grade, threshold and recommend. What must still hold, and is still
   // asserted here: every measurement section printed above it stays free of that vocabulary.
   it('never grades, ranks, warns or recommends above the Findings section, in prose', () => {
-    const findingsIndex = prose.indexOf('Findings — measured against named guidelines:')
+    const findingsIndex = prose.indexOf('Findings —')
     expect(findingsIndex).toBeGreaterThan(-1)
     const lowered = prose.slice(0, findingsIndex).toLowerCase()
     for (const word of GRADING_WORDS) {
@@ -94,13 +98,13 @@ describe('2. the report names no maturity level and confines advice to Findings'
   })
 })
 
-describe('3. prose and the contract carry the same figures', () => {
+describe('3. --details prose and the contract carry the same figures', () => {
   it('states the same encoding in both renderings', () => {
     expect(prose).toContain(report.encoding)
   })
 
   it('states the same list-line reading in both renderings', () => {
-    expect(prose).toContain(report.listLineReading)
+    expect(detailedProse).toContain(report.listLineReading)
   })
 
   it('prints every tier total the contract publishes', () => {
@@ -113,17 +117,17 @@ describe('3. prose and the contract carry the same figures', () => {
 
   it('prints every measured file the contract lists', () => {
     for (const file of report.files) {
-      expect(prose).toContain(file.path)
-      expect(prose).toContain(`${file.lineCount} lines`)
+      expect(detailedProse).toContain(file.path)
+      expect(detailedProse).toContain(`${file.lineCount} lines`)
     }
   })
 
   it('names every shared passage the contract lists', () => {
     for (const pair of report.duplication) {
-      expect(prose).toContain(pair.left)
-      expect(prose).toContain(pair.right)
+      expect(detailedProse).toContain(pair.left)
+      expect(detailedProse).toContain(pair.right)
       for (const passage of pair.passages) {
-        expect(prose).toContain(passage.words.join(' '))
+        expect(detailedProse).toContain(passage.words.join(' '))
       }
     }
   })

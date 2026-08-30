@@ -56,7 +56,8 @@ describe('runHarness — happy path', () => {
 
     expect(exitCode).toBe(0)
     expect(stderr()).toBe('')
-    expect(stdout()).toContain('CLAUDE.md')
+    expect(stdout()).toContain('Context at session opening')
+    expect(stdout()).toContain('Details: re-run with --details')
     expect(stdout().endsWith('\n')).toBe(true)
   })
 
@@ -73,6 +74,19 @@ describe('runHarness — happy path', () => {
     expect(report.schemaVersion).toBe(1)
     expect(report.tool).toBe('claude')
     expect(report.files.some((file) => file.path === 'CLAUDE.md')).toBe(true)
+  })
+
+  it('adds the exhaustive measurement inventory only under --details', async () => {
+    const subject = directoryHolding({ 'CLAUDE.md': 'the project context file\n' })
+    const source = new ClaudeHarnessAdapter(emptyMachineDirectory())
+    const { io, stdout, stderr } = capturingIo()
+
+    const exitCode = await runHarness(['harness', subject, '--details'], io, { source })
+
+    expect(exitCode).toBe(0)
+    expect(stderr()).toBe('')
+    expect(stdout()).toContain('Details — every measured file:')
+    expect(stdout()).toContain('CLAUDE.md: 1 lines')
   })
 
   it('says nothing was found to measure for a subject with no harness at all', async () => {
@@ -123,7 +137,7 @@ describe('runHarness — usage errors exit 2, nothing on stdout', () => {
     expect(exitCode).toBe(2)
     expect(stdout()).toBe('')
     expect(stderr()).toContain('No subject path given.')
-    expect(stderr()).toContain('usage: aidd-audit harness <path> [--json]')
+    expect(stderr()).toContain('usage: aidd-audit harness <path> [--json] [--details]')
   })
 
   it('rejects a subject path that names no directory or file', async () => {

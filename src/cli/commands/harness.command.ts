@@ -42,7 +42,9 @@ export async function runHarness(
       signal: budget.signal,
     })
 
-    const rendered = args.json ? renderHarnessJsonReport(report) : renderHarnessHumanReport(report)
+    const rendered = args.json
+      ? renderHarnessJsonReport(report)
+      : renderHarnessHumanReport(report, { details: args.details })
     io.stdout(`${rendered}\n`)
     return 0
   } catch (error) {

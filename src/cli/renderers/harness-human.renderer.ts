@@ -24,7 +24,14 @@ const TIER_LABEL: Record<LoadingTier, string> = {
     'Conditionally loaded — a ceiling on what could be added if every one of these triggered, never an opening cost',
 }
 
-export function renderHarnessHumanReport(report: HarnessAuditReport): string {
+export interface HarnessHumanRenderOptions {
+  readonly details?: boolean
+}
+
+export function renderHarnessHumanReport(
+  report: HarnessAuditReport,
+  options: HarnessHumanRenderOptions = {},
+): string {
   if (report.files.length === 0) {
     return [
       `Harness audit — loading convention read: ${report.tool}`,
@@ -35,14 +42,19 @@ export function renderHarnessHumanReport(report: HarnessAuditReport): string {
       .join('\n\n')
   }
 
-  const sections = [
+  const summarySections = [
     renderHeader(report),
-    renderScopeSection(report, 'SUBJECT'),
-    renderScopeSection(report, 'MACHINE'),
-    renderDuplicationSection(report),
+    renderOverviewSection(report),
     renderUnreadSection(report),
-    renderFindingsSection(report),
   ]
+
+  const sections = options.details
+    ? [...summarySections, renderMeasurementsSection(report), renderFindingsSection(report)]
+    : [
+        ...summarySections,
+        renderFindingsSection(report),
+        'Details: re-run with --details to list every file, prose shape and shared passage.',
+      ]
   return sections.filter((section) => section.length > 0).join('\n\n')
 }
 
@@ -50,8 +62,56 @@ function renderHeader(report: HarnessAuditReport): string {
   return [
     `Harness audit — loading convention read: ${report.tool}`,
     `Token figures are estimates under the ${report.encoding} encoding, not the counts the model itself would produce.`,
-    `List line reading: ${report.listLineReading}`,
   ].join('\n')
+}
+
+function renderOverviewSection(report: HarnessAuditReport): string {
+  const lines = [
+    'Context at session opening:',
+    ...(['SUBJECT', 'MACHINE'] as const).flatMap((scope) => renderOverviewForScope(report, scope)),
+  ]
+  const conditional = (['SUBJECT', 'MACHINE'] as const).flatMap((scope) =>
+    renderOverviewForScope(report, scope, 'CONDITIONALLY_LOADED'),
+  )
+  if (conditional.length > 0)
+    lines.push('', 'Conditional context — ceiling, not an opening cost:', ...conditional)
+  return lines.join('\n')
+}
+
+function renderOverviewForScope(
+  report: HarnessAuditReport,
+  scope: ReadingScope,
+  tier: LoadingTier = 'ALWAYS_LOADED',
+): readonly string[] {
+  const overview = renderTierOverview(report, scope, tier)
+  if (overview === '') return []
+  const reproducibility =
+    scope === 'SUBJECT' ? 'same subject on any machine' : 'unchanged machine configuration only'
+  return [`  ${scope === 'SUBJECT' ? 'Subject' : 'Machine'} (${reproducibility}): ${overview}`]
+}
+
+function renderTierOverview(
+  report: HarnessAuditReport,
+  scope: ReadingScope,
+  tier: LoadingTier,
+): string {
+  const total = report.tierTotals.find(
+    (candidate) => candidate.scope === scope && candidate.tier === tier,
+  )
+  if (total === undefined) return ''
+  return `${total.fileCount} file${plural(total.fileCount)}, ${total.lineCount} lines, ~${total.tokenEstimate} tokens`
+}
+
+function renderMeasurementsSection(report: HarnessAuditReport): string {
+  return [
+    'Details — every measured file:',
+    `List line reading: ${report.listLineReading}`,
+    renderScopeSection(report, 'SUBJECT'),
+    renderScopeSection(report, 'MACHINE'),
+    renderDuplicationSection(report),
+  ]
+    .filter((section) => section.length > 0)
+    .join('\n\n')
 }
 
 function renderScopeSection(report: HarnessAuditReport, scope: ReadingScope): string {
@@ -121,15 +181,16 @@ function plural(count: number): string {
   return count === 1 ? '' : 's'
 }
 
-// INVARIANT: printed after every measurement section, never in their place — the sole section
-// where a threshold, a comparison against one, and a recommendation are allowed to appear.
+// INVARIANT: the sole section where a threshold, a comparison against one, and a recommendation
+// are allowed to appear. The concise rendering places it after the overview; `--details` keeps it
+// after every measurement, so a reader chooses whether to act first or inspect first.
 // `renderFindingsSection` is the only function in this file that may say any of that.
 function renderFindingsSection(report: HarnessAuditReport): string {
-  const header = 'Findings — measured against named guidelines:'
+  const header = `Findings — ${report.findings.length} action${plural(report.findings.length)}, measured against chosen guidelines:`
   if (report.findings.length === 0) {
     return [header, '  nothing observed is over any stated guideline.'].join('\n')
   }
-  return [header, ...report.findings.map(renderFinding)].join('\n')
+  return [header, ...report.findings.map(renderFinding)].join('\n\n')
 }
 
 // INVARIANT: observed and guidelineValue print as-is, a fraction between 0 and 1 for PROSE_SHARE
@@ -140,10 +201,14 @@ function renderFinding(finding: Finding): string {
   const savingText =
     finding.potentialTokensRemoved === null
       ? ''
-      : ` · up to ~${finding.potentialTokensRemoved} tokens removable if acted on`
+      : ` · potential removal: up to ~${finding.potentialTokensRemoved} tokens`
 
   const shown = (value: number): string =>
     finding.guideline === 'PROSE_SHARE' ? `${Math.round(value * 100)}% prose` : `${value}`
 
-  return `  [${finding.guideline}] ${finding.subject}: observed ${shown(finding.observed)}, guideline ${shown(finding.guidelineValue)} — ${finding.action}${savingText}`
+  return [
+    `  [${finding.guideline}] ${finding.subject}`,
+    `    observed: ${shown(finding.observed)} · guideline: ${shown(finding.guidelineValue)}${savingText}`,
+    `    action: ${finding.action}`,
+  ].join('\n')
 }

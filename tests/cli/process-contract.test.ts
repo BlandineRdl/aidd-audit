@@ -368,6 +368,17 @@ describe('10. harness — a successful audit exits 0 and publishes on stdout', (
     expect(stdout.endsWith('\n')).toBe(true)
     expect(stdout.endsWith('\n\n')).toBe(false)
   })
+
+  it('publishes the exhaustive inventory only when --details asks for it', () => {
+    const concise = runCli('harness', '.')
+    const detailed = runCli('harness', '.', '--details')
+
+    expect(concise.status).toBe(0)
+    expect(detailed.status).toBe(0)
+    expect(concise.stdout).toContain('Details: re-run with --details')
+    expect(concise.stdout).not.toContain('Details — every measured file:')
+    expect(detailed.stdout).toContain('Details — every measured file:')
+  })
 })
 
 describe('11. harness --json publishes one parseable document', () => {

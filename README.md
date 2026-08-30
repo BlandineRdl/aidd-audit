@@ -52,6 +52,7 @@ maturité rendu par `assess`.
 
 ```bash
 node dist/cli.js harness .
+node dist/cli.js harness . --details
 node dist/cli.js harness . --json
 ```
 
@@ -64,6 +65,10 @@ action — ce n'est pas une économie mesurée.
 Un import ou une déclaration illisible est publié comme `unread`, jamais silencieusement interprété
 comme une absence. L'audit couvre actuellement la configuration Claude et reste intentionnellement
 séparé du contrat de maturité `assess`.
+
+La sortie par défaut commence par les totaux et les actions. `--details` ajoute l'inventaire de
+chaque fichier, sa forme prose/liste et les passages répétés ; `--json` publie toujours l'inventaire
+complet pour les outils.
 
 ## Plugin Claude Code
 

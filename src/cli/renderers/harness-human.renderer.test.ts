@@ -87,15 +87,15 @@ describe('the two tiers, printed separately and never summed', () => {
   it('names the always-loaded tier and the conditional tier as their own sections', () => {
     const output = renderHarnessHumanReport(report())
 
-    expect(output).toContain('Always loaded')
-    expect(output).toContain('Conditionally loaded')
+    expect(output).toContain('Context at session opening')
+    expect(output).toContain('Conditional context')
   })
 
   it('prints the conditional tier as a ceiling, in words, never as a cost the session actually pays', () => {
     const output = renderHarnessHumanReport(report())
 
     expect(output).toContain('ceiling')
-    expect(output).toContain('never an opening cost')
+    expect(output).toContain('not an opening cost')
   })
 
   it('never prints a figure summing the two tiers', () => {
@@ -111,6 +111,27 @@ describe('the two tiers, printed separately and never summed', () => {
     // 12 (subject always-loaded) + 15 (machine always-loaded) = 27: that sum must not appear.
     expect(output).not.toContain('27')
   })
+
+  it('keeps a machine conditional tier separate when one exists', () => {
+    const output = renderHarnessHumanReport(
+      report({
+        tierTotals: [
+          ...report().tierTotals,
+          {
+            tier: 'CONDITIONALLY_LOADED',
+            scope: 'MACHINE',
+            fileCount: 2,
+            lineCount: 9,
+            tokenEstimate: 31,
+          },
+        ],
+      }),
+    )
+
+    expect(output).toContain(
+      'Machine (unchanged machine configuration only): 2 files, 9 lines, ~31 tokens',
+    )
+  })
 })
 
 describe('the two scopes, each labelled with what it can be reproduced against', () => {
@@ -118,14 +139,14 @@ describe('the two scopes, each labelled with what it can be reproduced against',
     const output = renderHarnessHumanReport(report())
 
     expect(output).toContain('Subject')
-    expect(output).toContain('reproduces the same bytes on any machine')
+    expect(output).toContain('same subject on any machine')
   })
 
   it('labels the machine scope as reproducible only against an unchanged machine', () => {
     const output = renderHarnessHumanReport(report())
 
     expect(output).toContain('Machine')
-    expect(output).toContain('reproduces only against an unchanged machine')
+    expect(output).toContain('unchanged machine configuration only')
   })
 })
 
@@ -145,7 +166,7 @@ describe('the encoding and the estimate framing', () => {
 
 describe('every measured file, with its own length', () => {
   it('lists each file with its own line count and token estimate', () => {
-    const output = renderHarnessHumanReport(report())
+    const output = renderHarnessHumanReport(report(), { details: true })
 
     expect(output).toContain('CLAUDE.md: 3 lines, ~12 tokens')
     expect(output).toContain('.claude/rules/03-testing/3-tests.md: 20 lines, ~300 tokens')
@@ -155,20 +176,20 @@ describe('every measured file, with its own length', () => {
 
 describe('the prose-versus-list reading', () => {
   it('states the reading that produced the figure', () => {
-    const output = renderHarnessHumanReport(report())
+    const output = renderHarnessHumanReport(report(), { details: true })
 
     expect(output).toContain('List line reading:')
     expect(output).toContain('a line beginning with')
   })
 
   it('carries the count of list and prose lines per file', () => {
-    const output = renderHarnessHumanReport(report())
+    const output = renderHarnessHumanReport(report(), { details: true })
 
     expect(output).toContain('1 list line, 2 prose lines')
   })
 
   it('never renders an uncountable file as a share of zero', () => {
-    const output = renderHarnessHumanReport(report())
+    const output = renderHarnessHumanReport(report(), { details: true })
 
     expect(output).toContain('no countable line')
     expect(output).not.toMatch(/3-tests\.md.*0 list line/)
@@ -177,14 +198,14 @@ describe('the prose-versus-list reading', () => {
 
 describe('shared passages, named without a similarity score', () => {
   it('names the pair and the passage itself', () => {
-    const output = renderHarnessHumanReport(report())
+    const output = renderHarnessHumanReport(report(), { details: true })
 
     expect(output).toContain('CLAUDE.md <-> aidd_docs/memory/architecture.md')
     expect(output).toContain('the quick brown fox jumps over the lazy')
   })
 
   it('never prints a ratio or a percentage for duplication', () => {
-    const output = renderHarnessHumanReport(report())
+    const output = renderHarnessHumanReport(report(), { details: true })
     const start = output.indexOf('Shared passages')
     const duplicationSection = output.slice(start, output.indexOf('Findings', start))
 
@@ -223,15 +244,14 @@ describe('unread harness entries', () => {
 })
 
 describe('the Findings section', () => {
-  it('prints after the measurement sections, naming the guideline, the observed value, the guideline value, the action and the saving', () => {
+  it('names the guideline, observed value, guideline value, action and saving in a scannable block', () => {
     const output = renderHarnessHumanReport(report())
 
-    expect(output).toContain('Findings — measured against named guidelines:')
-    expect(output).toContain(
-      '[ALWAYS_LOADED_FILE_TOKENS] .claude/rules/03-testing/3-tests.md: observed 4200, guideline 4000',
-    )
-    expect(output).toContain('paths: scope so it loads only for the work it concerns')
-    expect(output).toContain('up to ~4200 tokens removable if acted on')
+    expect(output).toContain('Findings — 2 actions, measured against chosen guidelines:')
+    expect(output).toContain('[ALWAYS_LOADED_FILE_TOKENS] .claude/rules/03-testing/3-tests.md')
+    expect(output).toContain('observed: 4200 · guideline: 4000')
+    expect(output).toContain('action: Give .claude/rules/03-testing/3-tests.md a paths: scope')
+    expect(output).toContain('potential removal: up to ~4200 tokens')
   })
 
   // INVARIANT: a share is a fraction in the contract and a percentage in prose, the same split
@@ -241,17 +261,25 @@ describe('the Findings section', () => {
     const output = renderHarnessHumanReport(report())
 
     expect(output).toContain(
-      '[PROSE_SHARE] ~/.claude/CLAUDE.md: observed 75% prose, guideline 60% prose',
+      '[PROSE_SHARE] ~/.claude/CLAUDE.md\n    observed: 75% prose · guideline: 60% prose',
     )
-    expect(output).not.toMatch(/\[PROSE_SHARE\][^\n]*· ~/)
+    expect(output).not.toMatch(/\[PROSE_SHARE\][\s\S]*potential removal[\s\S]*Reformat/)
   })
 
-  it('prints the Findings section after the shared-passages section', () => {
-    const output = renderHarnessHumanReport(report())
+  it('keeps Findings after the full measurement section in detailed prose', () => {
+    const output = renderHarnessHumanReport(report(), { details: true })
 
     expect(output.indexOf('Shared passages')).toBeLessThan(
-      output.indexOf('Findings — measured against named guidelines:'),
+      output.indexOf('Findings — 2 actions, measured against chosen guidelines:'),
     )
+  })
+
+  it('keeps the exhaustive measurements opt-in in the concise rendering', () => {
+    const output = renderHarnessHumanReport(report())
+
+    expect(output).toContain('Details: re-run with --details')
+    expect(output).not.toContain('Shared passages')
+    expect(output).not.toContain('List line reading:')
   })
 })
 
@@ -279,10 +307,7 @@ describe('the verdict is confined to the Findings section', () => {
 
   it('never carries a grading word above the Findings section', () => {
     const output = renderHarnessHumanReport(report())
-    const aboveFindings = output.slice(
-      0,
-      output.indexOf('Findings — measured against named guidelines:'),
-    )
+    const aboveFindings = output.slice(0, output.indexOf('Findings —'))
     const lowered = aboveFindings.toLowerCase()
 
     const bannedWords = [
@@ -308,7 +333,7 @@ describe('the verdict is confined to the Findings section', () => {
   it('renders a Findings section that says so when a report has nothing over the guidelines', () => {
     const output = renderHarnessHumanReport(report({ findings: [] }))
 
-    expect(output).toContain('Findings — measured against named guidelines:')
+    expect(output).toContain('Findings — 0 actions, measured against chosen guidelines:')
     expect(output).toContain('nothing observed is over any stated guideline')
   })
 })

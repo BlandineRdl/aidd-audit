@@ -56,12 +56,8 @@ describe('subject-scoped file paths never carry the operand or its resolution', 
   it('labels the machine section apart from the subject one rather than folding it in', () => {
     const output = runCli('harness', '.').stdout
 
-    expect(output).toContain(
-      'Subject (this repository) — reproduces the same bytes on any machine, on any day, for this subject.',
-    )
-    expect(output).toContain(
-      "Machine (this tool's own configuration) — reproduces only against an unchanged machine",
-    )
+    expect(output).toContain('Subject (same subject on any machine)')
+    expect(output).toContain('Machine (unchanged machine configuration only)')
   })
 })
 
