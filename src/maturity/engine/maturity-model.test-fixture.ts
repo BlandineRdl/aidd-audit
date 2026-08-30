@@ -6,9 +6,21 @@ export const validModel: MaturityModel = {
   schemaVersion: 1,
   id: 'test',
   scales: {
-    size: { kind: 'ordinal', values: ['none', 'S', 'M', 'L'] },
-    harness: { kind: 'set', members: ['prompts', 'context-engineering', 'behavior'] },
-    parallelism: { kind: 'numeric' },
+    size: {
+      kind: 'ordinal',
+      values: ['none', 'S', 'M', 'L'],
+      descriptions: { none: 'none', S: 'small', M: 'medium', L: 'large' },
+    },
+    harness: {
+      kind: 'set',
+      members: ['prompts', 'context-engineering', 'behavior'],
+      descriptions: {
+        prompts: 'prompts',
+        'context-engineering': 'project context',
+        behavior: 'guardrails',
+      },
+    },
+    parallelism: { kind: 'numeric', description: 'active work per day' },
   },
   axes: [
     { id: 'size', label: 'Taille', scale: 'size' },

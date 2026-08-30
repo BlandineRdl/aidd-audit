@@ -11,7 +11,12 @@ const EXPECTED_LEVEL = {
   bohort: 'Blue',
   leodagan: 'Green',
   arthur: 'Copper',
+  lancelot: 'Red',
 } as const
+
+// INVARIANT: Venec has a recorded session, which confirms prompt use, but no historical delivery
+// record. An evidence hole is not a low score: the three unknown axes make every level unproven.
+const EXPECTED_UNPROVEN = ['venec'] as const
 
 // INVARIANT: What each bundle demonstrates, which is a second specification and not a restatement of
 // the first. `leodagan` is the one that differs, and deliberately: his recorded days carry three
@@ -28,7 +33,8 @@ const AXES_IN_THE_MODEL = 4
 
 function capturingIo(): { io: CommandIo; stdout: () => string } {
   const out: string[] = []
-  return { io: { stdout: (text) => out.push(text), stderr: () => {} }, stdout: () => out.join('') }
+  const io: CommandIo = { stdout: (text) => out.push(text), stderr: () => {}, colours: false }
+  return { io, stdout: () => out.join('') }
 }
 
 async function reportFor(profile: string): Promise<AssessmentReport> {
@@ -59,7 +65,7 @@ describe('every reference profile reaches the level its bundle proves', () => {
   }
 
   it('never demonstrates less than it proves, and always says how often', async () => {
-    for (const profile of Object.keys(EXPECTED_LEVEL)) {
+    for (const profile of Object.keys(EXPECTED_DEMONSTRATED)) {
       const report = await reportFor(profile)
 
       expect(report.demonstrated?.level?.rank).toBeGreaterThanOrEqual(report.proven?.rank ?? 0)
@@ -69,6 +75,17 @@ describe('every reference profile reaches the level its bundle proves', () => {
       }
     }
   })
+
+  it.each(EXPECTED_UNPROVEN)(
+    'does not assign a level to %s when evidence leaves axes unknown',
+    async (profile) => {
+      const report = await reportFor(profile)
+
+      expect(report.proven).toBeNull()
+      expect(report.coverage.axesConfirmed).toBeLessThan(AXES_IN_THE_MODEL)
+      expect(report.blocking.map((blocker) => blocker.gap)).toContain('EVIDENCE')
+    },
+  )
 
   it.each(Object.keys(EXPECTED_LEVEL))('confirms every axis from %s alone', async (profile) => {
     const report = await reportFor(profile)
@@ -88,7 +105,7 @@ describe('every reference profile reaches the level its bundle proves', () => {
   })
 })
 
-describe('the four reference profiles carry no roster: prose byte for byte, json plus one key', () => {
+describe('the reference profiles carry no roster: prose byte for byte, json plus one key', () => {
   it.each(Object.keys(EXPECTED_LEVEL))(
     'keeps contributors a present key holding null for %s',
     async (profile) => {
@@ -107,9 +124,29 @@ describe('the four reference profiles carry no roster: prose byte for byte, json
       const exitCode = await runAssess(['assess', `profiles/${profile}`], io)
 
       expect(exitCode).toBe(0)
-      expect(stdout()).not.toContain('Contributors:')
+      expect(stdout()).not.toContain('Contributeurs')
     },
   )
+})
+
+describe('the reference profiles assessed as one set', () => {
+  it('publishes one document per profile, in name order, unchanged from naming each alone', async () => {
+    const { io, stdout } = capturingIo()
+
+    const exitCode = await runAssess(['assess', 'profiles', '--json'], io)
+
+    expect(exitCode).toBe(0)
+    const set = JSON.parse(stdout()) as readonly AssessmentReport[]
+    const names = [...Object.keys(EXPECTED_LEVEL), ...EXPECTED_UNPROVEN].sort()
+
+    expect(set.map((report) => report.subject.path)).toEqual(
+      names.map((name) => `profiles/${name}`),
+    )
+
+    for (const [index, name] of names.entries()) {
+      expect(set[index]).toEqual(await reportFor(name))
+    }
+  })
 })
 
 describe('the production graph holds no knowledge of any profile', () => {

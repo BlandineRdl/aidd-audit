@@ -85,7 +85,7 @@ describe('running git', () => {
     const repository = await initRepository()
     const proof = join(repository, 'the-alias-can-write')
     const marker = join(repository, 'the-command-ran-to-its-end')
-    const LINGER_SECONDS = 2
+    const LINGER_SECONDS = 0.2
 
     // INVARIANT: the negative assertion below is worth nothing unless this command can create a
     // file at all, so prove the mechanism first and only then deny it the chance.
@@ -107,7 +107,7 @@ describe('running git', () => {
 
     // INVARIANT: and gone, not merely abandoned: the side effect never lands, even after the full
     // window has passed.
-    await delay((LINGER_SECONDS + 1) * 1000)
+    await delay(450)
     expect(existsSync(marker)).toBe(false)
   }, 30_000)
 })

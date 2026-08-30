@@ -1,3 +1,4 @@
+import type { CollectorDiagnostic } from '../../evidence/models/collector-diagnostic.model.js'
 import type { Evidence } from '../../evidence/models/observation.model.js'
 import { checkMaturity } from '../../maturity/engine/maturity-engine.js'
 import type { AxisObservation } from '../../maturity/models/axis-observation.model.js'
@@ -24,6 +25,16 @@ import type {
 
 export interface ProjectionContext {
   readonly evidenceByAxis: ReadonlyMap<AxisId, Evidence>
+
+  // INVARIANT: why a collector that ran observed nothing for an axis, keyed by that axis. A
+  // contributor row carries an empty map on purpose: `collectEvidence`'s diagnostics answer for the
+  // repository's collectors, and a row that did not clear its own sample floors was not failed by
+  // any of them — attaching one would name a cause nobody reported.
+  //
+  // LIMITATION: a row is therefore the one place the report states a gap in prose and not in the
+  // contract. `contributor-deliveries.ts` knows the count and the floor it fell short of, so a
+  // per-row diagnostic is constructible and is owed; it was left out for time, not decided against.
+  readonly diagnosticsByAxis: ReadonlyMap<AxisId, CollectorDiagnostic>
   readonly labelsByAxis: ReadonlyMap<AxisId, string>
 }
 
@@ -55,7 +66,11 @@ function reportAxis(result: AxisResult, context: ProjectionContext): AxisReport 
     label: labelOf(result.axis, context),
     outcome: result.outcome,
     requirements: result.requirements.map((requirement) =>
-      reportRequirement(requirement, context.evidenceByAxis.get(result.axis)),
+      reportRequirement(
+        requirement,
+        context.evidenceByAxis.get(result.axis),
+        context.diagnosticsByAxis.get(result.axis),
+      ),
     ),
   }
 }
@@ -72,11 +87,12 @@ function labelOf(axis: AxisId, context: ProjectionContext): string {
 function reportRequirement(
   result: RequirementResult,
   evidence: Evidence | undefined,
+  diagnostic: CollectorDiagnostic | undefined,
 ): RequirementReport {
   const threshold = thresholdOf(result.requirement)
 
   if (evidence === undefined) {
-    return unprovenRequirement(result, threshold, 'UNKNOWN')
+    return unprovenRequirement(result, threshold, 'UNKNOWN', diagnostic)
   }
 
   switch (evidence.status) {
@@ -94,7 +110,7 @@ function reportRequirement(
     case 'CLAIMED':
     case 'CONFLICTING':
     case 'UNKNOWN':
-      return unprovenRequirement(result, threshold, evidence.status)
+      return unprovenRequirement(result, threshold, evidence.status, diagnostic)
   }
 }
 
@@ -102,11 +118,19 @@ function unprovenRequirement(
   result: RequirementResult,
   threshold: Threshold,
   evidence: 'CLAIMED' | 'CONFLICTING' | 'UNKNOWN',
+  diagnostic: CollectorDiagnostic | undefined,
 ): RequirementReport {
   if (result.outcome !== 'UNPROVEN') {
     throw contradiction(result, evidence)
   }
-  return { axis: result.axis, threshold, observed: null, evidence, outcome: 'UNPROVEN' }
+  return {
+    axis: result.axis,
+    threshold,
+    observed: null,
+    evidence,
+    outcome: 'UNPROVEN',
+    ...(evidence === 'UNKNOWN' && diagnostic !== undefined ? { diagnostic } : {}),
+  }
 }
 
 // Guards the evidence/outcome invariant shared with the maturity engine.

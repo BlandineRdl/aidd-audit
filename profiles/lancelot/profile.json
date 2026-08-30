@@ -1,0 +1,20 @@
+{
+  "profile_id": "lancelot",
+  "role": "développeuse backend senior",
+  "experience_years": 8,
+  "stack": [
+    "Go",
+    "PostgreSQL",
+    "Kubernetes"
+  ],
+  "team_size": 7,
+  "available": [
+    "git-activity.json",
+    "pull-requests.json",
+    "code/",
+    "sonar-measures.json",
+    "repo-context/",
+    "declaratif.md",
+    "session.md"
+  ]
+}

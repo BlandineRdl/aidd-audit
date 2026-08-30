@@ -14,7 +14,7 @@ import {
 // and would drift the day the schema does without anything saying so.
 
 const NEVER_ABORTED = new AbortController().signal
-const A_LONG_TIME = 60_000
+const A_LONG_TIME = 15_000
 const SLUG = { owner: 'an-owner', name: 'a-repository' }
 
 const workspaces: string[] = []
@@ -186,6 +186,7 @@ describe('readForgeDerivedMetrics', () => {
         demonstratedIntervention: null,
         parallelism: null,
         demonstratedParallelism: null,
+        activeDays: 4,
       })
     },
     A_LONG_TIME,
@@ -513,6 +514,7 @@ describe('readForgeDerivedMetrics', () => {
         demonstratedIntervention: null,
         parallelism: null,
         demonstratedParallelism: null,
+        activeDays: null,
       })
     },
     A_LONG_TIME,
@@ -532,20 +534,27 @@ describe('readForgeDerivedMetrics', () => {
 })
 
 describe('deriveForgeMetrics', () => {
-  const SIX_NULLS = {
+  // INVARIANT: every derived value, and there is one more than the name says since `activeDays`
+  // joined them — asserted whole with `toEqual` so a field added to `ForgeDerivedMetrics` and left
+  // unset by the unrecoverable path fails here rather than reaching a report as `undefined`.
+  const NOTHING_DERIVED = {
     sizeBucket: null,
     demonstratedSize: null,
     intervention: null,
     demonstratedIntervention: null,
     parallelism: null,
     demonstratedParallelism: null,
+    activeDays: null,
   }
 
-  it('answers the six nulls for a walk that could not complete', () => {
-    expect(deriveForgeMetrics(null)).toEqual(SIX_NULLS)
+  it('derives nothing at all for a walk that could not complete', () => {
+    expect(deriveForgeMetrics(null)).toEqual(NOTHING_DERIVED)
   })
 
-  it('answers the six nulls for a window with too few deliveries to clear the floor', () => {
-    expect(deriveForgeMetrics([])).toEqual(SIX_NULLS)
+  // INVARIANT: an empty window counted zero active days; an unreadable walk counted none. The two
+  // are the `[]`-versus-`null` distinction this module draws on purpose, and collapsing them onto
+  // one expectation is what hid `activeDays` when it was added.
+  it('derives nothing at all for a window with too few deliveries to clear the floor', () => {
+    expect(deriveForgeMetrics([])).toEqual({ ...NOTHING_DERIVED, activeDays: 0 })
   })
 })

@@ -1,0 +1,15 @@
+{
+  "profile_id": "venec",
+  "role": "développeur produit",
+  "experience_years": 11,
+  "stack": [
+    "TypeScript",
+    "Node",
+    "Terraform"
+  ],
+  "team_size": 1,
+  "available": [
+    "session.md"
+  ],
+  "note": "Personne indépendante. Aucun accès aux dépôts : ils appartiennent aux clients. Le questionnaire déclaratif est resté sans réponse."
+}

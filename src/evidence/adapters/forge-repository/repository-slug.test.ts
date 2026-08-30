@@ -11,7 +11,7 @@ import { repositorySlug } from './repository-slug.js'
 
 const run = promisify(execFile)
 const NEVER_ABORTED = new AbortController().signal
-const A_LONG_TIME = 60_000
+const A_LONG_TIME = 15_000
 
 const workspaces: string[] = []
 

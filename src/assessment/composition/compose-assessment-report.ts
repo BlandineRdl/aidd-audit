@@ -1,11 +1,13 @@
 import type { ContributorRosterRun } from '../../evidence/ports/contributor-roster.port.js'
 import type { CollectorProvenance } from '../../evidence/models/collector-provenance.model.js'
+import type { CollectorDiagnostic } from '../../evidence/models/collector-diagnostic.model.js'
 import type { Evidence } from '../../evidence/models/observation.model.js'
 import { checkMaturity } from '../../maturity/engine/maturity-engine.js'
 import type { MaturityModel } from '../../maturity/models/maturity.model.js'
 import {
   ASSESSMENT_REPORT_SCHEMA_VERSION,
   type AssessmentReport,
+  type AxisVocabularyReport,
   type CoverageReport,
   type ProvenanceEntry,
 } from '../contracts/assessment-report.contract.js'
@@ -18,18 +20,20 @@ import {
   type ProjectionContext,
 } from './report-projection.js'
 import { UndeclaredAxisError } from './undeclared-axis.error.js'
+import { scaleNamedBy } from '../../maturity/models/scale-for-axis.js'
 
 export interface AssessmentComposition {
   readonly subjectPath: string
   readonly model: MaturityModel
   readonly evidence: readonly Evidence[]
   readonly provenance: readonly CollectorProvenance[]
+  readonly diagnostics?: readonly CollectorDiagnostic[]
   readonly roster?: ContributorRosterRun | null
 }
 
 // Publishes only the engine's own verdicts; this function decides none of them.
 export function composeAssessmentReport(input: AssessmentComposition): AssessmentReport {
-  const { model, evidence, subjectPath, provenance, roster } = input
+  const { model, evidence, subjectPath, provenance, diagnostics = [], roster } = input
 
   requireDeclaredAxes(model, evidence)
 
@@ -39,6 +43,7 @@ export function composeAssessmentReport(input: AssessmentComposition): Assessmen
   const check = checkMaturity(model, sustained.map(toObservation))
   const context: ProjectionContext = {
     evidenceByAxis: new Map(sustained.map((entry) => [entry.axis, entry])),
+    diagnosticsByAxis: new Map(diagnostics.map((diagnostic) => [diagnostic.axis, diagnostic])),
     labelsByAxis: new Map(model.axes.map((axis) => [axis.id, axis.label])),
   }
   const next = check.next === null ? null : reportLevel(check.next, context)
@@ -53,12 +58,36 @@ export function composeAssessmentReport(input: AssessmentComposition): Assessmen
     demonstrated: reportDemonstrated(model, sustained, demonstrated, check.proven),
     levels: check.levels.map((level) => reportLevel(level, context)),
     blocking: blockersOf(next),
+    vocabulary: reportVocabulary(model),
     coverage: deriveCoverage(model, sustained),
     provenance: provenance.map(toProvenanceEntry),
     contributors: composeContributorRoster({ model, run: roster ?? null }),
   }
 }
 
+function reportVocabulary(model: MaturityModel): readonly AxisVocabularyReport[] {
+  return model.axes.map((axis) => {
+    const scale = scaleNamedBy(model, axis)
+    switch (scale.kind) {
+      case 'ordinal':
+        return {
+          axis: axis.id,
+          kind: 'ordinal',
+          values: scale.values,
+          descriptions: scale.descriptions,
+        }
+      case 'set':
+        return {
+          axis: axis.id,
+          kind: 'set',
+          members: scale.members,
+          descriptions: scale.descriptions,
+        }
+      case 'numeric':
+        return { axis: axis.id, kind: 'numeric', description: scale.description }
+    }
+  })
+}
 // INVARIANT: axesRequested counts the model's axes, not evidence.length — an axis missing from
 // evidence entirely is still requested, just unobserved.
 function deriveCoverage(model: MaturityModel, evidence: readonly Evidence[]): CoverageReport {

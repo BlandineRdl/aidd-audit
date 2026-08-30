@@ -63,6 +63,9 @@ function rowOf(
   const check = checkMaturity(model, sustained.map(toObservation))
   const context: ProjectionContext = {
     evidenceByAxis: new Map(sustained.map((entry) => [entry.axis, entry])),
+    // SAFETY: empty, and the reason is on `ProjectionContext` itself — a collector's diagnostic
+    // answers for the repository's collection, and no collector failed on a row.
+    diagnosticsByAxis: new Map(),
     labelsByAxis: new Map(model.axes.map((axis) => [axis.id, axis.label])),
   }
 

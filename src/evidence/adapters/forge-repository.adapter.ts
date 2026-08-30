@@ -1,8 +1,13 @@
 import type { AxisId, AxisVocabulary } from '../models/axis.model.js'
-import type { Observation } from '../models/observation.model.js'
-import type { CollectorContext, EvidenceCollector } from '../ports/evidence-collector.port.js'
+import type { CollectorDiagnostic } from '../models/collector-diagnostic.model.js'
+import type {
+  CollectorCollection,
+  CollectorContext,
+  EvidenceCollector,
+} from '../ports/evidence-collector.port.js'
+import { MINIMUM_ACTIVE_DAYS } from './delivery-sample.js'
 import type { ForgeDeliveryReader } from './forge-repository/delivery-reader.js'
-import { deriveObservations } from './forge-repository/derived-observations.js'
+import { deriveObservations, scaleFor } from './forge-repository/derived-observations.js'
 import { deriveForgeMetrics } from './forge-repository/pull-request-history.js'
 import type { RepositorySlug } from './forge-repository/repository-slug.js'
 
@@ -30,20 +35,51 @@ export class ForgeRepositoryEvidenceCollector implements EvidenceCollector {
     private readonly deliveries: ForgeDeliveryReader,
   ) {}
 
-  async collect(context: CollectorContext): Promise<readonly Observation[]> {
+  async collect(context: CollectorContext): Promise<CollectorCollection> {
     context.signal.throwIfAborted()
 
-    if (!hasAnySupportedAxis(context.vocabulary)) return []
+    if (!hasAnySupportedAxis(context.vocabulary)) return { observations: [], diagnostics: [] }
 
     const metrics = deriveForgeMetrics(await this.deliveries.read(context.signal))
 
-    return deriveObservations(
-      metrics,
-      context.vocabulary,
-      COLLECTOR_ID,
-      `merged pull requests of ${this.slug.owner}/${this.slug.name}`,
-    )
+    return {
+      observations: deriveObservations(
+        metrics,
+        context.vocabulary,
+        COLLECTOR_ID,
+        `merged pull requests of ${this.slug.owner}/${this.slug.name}`,
+      ),
+      diagnostics: diagnosticsFor(metrics, context.vocabulary),
+    }
   }
+}
+
+// INVARIANT: why an axis this collector supports went unobserved, and only where the reason is one
+// it knows. A parallelism withheld for too thin a sample is a fact about the window, not a verdict
+// on the subject, and saying so is what stops "no observation" reading as "no branches".
+function diagnosticsFor(
+  metrics: ReturnType<typeof deriveForgeMetrics>,
+  vocabulary: readonly AxisVocabulary[],
+): readonly CollectorDiagnostic[] {
+  const parallelismScale = scaleFor(vocabulary, 'parallelism')
+  if (
+    parallelismScale?.kind !== 'numeric' ||
+    metrics.parallelism !== null ||
+    metrics.activeDays === null ||
+    metrics.activeDays >= MINIMUM_ACTIVE_DAYS
+  ) {
+    return []
+  }
+
+  return [
+    {
+      collector: COLLECTOR_ID,
+      axis: 'parallelism',
+      reason: 'INSUFFICIENT_ACTIVE_DAYS',
+      observed: metrics.activeDays,
+      minimum: MINIMUM_ACTIVE_DAYS,
+    },
+  ]
 }
 
 function hasAnySupportedAxis(vocabulary: readonly AxisVocabulary[]): boolean {

@@ -1,4 +1,5 @@
 import { type Stats, statSync } from 'node:fs'
+import type { AssessmentReport } from '../../assessment/contracts/assessment-report.contract.js'
 import { assessMaturity } from '../../assessment/usecases/assess-maturity.usecase.js'
 import { FixtureBundleEvidenceCollector } from '../../evidence/adapters/fixture-bundle.adapter.js'
 import { ForgeContributorRosterAdapter } from '../../evidence/adapters/forge-contributor-roster.adapter.js'
@@ -20,13 +21,20 @@ import { loadMaturityModel } from '../../maturity/loading/load-maturity-model.js
 import { InvalidMaturityModelError } from '../../maturity/models/invalid-maturity-model.error.js'
 import { parseAssessArguments } from '../parsing/assess-arguments.js'
 import { canonicalModelPath } from '../bootstrap/canonical-model-path.js'
-import { renderHumanReport } from '../renderers/human.renderer.js'
-import { renderJsonReport } from '../renderers/json.renderer.js'
+import { renderHumanReport, renderHumanReports } from '../renderers/human.renderer.js'
+import { colouredText, plainText } from '../renderers/text-style.js'
+import { renderJsonReport, renderJsonReports } from '../renderers/json.renderer.js'
+import { resolveSubjects } from '../subjects/resolve-subjects.js'
 import { UsageError } from '../usage.error.js'
 
 export interface CommandIo {
   stdout(text: string): void
   stderr(text: string): void
+
+  // INVARIANT: colour is a property of the channel, never of the report. It is stated by whoever
+  // owns the streams — only `main.ts` knows whether one is a terminal — so `runAssess` decides
+  // nothing about presentation and a captured run is plain without asking for it.
+  readonly colours: boolean
 }
 
 // INVARIANT: The slug and the one delivery reader built from it, resolved together so neither the
@@ -43,12 +51,26 @@ interface ForgeAccess {
 // requests as its own evidence — the fault the live collector's own root check exists to prevent.
 async function forgeAccessFor(
   subjectPath: string,
+  isWorkTreeRoot: boolean,
   signal: AbortSignal,
 ): Promise<ForgeAccess | null> {
-  if (!(await isRepositoryRoot(subjectPath, signal))) return null
+  if (!isWorkTreeRoot) return null
   const slug = await repositorySlug(subjectPath, signal)
   if (slug === null) return null
   return { slug, deliveries: forgeDeliveryReader(slug, subjectPath) }
+}
+
+// INVARIANT: One roster per subject with a GitHub origin, and none otherwise. It takes the same
+// delivery reader the collector set was built from, so the pull requests are walked once and serve
+// both the repository line and the rows.
+async function rosterFor(
+  forge: ForgeAccess | null,
+  subjectPath: string,
+  signal: AbortSignal,
+): Promise<ContributorRoster | null> {
+  if (forge === null) return null
+  const tree = await trackedTree(subjectPath, signal)
+  return new ForgeContributorRosterAdapter(forge.slug, subjectPath, forge.deliveries, tree)
 }
 
 // INVARIANT: One axis, one source. The live collector and the forge would both answer `size`,
@@ -74,25 +96,12 @@ function collectorsFor(forge: ForgeAccess | null): readonly EvidenceCollector[] 
   ]
 }
 
-// INVARIANT: built only when a slug was found — a subject with no GitHub origin spends no
-// `git ls-files` it would not otherwise have spent, and renders exactly as it does today. Takes the
-// same `ForgeDeliveryReader` `collectorsFor` hands the repository-level collector, so the pull
-// requests behind a roster's rows and the repository's own line come from one walk.
-async function rosterFor(
-  forge: ForgeAccess | null,
-  subjectPath: string,
-  signal: AbortSignal,
-): Promise<ContributorRoster | null> {
-  if (forge === null) return null
-  const tree = await trackedTree(subjectPath, signal)
-  return new ForgeContributorRosterAdapter(forge.slug, subjectPath, forge.deliveries, tree)
-}
-
 // INVARIANT: the wired set is the default, never the only one. A suite that needs a collector this
 // composition root would not build — one emitting a value off the loaded scale, which is the only
 // route to exit code 1 — passes its own, and nothing about the production wiring moves.
 export interface AssessOptions {
   readonly collectors?: readonly EvidenceCollector[]
+
   // INVARIANT: `null` is a meaningful override — a suite proving the no-roster document must be
   // able to pass it — so selection below reads `'roster' in options`, never `??`, which would
   // silently fall back to production wiring on exactly that call.
@@ -118,26 +127,37 @@ export async function runAssess(
     const args = parseAssessArguments(argv)
     requireExistingSubject(args.subjectPath)
 
+    const resolved = await resolveSubjects(args.subjectPath, budget.signal)
     const model = loadMaturityModel(args.modelPath ?? canonicalModelPath())
+    const reports: AssessmentReport[] = []
+    for (const subjectPath of resolved.subjects) {
+      const isWorkTreeRoot = resolved.isSet
+        ? await isRepositoryRoot(subjectPath, budget.signal)
+        : resolved.isWorkTreeRoot
 
-    // INVARIANT: the remote is read once here, and reused for both the collector set and the
-    // roster — never resolved a second time for either.
-    const forge = await forgeAccessFor(args.subjectPath, budget.signal)
-    const roster =
-      'roster' in options ? options.roster : await rosterFor(forge, args.subjectPath, budget.signal)
+      // INVARIANT: the remote is read once per subject, and the access it yields is reused for both
+      // the collector set and the roster — never resolved a second time for either.
+      const forge = await forgeAccessFor(subjectPath, isWorkTreeRoot, budget.signal)
+      const roster =
+        'roster' in options ? options.roster : await rosterFor(forge, subjectPath, budget.signal)
 
-    const report = await assessMaturity({
-      subjectPath: args.subjectPath,
-      model,
-      collectors: options.collectors ?? collectorsFor(forge),
-      // COMPAT: `exactOptionalPropertyTypes` forbids `roster: undefined` — the key must be absent
-      // rather than present holding it, so a `null` roster (no origin, or a suite's own override)
-      // is spread away instead of passed through.
-      ...(roster === null || roster === undefined ? {} : { roster }),
-      signal: budget.signal,
-    })
+      reports.push(
+        await assessMaturity({
+          subjectPath,
+          model,
+          collectors: options.collectors ?? collectorsFor(forge),
+          // COMPAT: `exactOptionalPropertyTypes` forbids `roster: undefined` — the key must be
+          // absent rather than present holding it, so a `null` roster (no origin, or a suite's own
+          // override) is spread away instead of passed through.
+          ...(roster === null || roster === undefined ? {} : { roster }),
+          signal: budget.signal,
+        }),
+      )
+    }
 
-    const rendered = args.json ? renderJsonReport(report) : renderHumanReport(report)
+    // INVARIANT: colour dresses the explanation only. The contract is the machine-readable
+    // channel, and every byte of it is the contract's.
+    const rendered = renderReports(reports, resolved.isSet, args.json, io.colours)
     io.stdout(`${rendered}\n`)
     return 0
   } catch (error) {
@@ -146,6 +166,19 @@ export async function runAssess(
   } finally {
     budget.abort()
   }
+}
+
+function renderReports(
+  reports: readonly AssessmentReport[],
+  isSet: boolean,
+  json: boolean,
+  colours: boolean,
+): string {
+  const [only] = reports
+  const style = colours ? colouredText : plainText
+  if (!isSet && only !== undefined)
+    return json ? renderJsonReport(only) : renderHumanReport(only, style)
+  return json ? renderJsonReports(reports) : renderHumanReports(reports, style)
 }
 
 // Never reads inside the subject: a failure met during collection is the collector's.

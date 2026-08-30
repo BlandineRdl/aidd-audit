@@ -39,13 +39,10 @@ Project docs, memory, specs, and plans live in `aidd_docs/`.
 
 <!-- aidd_project_memory:start -->
 
-@aidd_docs/memory/architecture.md
-@aidd_docs/memory/cli.md
 @aidd_docs/memory/codebase-map.md
 @aidd_docs/memory/coding-assertions.md
 @aidd_docs/memory/ecosystem.md
 @aidd_docs/memory/project-brief.md
-@aidd_docs/memory/testing.md
 @aidd_docs/memory/vcs.md
 
 <!-- aidd_project_memory:end -->
@@ -53,3 +50,10 @@ Project docs, memory, specs, and plans live in `aidd_docs/`.
 - If the block above is empty, run `ls -1tr aidd_docs/memory/` and read each file.
 - Load `aidd_docs/memory/external/*` when the user asks.
 - Load `aidd_docs/memory/internal/*` when the task needs it.
+
+**Three memory files are deliberately absent from the block above**, and a regeneration that
+restores them has undone this. `architecture.md`, `cli.md` and `testing.md` carry two thirds of the
+session-opening cost and concern one kind of work each, so they are reached through the
+path-scoped rules that fire when that work starts — `.claude/rules/00-architecture/`,
+`.claude/rules/03-testing/`. Nothing was shortened; the cost moved off the sessions that never
+open those files.

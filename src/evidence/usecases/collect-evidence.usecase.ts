@@ -1,4 +1,5 @@
 import type { AxisId, AxisVocabulary } from '../models/axis.model.js'
+import type { CollectorDiagnostic } from '../models/collector-diagnostic.model.js'
 import type { CollectorProvenance } from '../models/collector-provenance.model.js'
 import type { Evidence } from '../models/observation.model.js'
 import type {
@@ -18,6 +19,7 @@ export interface EvidenceCollectionRequest {
 export interface EvidenceCollection {
   readonly evidence: readonly Evidence[]
   readonly provenance: readonly CollectorProvenance[]
+  readonly diagnostics: readonly CollectorDiagnostic[]
 }
 
 interface CollectorOutcome {
@@ -47,6 +49,7 @@ export async function collectEvidence(
   return {
     evidence: resolveEvidence(observations, requestedAxes),
     provenance: outcomes.map(toProvenance),
+    diagnostics: outcomes.flatMap((outcome) => outcome.run.diagnostics),
   }
 }
 
@@ -64,14 +67,23 @@ async function runCollector(
         collector: collector.id,
         status: 'SKIPPED',
         observations: [],
+        diagnostics: [],
         reason: `${collector.id} supports none of the requested axes`,
       },
     }
   }
 
   try {
-    const observations = await collector.collect(context)
-    return { responsibleAxes, run: { collector: collector.id, status: 'COMPLETED', observations } }
+    const collection = await collector.collect(context)
+    return {
+      responsibleAxes,
+      run: {
+        collector: collector.id,
+        status: 'COMPLETED',
+        observations: collection.observations,
+        diagnostics: collection.diagnostics,
+      },
+    }
   } catch (error) {
     return {
       responsibleAxes,
@@ -79,6 +91,7 @@ async function runCollector(
         collector: collector.id,
         status: context.signal.aborted ? 'TIMED_OUT' : 'FAILED',
         observations: [],
+        diagnostics: [],
         reason: reasonFor(error),
       },
     }

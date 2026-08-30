@@ -13,7 +13,7 @@ import { ForgeRepositoryEvidenceCollector } from './forge-repository.adapter.js'
 // owns.
 
 const NEVER_ABORTED = new AbortController().signal
-const A_LONG_TIME = 60_000
+const A_LONG_TIME = 15_000
 const SLUG = { owner: 'an-owner', name: 'a-repository' }
 
 const FULL_VOCABULARY: readonly AxisVocabulary[] = [
@@ -108,22 +108,77 @@ const TWELVE_DELIVERIES: readonly RecordedPullRequest[] = Array.from(
   }),
 )
 
-function collectFrom(
+async function collectFrom(
   vocabulary: readonly AxisVocabulary[] = FULL_VOCABULARY,
   signal: AbortSignal = NEVER_ABORTED,
 ): Promise<readonly Observation[]> {
   const deliveries = forgeDeliveryReader(SLUG, '.')
-  return new ForgeRepositoryEvidenceCollector(SLUG, deliveries).collect({
-    path: '.',
-    vocabulary,
-    signal,
-  })
+  return (
+    await new ForgeRepositoryEvidenceCollector(SLUG, deliveries).collect({
+      path: '.',
+      vocabulary,
+      signal,
+    })
+  ).observations
 }
 
 const on = (observations: readonly Observation[], axis: string, reading: string) =>
   observations.find((observation) => observation.axis === axis && observation.reading === reading)
 
 describe('the forge evidence collector', () => {
+  it(
+    'reports an active-day diagnostic while withholding parallelism from a short sample',
+    async () => {
+      await ghAnswering(
+        payload(
+          [10, 11, 12, 13, 14].map((day, index) => ({
+            mergedAt: DAY(day),
+            lines: 50,
+            files: 2,
+            commitDays: [DAY((index % 3) + 1)],
+          })),
+        ),
+      )
+
+      const collection = await new ForgeRepositoryEvidenceCollector(
+        SLUG,
+        forgeDeliveryReader(SLUG, '.'),
+      ).collect({
+        path: '.',
+        vocabulary: FULL_VOCABULARY,
+        signal: NEVER_ABORTED,
+      })
+
+      expect(on(collection.observations, 'parallelism', 'SUSTAINED')).toBeUndefined()
+      expect(collection.diagnostics).toEqual([
+        {
+          collector: 'forge-repository',
+          axis: 'parallelism',
+          reason: 'INSUFFICIENT_ACTIVE_DAYS',
+          observed: 3,
+          minimum: 5,
+        },
+      ])
+    },
+    A_LONG_TIME,
+  )
+
+  it(
+    'does not report a sample diagnostic once five active days establish parallelism',
+    async () => {
+      await ghAnswering(payload(TWELVE_DELIVERIES))
+
+      await expect(
+        new ForgeRepositoryEvidenceCollector(SLUG, forgeDeliveryReader(SLUG, '.')).collect({
+          path: '.',
+          vocabulary: FULL_VOCABULARY,
+          signal: NEVER_ABORTED,
+        }),
+      ).resolves.toMatchObject({ diagnostics: [] })
+    },
+    A_LONG_TIME,
+  )
+
   it(
     'tags what the subject sustains apart from what it demonstrated, on the same axis',
     async () => {
@@ -212,7 +267,9 @@ describe('the forge evidence collector', () => {
       })
 
       expect(collector.supportedAxes).not.toContain('harness')
-      expect(observations.map((observation) => observation.axis)).not.toContain('harness')
+      expect(observations.observations.map((observation) => observation.axis)).not.toContain(
+        'harness',
+      )
     },
     A_LONG_TIME,
   )

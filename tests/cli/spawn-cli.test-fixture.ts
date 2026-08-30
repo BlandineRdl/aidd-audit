@@ -34,12 +34,32 @@ export interface CliRun {
 }
 
 export function runCli(...args: readonly string[]): CliRun {
+  return runCliWith({}, ...args)
+}
+
+export function runCliFresh(...args: readonly string[]): CliRun {
+  return runCliWith({}, ...args)
+}
+
+export function runCliWithHome(args: readonly string[], home: string): CliRun {
+  return runCliWith({ HOME: home }, ...args)
+}
+
+// SAFETY: NO_COLOR and FORCE_COLOR are dropped from the inherited environment before `overrides`
+// are applied. A developer who exports either in their shell would otherwise change what the gate
+// asserts, and a suite that spawns a binary must not depend on who is running it.
+export function runCliWith(
+  overrides: Readonly<Record<string, string>>,
+  ...args: readonly string[]
+): CliRun {
+  const { NO_COLOR: _off, FORCE_COLOR: _on, ...inherited } = process.env
   const result = spawnSync(process.execPath, [BUNDLE, ...args], {
     cwd: REPO_ROOT,
     encoding: 'utf8',
     env: {
-      ...process.env,
+      ...inherited,
       PATH: `${directoryHoldingARefusingGh()}:${process.env.PATH ?? ''}`,
+      ...overrides,
     },
   })
   if (result.error !== undefined) throw result.error

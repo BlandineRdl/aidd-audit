@@ -26,6 +26,47 @@ const SENTINELS = [
     },
   },
   {
+    // A widened rule is unproven in the folder it newly reaches until a sentinel sits there.
+    rule: 'maturity-is-a-peer',
+    from: 'src/maturity/usecases/__boundary-sentinel__peer-harness.ts',
+    files: {
+      'src/harness/models/__boundary-sentinel__target-from-maturity.ts':
+        'export const target = 1\n',
+      'src/maturity/usecases/__boundary-sentinel__peer-harness.ts':
+        "import { target } from '../../harness/models/__boundary-sentinel__target-from-maturity.js'\nexport const breach = target\n",
+    },
+  },
+  {
+    rule: 'evidence-is-a-peer',
+    from: 'src/evidence/usecases/__boundary-sentinel__peer-harness.ts',
+    files: {
+      'src/harness/models/__boundary-sentinel__target-from-evidence.ts':
+        'export const target = 1\n',
+      'src/evidence/usecases/__boundary-sentinel__peer-harness.ts':
+        "import { target } from '../../harness/models/__boundary-sentinel__target-from-evidence.js'\nexport const breach = target\n",
+    },
+  },
+  {
+    rule: 'harness-is-a-peer',
+    from: 'src/harness/usecases/__boundary-sentinel__peer.ts',
+    files: {
+      'src/maturity/models/__boundary-sentinel__target-from-harness.ts':
+        'export const target = 1\n',
+      'src/harness/usecases/__boundary-sentinel__peer.ts':
+        "import { target } from '../../maturity/models/__boundary-sentinel__target-from-harness.js'\nexport const breach = target\n",
+    },
+  },
+  {
+    rule: 'assessment-never-depends-on-harness',
+    from: 'src/assessment/usecases/__boundary-sentinel__harness.ts',
+    files: {
+      'src/harness/models/__boundary-sentinel__target-from-assessment.ts':
+        'export const target = 1\n',
+      'src/assessment/usecases/__boundary-sentinel__harness.ts':
+        "import { target } from '../../harness/models/__boundary-sentinel__target-from-assessment.js'\nexport const breach = target\n",
+    },
+  },
+  {
     rule: 'assessment-composes-never-adapts',
     from: 'src/assessment/usecases/__boundary-sentinel__adapter.ts',
     files: {
@@ -203,6 +244,150 @@ const SENTINELS = [
     from: 'src/evidence/ports/__boundary-sentinel__vendor.ts',
     files: {
       'src/evidence/ports/__boundary-sentinel__vendor.ts':
+        "import { parse } from 'yaml'\nexport const breach = parse\n",
+    },
+  },
+  {
+    rule: 'domain-has-no-filesystem',
+    from: 'src/harness/contracts/__boundary-sentinel__fs.ts',
+    files: {
+      'src/harness/contracts/__boundary-sentinel__fs.ts':
+        "import { readFileSync } from 'node:fs'\nexport const breach = readFileSync\n",
+    },
+  },
+  {
+    rule: 'domain-has-no-processes',
+    from: 'src/harness/contracts/__boundary-sentinel__proc.ts',
+    files: {
+      'src/harness/contracts/__boundary-sentinel__proc.ts':
+        "import { execSync } from 'node:child_process'\nexport const breach = execSync\n",
+    },
+  },
+  {
+    rule: 'domain-has-no-vendor-sdk',
+    from: 'src/harness/contracts/__boundary-sentinel__vendor.ts',
+    files: {
+      'src/harness/contracts/__boundary-sentinel__vendor.ts':
+        "import { parse } from 'yaml'\nexport const breach = parse\n",
+    },
+  },
+  {
+    rule: 'domain-has-no-filesystem',
+    from: 'src/harness/models/__boundary-sentinel__fs.ts',
+    files: {
+      'src/harness/models/__boundary-sentinel__fs.ts':
+        "import { readFileSync } from 'node:fs'\nexport const breach = readFileSync\n",
+    },
+  },
+  {
+    rule: 'domain-has-no-processes',
+    from: 'src/harness/models/__boundary-sentinel__proc.ts',
+    files: {
+      'src/harness/models/__boundary-sentinel__proc.ts':
+        "import { execSync } from 'node:child_process'\nexport const breach = execSync\n",
+    },
+  },
+  {
+    rule: 'domain-has-no-vendor-sdk',
+    from: 'src/harness/models/__boundary-sentinel__vendor.ts',
+    files: {
+      'src/harness/models/__boundary-sentinel__vendor.ts':
+        "import { parse } from 'yaml'\nexport const breach = parse\n",
+    },
+  },
+  {
+    rule: 'domain-has-no-filesystem',
+    from: 'src/harness/ports/__boundary-sentinel__fs.ts',
+    files: {
+      'src/harness/ports/__boundary-sentinel__fs.ts':
+        "import { readFileSync } from 'node:fs'\nexport const breach = readFileSync\n",
+    },
+  },
+  {
+    rule: 'domain-has-no-processes',
+    from: 'src/harness/ports/__boundary-sentinel__proc.ts',
+    files: {
+      'src/harness/ports/__boundary-sentinel__proc.ts':
+        "import { execSync } from 'node:child_process'\nexport const breach = execSync\n",
+    },
+  },
+  {
+    rule: 'domain-has-no-vendor-sdk',
+    from: 'src/harness/ports/__boundary-sentinel__vendor.ts',
+    files: {
+      'src/harness/ports/__boundary-sentinel__vendor.ts':
+        "import { parse } from 'yaml'\nexport const breach = parse\n",
+    },
+  },
+  {
+    rule: 'domain-has-no-filesystem',
+    from: 'src/harness/measurement/__boundary-sentinel__fs.ts',
+    files: {
+      'src/harness/measurement/__boundary-sentinel__fs.ts':
+        "import { readFileSync } from 'node:fs'\nexport const breach = readFileSync\n",
+    },
+  },
+  {
+    rule: 'domain-has-no-processes',
+    from: 'src/harness/measurement/__boundary-sentinel__proc.ts',
+    files: {
+      'src/harness/measurement/__boundary-sentinel__proc.ts':
+        "import { execSync } from 'node:child_process'\nexport const breach = execSync\n",
+    },
+  },
+  {
+    rule: 'domain-has-no-vendor-sdk',
+    from: 'src/harness/measurement/__boundary-sentinel__vendor.ts',
+    files: {
+      'src/harness/measurement/__boundary-sentinel__vendor.ts':
+        "import { parse } from 'yaml'\nexport const breach = parse\n",
+    },
+  },
+  {
+    rule: 'domain-has-no-filesystem',
+    from: 'src/harness/usecases/__boundary-sentinel__fs.ts',
+    files: {
+      'src/harness/usecases/__boundary-sentinel__fs.ts':
+        "import { readFileSync } from 'node:fs'\nexport const breach = readFileSync\n",
+    },
+  },
+  {
+    rule: 'domain-has-no-processes',
+    from: 'src/harness/usecases/__boundary-sentinel__proc.ts',
+    files: {
+      'src/harness/usecases/__boundary-sentinel__proc.ts':
+        "import { execSync } from 'node:child_process'\nexport const breach = execSync\n",
+    },
+  },
+  {
+    rule: 'domain-has-no-vendor-sdk',
+    from: 'src/harness/usecases/__boundary-sentinel__vendor.ts',
+    files: {
+      'src/harness/usecases/__boundary-sentinel__vendor.ts':
+        "import { parse } from 'yaml'\nexport const breach = parse\n",
+    },
+  },
+  {
+    rule: 'domain-has-no-filesystem',
+    from: 'src/harness/advice/__boundary-sentinel__fs.ts',
+    files: {
+      'src/harness/advice/__boundary-sentinel__fs.ts':
+        "import { readFileSync } from 'node:fs'\nexport const breach = readFileSync\n",
+    },
+  },
+  {
+    rule: 'domain-has-no-processes',
+    from: 'src/harness/advice/__boundary-sentinel__proc.ts',
+    files: {
+      'src/harness/advice/__boundary-sentinel__proc.ts':
+        "import { execSync } from 'node:child_process'\nexport const breach = execSync\n",
+    },
+  },
+  {
+    rule: 'domain-has-no-vendor-sdk',
+    from: 'src/harness/advice/__boundary-sentinel__vendor.ts',
+    files: {
+      'src/harness/advice/__boundary-sentinel__vendor.ts':
         "import { parse } from 'yaml'\nexport const breach = parse\n",
     },
   },

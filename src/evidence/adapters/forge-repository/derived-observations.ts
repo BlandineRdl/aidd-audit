@@ -102,7 +102,10 @@ export function deriveObservations(
   return observations
 }
 
-function scaleFor(vocabulary: readonly AxisVocabulary[], axis: AxisId): AxisVocabulary | undefined {
+export function scaleFor(
+  vocabulary: readonly AxisVocabulary[],
+  axis: AxisId,
+): AxisVocabulary | undefined {
   return vocabulary.find((scale) => scale.axis === axis)
 }
 

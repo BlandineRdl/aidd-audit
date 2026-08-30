@@ -22,6 +22,7 @@ A modular monolith with bounded contexts and hexagonal boundaries:
 ```mermaid id="wjrf9s"
 flowchart LR
   CLI["cli — driving adapter"] --> ASSESS["assessment — orchestration"]
+  CLI --> HARN["harness — cost & shape audit"]
 
   ASSESS --> EV["evidence — collect + resolve"]
   ASSESS --> MAT["maturity — decision engine"]
@@ -35,6 +36,8 @@ flowchart LR
 ```
 
 No `maturity-model.port.ts` exists, and the loader is therefore **not** an adapter: nothing asks `maturity` for a model through an abstraction yet, so there is no port to implement. It lives in `loading/` and is named for what it does. When a use case needs "give me a maturity model", the port appears with that consumer and this file becomes its YAML implementation. A port with one implementation and no consumer would be a wall with no door.
+
+`harness` hangs directly off `cli`, never off `assessment`: it is a second command with its own JSON shape, and the diagram's missing arrow from `assessment` to `harness` — or the reverse — is the point, not an omission. See `harness-is-a-peer` and `assessment-never-depends-on-harness` below.
 
 ## Contexts
 
@@ -55,6 +58,18 @@ Owns observation collection and evidence resolution, including collector ports a
 **A roster answers no axis, and this is why it is a second port rather than a second collector.** `EvidenceCollector` emits observations that `resolveEvidence` compares one axis at a time; N contributors each emitting `size` would be N values of one axis, which resolution turns into `CONFLICTING` and destroys that axis for the repository and for every person at once. A roster answers a different question — who was active, and what does each person's own sample prove — so nothing it returns ever reaches `resolveEvidence`, and no collector learns that it exists.
 
 It knows nothing about maturity calculation, assessment orchestration, or CLI concerns.
+
+### `harness`
+
+Owns harness measurement: what a Claude repository loads at session opening, how heavy each part is, how much repeats, and how it is written. A third peer of `maturity` and `evidence`, not a third input to `assessment` — it feeds no axis and no field of the assessment report, so it is reached directly by `cli` through a second command rather than through `assess-maturity.usecase`.
+
+`composeHarnessAudit` lives in `measurement/`, alongside `models/`, `contracts/`, `ports/` and `usecases/`, for the reason `checkMaturity` and `resolveEvidence` live outside theirs: it takes domain values — a tool name, the files a source read, an encoder — and returns one, loading and collecting nothing. `measurement/` was added to the same folder-name-matched dependency-cruiser rules `models/`, `usecases/`, `contracts/`, `engine/`, `resolution/` and `composition/` already sat inside, rather than earning its own rule — it needed its own sentinel in its own folder for exactly that reason; see `coding-assertions.md`.
+
+`auditHarness` in `usecases/` is the sequencer: it reads through the port it is handed, then composes, nothing else. It chooses no adapter and loads no configuration — both belong to `cli/`, which builds `ClaudeHarnessAdapter` and `GptTokenizerEncoderAdapter` and passes them in, the same composition-root discipline `assessment` follows for its own collectors.
+
+`HarnessSourcePort` is one port, `HarnessTree` is not one. `harness/adapters/claude/harness-tree.ts` names the same shape `evidence/adapters/harness/harness-tree.ts` already names for the maturity axis — `entries` and `read` over one directory — and this context declares its own copy rather than importing that one. Reusing it would make a new context depend on another context's concrete infrastructure, which is exactly what `harness-is-a-peer` forbids; forbidding it after the fact would cost another rule and another sentinel. Re-declaring a thirteen-line interface here is cheaper than the wall it would otherwise need. Like its counterpart, this seam is **not** a port: it crosses no context boundary, it abstracts nothing the domain knows about, and both its implementations — a real directory walk, a fixture in its own suite — are adapters. It is named for what it is and lives beside them.
+
+It knows nothing about maturity calculation, evidence collection, assessment orchestration, or CLI concerns.
 
 ### `assessment`
 
@@ -86,18 +101,18 @@ It contains no business logic.
 
 ```text id="6e4trr"
 cli
- ↓
-assessment
+ ↓         ↘
+assessment  harness
  ↙       ↘
 evidence  maturity
 ```
 
-* `maturity` and `evidence` are peers and never import each other.
-* Neither imports `assessment` or `cli`.
-* `assessment` depends on their public APIs, never their concrete adapters.
+* `maturity`, `evidence` and `harness` are peers and never import one another.
+* None of the three imports `assessment` or `cli`.
+* `assessment` depends on `evidence` and `maturity`'s public APIs, never their concrete adapters, and never on `harness` at all — `assessment-never-depends-on-harness` makes that second rule explicit, since the folder-name pattern the first three rules share would not otherwise catch a peer reached by a different route.
 * Domain and use-case files never depend on filesystem, Git processes, YAML parsers, or vendor SDKs.
 * Concrete infrastructure stays behind ports.
-* dependency-cruiser enforces these rules mechanically.
+* dependency-cruiser enforces these rules mechanically, widened by `harness-is-a-peer` and `assessment-never-depends-on-harness` when this context landed — nine rules became eleven, and the boundary-proving script went from proving eight of them to ten, with sentinel count rising from 25 to 44; see `coding-assertions.md`.
 
 ## Public boundary
 
@@ -109,6 +124,8 @@ Driving adapters consume this contract; they do not reshape domain semantics the
 
 `AssessmentReport` gains `contributors: ContributorRosterReport | null`, required and nullable like `demonstrated` before it, and `schemaVersion` stays 1 for the same reason `demonstrated` did not move it: a consumer reading `proven` alone sees exactly what it saw before the field existed. Three values sit on the block rather than on a row — `windowDays`, `harnessObserved` and `harnessPaths` — because every row is measured over one window against one harness set, and a per-row copy is two rows free to disagree about a fact neither of them owns.
 
+`harness/contracts/harness-audit-report.contract.ts` is a second, unrelated versioned public shape with its own `schemaVersion`, starting at `1` independently of the assessment contract's own count. The MVP keeps it at `1` while the contract evolves. Its named chosen findings are advice, not maturity: the assessment contract gains no level, requirement, or verdict from them.
+
 ## Runtime boundaries
 
 The maturity model is loaded through `maturity/loading/load-maturity-model.ts` (`loadMaturityModel` / `parseMaturityModel`), the only place in `maturity` that may import `yaml` or `node:fs`. It parses YAML, checks shape and vocabulary, verifies every level covers every declared axis, and guarantees cumulativity before returning a `MaturityModel` the engine may trust without re-checking. A rejection throws `InvalidMaturityModelError`, naming what is wrong.
@@ -117,7 +134,7 @@ Evidence is collected through collector ports. Fixture and live-repository colle
 
 The live-repository adapter may access the real filesystem and local Git. The fixture-bundle adapter may access the real filesystem, and reads a directory holding a `profile.json`. The forge-repository adapter may spawn `gh` and reach the network; it is the only one that may, and it is constructed only for a subject whose origin declares a GitHub repository.
 
-They share every rule that decides a value: the `harness` scan between the two that read a tree, and `size-buckets.ts`, `delivery-sample.ts`, `intervention-scale.ts` and `autonomy.ts` across all three. The port promises they are interchangeable, and a rule two of them computed differently would break that promise. `autonomy.ts` holds the zero-touch share and the single `intervention` value either may reach: the live collector grants it from authorship, the bundle from its record, and the two must agree on the bar and on what clearing it is called. The scan reads a tree through `adapters/harness/harness-tree.ts`, which each adapter supplies — `git ls-files` on one side, a directory walk on the other. That seam is **not** a port: it crosses no context boundary, it abstracts nothing the domain knows about, and both its implementations are adapters. It lives beside them and is named for what it is.
+They share every rule that decides a value: the `harness` scan between the two that read a tree, and `size-buckets.ts`, `delivery-sample.ts`, `intervention-scale.ts` and `autonomy.ts` across all three. The port promises they are interchangeable, and a rule two of them computed differently would break that promise. `autonomy.ts` holds the zero-touch share and the single `intervention` value either may reach: the live collector grants it from authorship, the bundle from its record, and the two must agree on the bar and on what clearing it is called. The scan reads a tree through `adapters/harness/harness-tree.ts`, which each adapter supplies — `git ls-files` on one side, a directory walk on the other. That seam is **not** a port: it crosses no context boundary, it abstracts nothing the domain knows about, and both its implementations are adapters. It is nevertheless the scan's complete input contract: consumer tests may use a faithful in-memory tree, while each production translation owns integration tests for the source-specific facts it emits. It lives beside the adapters and is named for what it is.
 
 Inside `adapters/harness/`, the split is by question answered, not by size. `harness-scan.ts` decides the four capabilities and delegates every one of them; recognising a coding agent, reading a shell loop's continuation, and matching a context file are three unrelated problems that happened to share a file. The layering is one-way — `shell-loop` over `agent-invocation` over `shell-tokens` — so someone correcting how `CLAUDE.md` is found never opens the tokeniser, and someone working on retry loops cannot reach the context-engineering table. There is deliberately no `shell/` subtree: one file per question is the whole of it, and a lexer, a parser and a variable analysis filed separately would be a framework nobody asked for.
 

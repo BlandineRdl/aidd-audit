@@ -1,0 +1,58 @@
+{
+  "period": {
+    "from": "2026-01-15",
+    "to": "2026-07-15"
+  },
+  "repositories": 3,
+  "pull_requests": {
+    "total": 64,
+    "size_distribution": {
+      "xs": 4,
+      "s": 18,
+      "m": 31,
+      "l": 10,
+      "xl": 1
+    },
+    "median_files_changed": 6.5,
+    "median_lines_changed": 232.5,
+    "median_correction_commits_after_open": 3,
+    "merged_without_human_edit_after_open": 9,
+    "reverted": 3,
+    "median_review_comments_received": 5.5
+  },
+  "commits": {
+    "total": 603,
+    "median_per_pr": 9,
+    "ai_coauthored_ratio": 0.74,
+    "message_convention_compliance": 0.86
+  },
+  "tests": {
+    "coverage_start": 0.61,
+    "coverage_end": 0.68,
+    "prs_with_tests_ratio": 0.77
+  },
+  "parallelism": {
+    "max_concurrent_branches": 2,
+    "median_concurrent_branches": 1
+  },
+  "ci": {
+    "failure_rate": 0.22,
+    "median_runs_to_green": 2.5
+  },
+  "context_files": {
+    "agents_md": true,
+    "rules_count": 0,
+    "skills_count": 0,
+    "hooks_count": 0,
+    "agents_count": 0,
+    "last_updated": "2026-02-03"
+  },
+  "assistant_usage": {
+    "declared_tools": [
+      "cursor"
+    ],
+    "editor_integration": true,
+    "sessions_per_week": 22,
+    "tokens_per_week": 1450000
+  }
+}

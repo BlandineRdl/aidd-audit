@@ -2,7 +2,14 @@
   "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
   "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
   "files": {
-    "includes": ["**", "!profiles/**", "!dist/**", "!node_modules/**", "!pnpm-lock.yaml"]
+    "includes": [
+      "**",
+      "!plugins/aidd-evaluation/bin/cli.js",
+      "!profiles/**",
+      "!dist/**",
+      "!node_modules/**",
+      "!pnpm-lock.yaml"
+    ]
   },
   "formatter": {
     "enabled": true,

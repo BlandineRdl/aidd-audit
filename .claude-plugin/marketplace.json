@@ -1,0 +1,14 @@
+{
+  "name": "aidd-evaluation",
+  "owner": {
+    "name": "BlandineRdl"
+  },
+  "description": "Plugins AIDD maintenus par Black Sun.",
+  "plugins": [
+    {
+      "name": "aidd-evaluation",
+      "source": "./plugins/aidd-evaluation",
+      "description": "Évalue la maturité AIDD et audite le coût du contexte Claude d’un projet à partir de preuves observables."
+    }
+  ]
+}

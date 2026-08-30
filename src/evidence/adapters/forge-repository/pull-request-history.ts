@@ -29,6 +29,7 @@ export interface ForgeDerivedMetrics {
   readonly demonstratedIntervention: DemonstratedValue<string> | null
   readonly parallelism: number | null
   readonly demonstratedParallelism: DemonstratedValue<number> | null
+  readonly activeDays: number | null
 }
 
 const UNRECOVERABLE: ForgeDerivedMetrics = {
@@ -38,6 +39,7 @@ const UNRECOVERABLE: ForgeDerivedMetrics = {
   demonstratedIntervention: null,
   parallelism: null,
   demonstratedParallelism: null,
+  activeDays: null,
 }
 
 // INVARIANT: One delivered change is one merged pull request, which is why this collector sees what
@@ -144,6 +146,7 @@ export function deriveForgeMetrics(
     demonstratedIntervention: readDemonstratedIntervention(deliveries),
     parallelism: readParallelism(requestsPerActiveDay),
     demonstratedParallelism: readDemonstratedParallelism(requestsPerActiveDay),
+    activeDays: requestsPerActiveDay.length,
   }
 }
 

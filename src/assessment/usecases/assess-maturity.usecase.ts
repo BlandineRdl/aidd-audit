@@ -21,7 +21,7 @@ export interface AssessMaturityRequest {
 export async function assessMaturity(request: AssessMaturityRequest): Promise<AssessmentReport> {
   const { subjectPath, model, collectors, roster, signal } = request
   const vocabulary = axisVocabularyOf(model)
-  const { evidence, provenance } = await collectEvidence({
+  const { evidence, provenance, diagnostics } = await collectEvidence({
     path: subjectPath,
     vocabulary,
     collectors,
@@ -30,7 +30,14 @@ export async function assessMaturity(request: AssessMaturityRequest): Promise<As
   // INVARIANT: read after collection, never concurrently with it — the sequencer's job is order,
   // and overlapping the two forge round trips would buy a latency nobody has measured.
   const run = await readRoster(roster, { path: subjectPath, vocabulary, signal })
-  return composeAssessmentReport({ subjectPath, model, evidence, provenance, roster: run })
+  return composeAssessmentReport({
+    subjectPath,
+    model,
+    evidence,
+    provenance,
+    diagnostics,
+    roster: run,
+  })
 }
 
 // INVARIANT: a roster that could not be read is a gap in the document, never a failure of the run —

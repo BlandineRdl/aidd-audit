@@ -1,5 +1,5 @@
-import { execFile } from 'node:child_process'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { execFile, execFileSync } from 'node:child_process'
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { chmod, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -9,6 +9,7 @@ import type { AssessmentReport } from '../../assessment/contracts/assessment-rep
 import { gitEnvironment } from '../../evidence/adapters/live-repository/git-process.js'
 import type { Observation } from '../../evidence/models/observation.model.js'
 import type {
+  CollectorCollection,
   CollectorContext,
   EvidenceCollector,
 } from '../../evidence/ports/evidence-collector.port.js'
@@ -30,6 +31,7 @@ function capturingIo(): { io: CommandIo; stdout: () => string; stderr: () => str
     io: {
       stdout: (text) => out.push(text),
       stderr: (text) => err.push(text),
+      colours: false,
     },
     stdout: () => out.join(''),
     stderr: () => err.join(''),
@@ -55,7 +57,7 @@ describe('runAssess — happy path', () => {
 
     expect(exitCode).toBe(0)
     expect(stderr()).toBe('')
-    expect(stdout()).toContain('could not be established')
+    expect(stdout()).toContain("Aucun niveau n'a pu être entièrement prouvé")
   })
 
   it('renders the frozen contract under --json', async () => {
@@ -95,6 +97,156 @@ describe('runAssess — happy path', () => {
     await runAssess(['assess', PERCEVAL, '--json', '--model', 'aidd.yml'], withOverride.io)
 
     expect(withOverride.stdout()).toEqual(withDefault.stdout())
+  })
+})
+
+describe('runAssess — a set of exactly one bundle still publishes the set shape', () => {
+  let tempDir: string | undefined
+
+  afterEach(() => {
+    if (tempDir !== undefined) {
+      rmSync(tempDir, { recursive: true, force: true })
+      tempDir = undefined
+    }
+  })
+
+  function directoryHoldingOneBundle(): string {
+    tempDir = mkdtempSync(join(tmpdir(), 'aidd-audit-one-bundle-'))
+    const bundle = join(tempDir, 'only')
+    mkdirSync(bundle)
+    writeFileSync(join(bundle, 'profile.json'), '{}')
+    return tempDir
+  }
+
+  it('renders an array under --json, not the bare object a lone subject publishes', async () => {
+    const { io, stdout } = capturingIo()
+
+    const exitCode = await runAssess(['assess', directoryHoldingOneBundle(), '--json'], io)
+
+    expect(exitCode).toBe(0)
+    const parsed = JSON.parse(stdout())
+    expect(Array.isArray(parsed)).toBe(true)
+    expect(parsed).toHaveLength(1)
+  })
+
+  it('publishes a document for the bundle itself, not for the directory holding it', async () => {
+    const { io, stdout } = capturingIo()
+    const directory = directoryHoldingOneBundle()
+
+    const exitCode = await runAssess(['assess', directory, '--json'], io)
+
+    expect(exitCode).toBe(0)
+    const documents = JSON.parse(stdout()) as readonly AssessmentReport[]
+    expect(documents).toHaveLength(1)
+    expect(documents[0]?.subject.path).toBe(join(directory, 'only'))
+  })
+})
+
+describe('runAssess — a set member that is its own work-tree root', () => {
+  let tempDir: string | undefined
+  let originalPath: string | undefined
+
+  afterEach(() => {
+    if (originalPath !== undefined) {
+      process.env.PATH = originalPath
+      originalPath = undefined
+    }
+    if (tempDir !== undefined) {
+      rmSync(tempDir, { recursive: true, force: true })
+      tempDir = undefined
+    }
+  })
+
+  // SAFETY: a `gh` that refuses is put ahead of any real one, so the forge is asked and answers
+  // FAILED instead of reaching the network from inside the gate. What is under test is which
+  // collectors the composition root builds, and a refusal names itself in `provenance` just as an
+  // answer would.
+  function refusingGhOnPath(directory: string): void {
+    const bin = join(directory, 'bin')
+    mkdirSync(bin)
+    const script = join(bin, 'gh')
+    writeFileSync(script, '#!/bin/sh\necho "gh: no credentials in this run" >&2\nexit 1\n')
+    chmodSync(script, 0o755)
+    originalPath = process.env.PATH
+    process.env.PATH = `${bin}:${process.env.PATH ?? ''}`
+  }
+
+  // INVARIANT: a bundle is free to be a git repository nested inside a plain directory, so a set's
+  // members are not all non-roots just because the directory holding them is one.
+  function setHoldingARepositoryBundle(): { directory: string; member: string } {
+    tempDir = mkdtempSync(join(tmpdir(), 'aidd-audit-set-member-root-'))
+    refusingGhOnPath(tempDir)
+
+    const member = join(tempDir, 'member')
+    mkdirSync(member)
+    writeFileSync(join(member, 'profile.json'), '{}')
+    // SAFETY: `gitEnvironment()` drops the `GIT_*` variables a running git hook exports. Without it
+    // these commands are aimed at the enclosing repository rather than the bundle, and the suite
+    // passes standalone while failing under `pre-commit` — which is where it first did.
+    const git = (...args: readonly string[]): void => {
+      execFileSync('git', [...args], { cwd: member, stdio: 'ignore', env: gitEnvironment() })
+    }
+    git('-c', 'init.defaultBranch=main', 'init', '-q')
+    git('remote', 'add', 'origin', 'https://github.com/an-owner/a-repository.git')
+
+    return { directory: tempDir, member }
+  }
+
+  async function documentsFor(...argv: readonly string[]): Promise<readonly AssessmentReport[]> {
+    const { io, stdout } = capturingIo()
+    const exitCode = await runAssess(['assess', ...argv, '--json'], io)
+
+    expect(exitCode).toBe(0)
+    const published: unknown = JSON.parse(stdout())
+    return (Array.isArray(published) ? published : [published]) as AssessmentReport[]
+  }
+
+  it('publishes inside a set the document it publishes when named alone', async () => {
+    const { directory, member } = setHoldingARepositoryBundle()
+
+    const [alone] = await documentsFor(member)
+    const [inTheSet] = await documentsFor(directory)
+
+    // INVARIANT: the forge is what a member loses when the work-tree-root answer is inherited from
+    // the directory holding it rather than asked of the member, so its presence is what makes the
+    // equality below prove anything.
+    expect(alone?.provenance.map((entry) => entry.collector)).toContain('forge-repository')
+    expect(inTheSet).toEqual(alone)
+  })
+})
+
+describe('runAssess — a set publishes every report or none', () => {
+  let tempDir: string | undefined
+
+  afterEach(() => {
+    if (tempDir !== undefined) {
+      rmSync(tempDir, { recursive: true, force: true })
+      tempDir = undefined
+    }
+  })
+
+  function twoBundles(): string {
+    tempDir = mkdtempSync(join(tmpdir(), 'aidd-audit-partial-set-'))
+    for (const name of ['first', 'second']) {
+      const bundle = join(tempDir, name)
+      mkdirSync(bundle)
+      writeFileSync(join(bundle, 'profile.json'), '{}')
+    }
+    return tempDir
+  }
+
+  it('writes nothing when the second report is the one that cannot be published', async () => {
+    const { io, stdout, stderr } = capturingIo()
+
+    const exitCode = await runAssess(['assess', twoBundles(), '--json'], io, {
+      collectors: [new PoisonedForOneSubject('second', Number.POSITIVE_INFINITY)],
+    })
+
+    // INVARIANT: the first report rendered cleanly. Publishing it and then failing would leave a
+    // caller holding half a set that reads like a whole one.
+    expect(exitCode).toBe(1)
+    expect(stdout()).toBe('')
+    expect(stderr()).toContain('Infinity')
   })
 })
 
@@ -255,6 +407,7 @@ describe('runAssess — model errors exit 2, nothing on stdout', () => {
         '  size:',
         '    kind: ordinal',
         '    values: [S, M, L]',
+        '    descriptions: { S: small, M: medium, L: large }',
         'axes:',
         '  - id: size',
         '    label: Size',
@@ -298,19 +451,57 @@ class OffVocabularyEvidenceCollector implements EvidenceCollector {
 
   constructor(private readonly value: string | number) {}
 
-  async collect(context: CollectorContext): Promise<readonly Observation[]> {
+  async collect(context: CollectorContext): Promise<{
+    readonly observations: readonly Observation[]
+    readonly diagnostics: readonly []
+  }> {
     context.signal.throwIfAborted()
-    return [
-      {
-        axis: 'parallelism',
-        reading: 'SUSTAINED',
-        value: this.value,
-        kind: 'OBSERVED',
-        collector: this.id,
-        basis: 'a value this suite chose',
-        demonstration: null,
-      },
-    ]
+    return {
+      observations: [
+        {
+          axis: 'parallelism',
+          reading: 'SUSTAINED' as const,
+          value: this.value,
+          kind: 'OBSERVED' as const,
+          collector: this.id,
+          basis: 'a value this suite chose',
+          demonstration: null,
+        },
+      ],
+      diagnostics: [],
+    }
+  }
+}
+
+// INVARIANT: answers `parallelism` for one named subject only, so a set's earlier reports render
+// cleanly and the refusal lands on a later one. Like its sibling above it fakes no domain
+// collaborator: everything downstream of it is the real pipeline.
+class PoisonedForOneSubject implements EvidenceCollector {
+  readonly id = 'poisoned-for-one-subject'
+  readonly supportedAxes: readonly string[] = ['parallelism']
+
+  constructor(
+    private readonly subjectName: string,
+    private readonly value: number,
+  ) {}
+
+  async collect(context: CollectorContext): Promise<CollectorCollection> {
+    context.signal.throwIfAborted()
+    if (!context.path.endsWith(this.subjectName)) return { observations: [], diagnostics: [] }
+    return {
+      observations: [
+        {
+          axis: 'parallelism',
+          reading: 'SUSTAINED',
+          value: this.value,
+          kind: 'OBSERVED',
+          collector: this.id,
+          basis: 'a value this suite chose',
+          demonstration: null,
+        },
+      ],
+      diagnostics: [],
+    }
   }
 }
 
@@ -437,7 +628,7 @@ describe('runAssess — the contributor roster', () => {
 
       const { io: proseIo, stdout: proseStdout } = capturingIo()
       await runAssess(['assess', repository], proseIo)
-      expect(proseStdout()).toContain('Contributors: could not be read')
+      expect(proseStdout()).toContain('Contributeurs : lecture impossible')
     },
     A_LONG_TIME,
   )
