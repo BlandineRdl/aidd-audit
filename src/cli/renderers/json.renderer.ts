@@ -3,6 +3,8 @@ import type {
   AxisVocabularyReport,
   AxisReport,
   BlockingRequirement,
+  ContributorRosterReport,
+  ContributorRow,
   CoverageReport,
   DemonstratedLevel,
   DemonstratedReport,
@@ -56,6 +58,7 @@ function projectReport(report: AssessmentReport): AssessmentReport {
     schemaVersion: report.schemaVersion,
     model: { id: report.model.id, schemaVersion: report.model.schemaVersion },
     subject: { path: report.subject.path },
+    contributors: projectContributors(report.contributors),
     proven: report.proven === null ? null : projectLevel(report.proven),
     next: report.next === null ? null : projectLevel(report.next),
     demonstrated: report.demonstrated === null ? null : projectDemonstrated(report.demonstrated),
@@ -196,5 +199,53 @@ function projectProvenanceEntry(entry: ProvenanceEntry): ProvenanceEntry {
         axes: entry.axes,
         reason: entry.reason,
       }
+  }
+}
+
+// SAFETY: branches on the roster's own status the way `projectProvenanceEntry` branches on a
+// collector's. The two arms differ by more than one key: a failed roster emits `reason` and no
+// `harnessObserved` or `harnessPaths`, because it scanned no tree; a completed one emits both and
+// no `reason`. Neither arm may emit the other's keys as `undefined`.
+function projectContributors(
+  contributors: ContributorRosterReport | null,
+): ContributorRosterReport | null {
+  if (contributors === null) return null
+
+  switch (contributors.status) {
+    case 'COMPLETED':
+      return {
+        status: contributors.status,
+        windowDays: contributors.windowDays,
+        harnessObserved: contributors.harnessObserved,
+        harnessPaths: contributors.harnessPaths,
+        rows: contributors.rows.map(projectContributorRow),
+      }
+    case 'FAILED':
+    case 'TIMED_OUT':
+      return { status: contributors.status, rows: [], reason: contributors.reason }
+  }
+}
+
+// Never spread: a field the contract does not declare must not reach the published output.
+function projectContributorRow(row: ContributorRow): ContributorRow {
+  return {
+    account: row.account,
+    emailAddresses: row.emailAddresses,
+    commits: row.commits,
+    deliveries: row.deliveries,
+    activeDays: row.activeDays,
+    harnessAuthorship:
+      row.harnessAuthorship === null
+        ? null
+        : { files: row.harnessAuthorship.files, commits: row.harnessAuthorship.commits },
+    proven: row.proven === null ? null : projectLevel(row.proven),
+    next: row.next === null ? null : projectLevel(row.next),
+    observed: row.observed.map((entry) => ({
+      axis: entry.axis,
+      value: entry.value,
+      evidence: entry.evidence,
+    })),
+    demonstrated: row.demonstrated === null ? null : projectDemonstrated(row.demonstrated),
+    blocking: row.blocking.map(projectBlockingRequirement),
   }
 }

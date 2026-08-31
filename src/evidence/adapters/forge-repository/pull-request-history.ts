@@ -44,7 +44,7 @@ const UNRECOVERABLE: ForgeDerivedMetrics = {
 
 // INVARIANT: One delivered change is one merged pull request, which is why this collector sees what
 // the graph cannot: a squash merge erases the branch but never the pull request.
-interface MergedPullRequest {
+export interface MergedPullRequest {
   readonly mergedAt: string
   readonly createdAt: string
   readonly lines: number
@@ -52,6 +52,7 @@ interface MergedPullRequest {
   readonly commitDays: readonly string[]
   readonly commitsAfterOpen: number
   readonly openedByABot: boolean
+  readonly openedBy: string | null
 }
 
 const PAGE_SIZE = 50
@@ -76,16 +77,17 @@ query($owner: String!, $name: String!, $size: Int!, $after: String) {
         additions
         deletions
         changedFiles
-        author { __typename }
+        author { __typename login }
         commits(first: 100) { nodes { commit { committedDate } } }
       }
     }
   }
 }`
 
-// INVARIANT: Rejects on an abort and on any refusal from `gh`, both of which the adapter turns into
-// an evidence gap. Returns nulls when the window holds too small a sample, never a value computed
-// from less than the floors allow.
+// INVARIANT: Rejects on an abort and on any refusal from `gh`. Answers `null` when the walk could
+// not be completed, or when the window end is not finite; a caller turns either into an evidence
+// gap. Answers `[]` for a walk that completed over a window that held nothing, which is not the same
+// failure.
 //
 // INVARIANT: `subjectActivityEnd` is the instant of the subject's most recent commit, so this
 // collector measures the same period as the local one and the two stay interchangeable behind their
@@ -93,13 +95,13 @@ query($owner: String!, $name: String!, $size: Int!, $after: String) {
 // commits pull the window back, and on a subject whose median sits near a bucket bound that moves
 // the reported level. `null` falls back to the most recent merge, which is all a subject whose
 // history could not be read still offers.
-export async function readForgeDerivedMetrics(
+export async function readDeliveredChanges(
   slug: RepositorySlug,
   subjectActivityEnd: number | null,
   signal: AbortSignal,
-): Promise<ForgeDerivedMetrics> {
+): Promise<readonly MergedPullRequest[] | null> {
   const merged = await readMergedPullRequests(slug, signal)
-  if (merged === null || merged.length === 0) return UNRECOVERABLE
+  if (merged === null) return null
 
   const windowEnd =
     subjectActivityEnd ??
@@ -107,7 +109,7 @@ export async function readForgeDerivedMetrics(
       (latest, request) => Math.max(latest, Date.parse(request.mergedAt)),
       Number.NEGATIVE_INFINITY,
     )
-  if (!Number.isFinite(windowEnd)) return UNRECOVERABLE
+  if (!Number.isFinite(windowEnd)) return null
 
   const windowStart = windowStartFrom(windowEnd)
   // SAFETY: bounded at both ends, because a pull request merged into another branch after the
@@ -119,20 +121,29 @@ export async function readForgeDerivedMetrics(
   // subject's work. On the repository this was written against, twenty such deliveries out of a
   // hundred and eight halved the median size and cost a whole level. An author GitHub cannot type is
   // kept: absence of proof that it is a bot is not proof that it is one.
-  const inWindow = merged.filter((request) => {
+  return merged.filter((request) => {
     if (request.openedByABot) return false
     const instant = Date.parse(request.mergedAt)
     return Number.isFinite(instant) && instant >= windowStart && instant <= windowEnd
   })
+}
 
-  const bucketPerDelivery = inWindow.map(bucketOf)
-  const requestsPerActiveDay = countRequestsPerActiveDay(inWindow)
+// INVARIANT: Returns nulls when the window holds too small a sample, never a value computed from
+// less than the floors allow. A `null` argument — a walk that could not complete — answers the same
+// six nulls.
+export function deriveForgeMetrics(
+  deliveries: readonly MergedPullRequest[] | null,
+): ForgeDerivedMetrics {
+  if (deliveries === null) return UNRECOVERABLE
+
+  const bucketPerDelivery = deliveries.map(bucketOf)
+  const requestsPerActiveDay = countRequestsPerActiveDay(deliveries)
 
   return {
-    sizeBucket: readSizeBucket(inWindow),
+    sizeBucket: readSizeBucket(deliveries),
     demonstratedSize: readDemonstratedSize(bucketPerDelivery),
-    intervention: readIntervention(inWindow),
-    demonstratedIntervention: readDemonstratedIntervention(inWindow),
+    intervention: readIntervention(deliveries),
+    demonstratedIntervention: readDemonstratedIntervention(deliveries),
     parallelism: readParallelism(requestsPerActiveDay),
     demonstratedParallelism: readDemonstratedParallelism(requestsPerActiveDay),
     activeDays: requestsPerActiveDay.length,
@@ -238,8 +249,12 @@ function readPullRequest(node: unknown): MergedPullRequest | null {
     commitsAfterOpen: commitDates.filter((date) => date > createdAt).length,
     // COMPAT: GitHub types a pull request's author, and a GitHub App comes back as `Bot`. That is a
     // structural fact rather than a name, so no list of bot logins has to be kept correct here —
-    // `renovate` and `dependabot` do not even carry a `[bot]` suffix on this field.
+    // `renovate` and `dependabot` do not even carry a `[bot]` suffix on this field. `login` is read
+    // from the same node and decides nothing here: it names whose sample a delivery belongs to,
+    // never whether the delivery counts at all.
     openedByABot: stringAt(objectAt(node, 'author'), '__typename') === 'Bot',
+    // `null` here is nobody GitHub can name: a deleted account, no author, or an empty login.
+    openedBy: stringAt(objectAt(node, 'author'), 'login'),
   }
 }
 

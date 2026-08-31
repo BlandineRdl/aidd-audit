@@ -4,6 +4,8 @@ import type {
   AxisReport,
   AxisVocabularyReport,
   BlockingRequirement,
+  ContributorRosterReport,
+  ContributorRow,
   DemonstratedAxis,
   EvidenceStatus,
   ObservedValue,
@@ -31,6 +33,7 @@ export function renderHumanReport(report: AssessmentReport, style: TextStyle = p
     renderNoCollectorsSection(rendering),
     renderIncompleteCollectorsSection(rendering),
     renderGapsSection(rendering),
+    renderContributorsSection(rendering),
   ]
   return sections.filter((section) => section.length > 0).join('\n\n')
 }
@@ -508,4 +511,307 @@ function descriptionFor(
   const scale = vocabularyFor(vocabulary, axis)
   if (scale === undefined || scale.kind === 'numeric') return undefined
   return scale.descriptions[term]
+}
+
+type CompletedRoster = Extract<ContributorRosterReport, { status: 'COMPLETED' }>
+type FailedRoster = Exclude<ContributorRosterReport, CompletedRoster>
+type PracticeBlocker = Extract<BlockingRequirement, { gap: 'PRACTICE' }>
+type EvidenceBlocker = Extract<BlockingRequirement, { gap: 'EVIDENCE' }>
+type PracticeRequirement = Extract<RequirementReport, { evidence: 'CONFIRMED' }>
+
+// INVARIANT: existence is keyed on `report.contributors === null` alone, never on the roster's own
+// status. Falling back to the repository-only rendering when the roster failed would make one
+// subject produce two documents depending on credentials, and `cli.md` promises the same bytes on
+// any machine, on any day.
+//
+// INVARIANT: it is the last section of the report, below the gaps. A reader quoting the first level
+// they meet must quote the repository's, never one account's.
+function renderContributorsSection(rendering: Rendering): string {
+  const { report, style } = rendering
+  const { contributors } = report
+  if (contributors === null) return ''
+
+  if (contributors.status !== 'COMPLETED') {
+    return style.heading(renderFailedRoster(contributors))
+  }
+
+  const header = style.heading(renderContributorsHeader(contributors))
+  if (contributors.rows.length === 0) {
+    return header
+  }
+
+  const rows = contributors.rows.map((row) => renderContributorRow(rendering, contributors, row))
+  const harness = renderSharedHarnessLine(rendering, contributors)
+
+  return [header, ...rows, ...(harness === null ? [] : [harness])].join('\n\n')
+}
+
+function renderFailedRoster(roster: FailedRoster): string {
+  return `Contributeurs : ${glossRosterStatus(roster.status)} — ${roster.reason}. Le niveau ci-dessus est inchangé.`
+}
+
+// INVARIANT: never `glossProvenanceStatus` — that one is typed on a provenance entry, and the
+// roster is not a collector and answers no axis.
+function glossRosterStatus(status: FailedRoster['status']): string {
+  switch (status) {
+    case 'FAILED':
+      return 'lecture impossible'
+    case 'TIMED_OUT':
+      return 'délai dépassé'
+  }
+}
+
+function renderContributorsHeader(contributors: CompletedRoster): string {
+  if (contributors.rows.length === 0) {
+    return `Contributeurs : aucun compte actif sur les ${contributors.windowDays} derniers jours.`
+  }
+
+  const named = contributors.rows.filter((row) => row.account !== null).length
+  const accounts = named === 1 ? '1 compte actif' : `${named} comptes actifs`
+  const unattributed = contributors.rows.some((row) => row.account === null)
+    ? ', plus des commits que GitHub ne rattache à aucun compte'
+    : ''
+
+  return `Contributeurs : ${accounts} sur les ${contributors.windowDays} derniers jours${unattributed}. Le niveau ci-dessus couvre toutes les livraisons de la fenêtre, quel qu'en soit l'auteur ; chaque ligne ci-dessous ne couvre que celles d'un compte.`
+}
+
+function renderContributorRow(
+  rendering: Rendering,
+  contributors: CompletedRoster,
+  row: ContributorRow,
+): string {
+  const { style } = rendering
+  const label = row.account ?? 'non rattaché'
+  const lines = [
+    style.heading(`  ${label} — ${renderRowProvenLabel(row)}`),
+    style.faint(`    ${renderRowSample(row)}`),
+  ]
+
+  const demonstrated = renderRowDemonstrated(rendering, row)
+  if (demonstrated !== null) lines.push(demonstrated)
+
+  // INVARIANT: what the row measured, printed only when it reached no level. A row with a level
+  // already carries its values inside that level's requirements; a row without one used to carry
+  // them nowhere, so the rows a reader most wants to understand were the ones saying least.
+  if (row.proven === null) {
+    const observed = renderRowObserved(rendering, row)
+    if (observed !== null) lines.push(observed)
+  }
+
+  // SAFETY: the aim and what stands in its way are one statement, never two. `pour atteindre X :`
+  // ends in a colon and must not stand alone — a row that named its next level and then said
+  // nothing about reaching it would read as a level already within reach. Both are keyed on
+  // `blocking` being non-empty rather than on `proven` being null, because a row that did prove a
+  // level still has a next one and still owes the reason it has not reached it.
+  if (row.blocking.length > 0) {
+    const aim = renderRowNext(rendering, row)
+    if (aim !== null) lines.push(aim)
+    lines.push(...renderRowGapLines(rendering, row))
+  }
+
+  lines.push(style.faint(`    ${renderRowHarness(row, contributors)}`))
+
+  return lines.join('\n')
+}
+
+// INVARIANT: the level this account is next in line for, named on every row that has one — the
+// question a person reads their own row to answer, and one the repository's own next level cannot
+// answer for them because it is measured over deliveries they did not make. The gap lines below say
+// what stands in the way; this says what it stands in the way of.
+function renderRowNext(rendering: Rendering, row: ContributorRow): string | null {
+  const { style } = rendering
+  if (row.next === null) return null
+  return style.faint(`    pour atteindre ${row.next.label} (rang ${row.next.rank}) :`)
+}
+
+// INVARIANT: only the axes this row's own evidence confirmed. An axis it could not establish is
+// left out rather than printed as unknown, because the gap lines below already name every one of
+// them and with the reason; repeating them here would state the same absence twice in two wordings.
+function renderRowObserved(rendering: Rendering, row: ContributorRow): string | null {
+  const { report, style } = rendering
+  // SAFETY: `value !== null` as well as CONFIRMED, so no entry can reach `formatScaleValue` with
+  // nothing to format. Coalescing an absent value to an empty array would print `l'ensemble vide`,
+  // which `cli.md` reserves for a set that was observed and found empty — the opposite sentence.
+  const confirmed = row.observed.flatMap((entry) =>
+    entry.evidence === 'CONFIRMED' && entry.value !== null
+      ? [{ axis: entry.axis, value: entry.value }]
+      : [],
+  )
+  if (confirmed.length === 0) return null
+
+  const parts = confirmed.map(
+    (entry) =>
+      `${labelFor(report, entry.axis) ?? entry.axis} : ${formatScaleValue(report, entry.axis, entry.value)}`,
+  )
+  return style.faint(`    observé sur son propre échantillon — ${parts.join(' · ')}`)
+}
+
+// INVARIANT: "aucun" is the row's own result and reads as the report's own null-proven line does —
+// never White, never a rank below the floor, and never a verdict on the person named beside it.
+function renderRowProvenLabel(row: ContributorRow): string {
+  return row.proven === null
+    ? 'niveau prouvé : aucun'
+    : `niveau prouvé : ${row.proven.label} (rang ${row.proven.rank})`
+}
+
+// INVARIANT: `activeDays` where the sample supported a reading, `commits` where it did not — a day
+// on which one of this account's own deliveries received a commit is meaningless at zero
+// deliveries, so the commit count is what tells "nothing to measure" from "measured and low" for
+// that row instead.
+function renderRowSample(row: ContributorRow): string {
+  if (row.deliveries === 0) {
+    const whose =
+      row.account === null ? " dont l'adresse d'auteur n'est rattachée à aucun compte GitHub" : ''
+    return `${countOf(0, 'livraison')} · ${countOf(row.commits, 'commit')}${whose}`
+  }
+  return `${countOf(row.deliveries, 'livraison')} · ${countOf(row.activeDays, 'jour actif', 'jours actifs')}`
+}
+
+// French agreement: a count below two takes the singular, zero included.
+function countOf(count: number, one: string, many = `${one}s`): string {
+  return `${count} ${count < 2 ? one : many}`
+}
+
+// SAFETY: never below the row's own proven level, and never without the share that earned it — the
+// same rule `renderDemonstratedSection` applies at the top of the document, down to the level line
+// that ends in a colon and never stands alone.
+function renderRowDemonstrated(rendering: Rendering, row: ContributorRow): string | null {
+  const { report, style } = rendering
+  const { demonstrated, proven } = row
+  if (demonstrated === null || demonstrated.level === null) return null
+  if (proven === null) return null
+  if (demonstrated.level.rank <= proven.rank) return null
+
+  const level = demonstrated.level
+  return [
+    style.faint(`    démontré : ${level.label} (rang ${level.rank}), atteint sur :`),
+    ...demonstrated.axes.map((axis) =>
+      style.faint(`      ${renderDemonstratedAxis(report, axis)}`),
+    ),
+  ].join('\n')
+}
+
+function renderRowGapLines(rendering: Rendering, row: ContributorRow): readonly string[] {
+  const practiceBlockers = row.blocking.filter(
+    (blocker): blocker is PracticeBlocker => blocker.gap === 'PRACTICE',
+  )
+  // INVARIANT: a practice gap on the row is a measurement that did say something, and the row must
+  // read that way rather than as the evidence gap the thin-sample prose describes. A row mixing
+  // both never reads as an evidence gap once one axis was actually measured and found low.
+  if (practiceBlockers.length > 0) {
+    return practiceBlockers.map((blocker) => renderRowPracticeGap(rendering, row, blocker))
+  }
+
+  const evidenceBlockers = row.blocking.filter(
+    (blocker): blocker is EvidenceBlocker => blocker.gap === 'EVIDENCE',
+  )
+  return evidenceBlockers.length === 0 ? [] : [renderRowEvidenceGap(rendering, evidenceBlockers)]
+}
+
+// SAFETY: a row names a person, so the line states the shortfall and stops. `project-brief.md`
+// forbids recommending a practice change from a failure to prove one, and a row must not read as a
+// verdict on anyone: no imperative is ever appended here, whichever branch renders it.
+//
+// INVARIANT: the values themselves go through `renderPracticeGapFact`, the report's own, so a row
+// and the axis lines above it never describe one threshold in two vocabularies. Only the frame is
+// the row's, because a row carries no axis line to sit under.
+function renderRowPracticeGap(
+  rendering: Rendering,
+  row: ContributorRow,
+  blocker: PracticeBlocker,
+): string {
+  const { report, style } = rendering
+  const located = locateAxis(report, blocker)
+  // SAFETY: the axis is taken from the row's own next level, never from the report's. The
+  // repository's level report pairs each threshold with the repository's observed value, and on the
+  // axis that blocks this row that value is the one the repository met — so reading it there finds
+  // no unmet requirement and falls back to a sentence naming no values at all. The row's own next
+  // level pairs the same threshold with what this account observed, which is the fact owed here.
+  const axis = row.next?.axes.find((candidate) => candidate.axis === blocker.axis)
+  const levelLabel = row.next?.label ?? located.levelLabel
+  const axisLabel = axis?.label ?? located.axisLabel
+  const tag = gapTagFor(style, 'NOT_MET')
+  const requirement = findUniquePracticeRequirement(axis, blocker)
+  if (requirement === undefined) {
+    return `    ${tag}${axisLabel} à ${levelLabel} : la pratique observée n'atteint pas l'exigence.`
+  }
+  const evidence = style.faint(`(${requirement.evidence})`)
+  const fact = renderPracticeGapFact(report, blocker.axis, requirement, evidence)
+  return `    ${tag}${axisLabel} à ${levelLabel} : ${fact}`
+}
+
+function renderRowEvidenceGap(rendering: Rendering, blockers: readonly EvidenceBlocker[]): string {
+  const { report, style } = rendering
+  const labels = blockers.map((blocker) => locateAxis(report, blocker).axisLabel)
+  const verb = labels.length === 1 ? 'reste' : 'restent'
+  return `    ${gapTagFor(style, 'UNPROVEN')}l'échantillon propre à ce compte n'a pas permis de trancher : ${joinLabels(labels)} ${verb} sans réponse pour ce compte. Ce n'est pas un constat sur sa pratique.`
+}
+
+function joinLabels(labels: readonly string[]): string {
+  if (labels.length <= 1) return labels[0] ?? ''
+  return `${labels.slice(0, -1).join(', ')} et ${labels[labels.length - 1]}`
+}
+
+interface AxisLocation {
+  readonly levelLabel: string
+  readonly axisLabel: string
+  readonly axis: AxisReport | undefined
+}
+
+function locateAxis(report: AssessmentReport, blocker: BlockingRequirement): AxisLocation {
+  const level = report.levels.find((candidate) => candidate.id === blocker.level)
+  const axis = level?.axes.find((candidate) => candidate.axis === blocker.axis)
+  return {
+    levelLabel: level?.label ?? blocker.level,
+    axisLabel: axis?.label ?? blocker.axis,
+    axis,
+  }
+}
+
+// LIMITATION: BlockingRequirement carries no requirement identity, so the requirement is re-derived
+// from a key that is not unique. Ambiguous means no threshold, never a guessed one. Fix belongs in
+// the contract — see aidd_docs/memory/architecture.md, "Frozen before the split".
+function findUniquePracticeRequirement(
+  axis: AxisReport | undefined,
+  blocker: PracticeBlocker,
+): PracticeRequirement | undefined {
+  const matches = (axis?.requirements ?? []).filter(
+    (candidate): candidate is PracticeRequirement =>
+      candidate.evidence === 'CONFIRMED' && candidate.outcome === blocker.outcome,
+  )
+  return matches.length === 1 ? matches[0] : undefined
+}
+
+// The axis the roster's one shared value belongs to, named by the contract field itself.
+const HARNESS_AXIS = 'harness'
+
+function renderSharedHarnessLine(
+  { report, style }: Rendering,
+  contributors: CompletedRoster,
+): string | null {
+  // INVARIANT: `null` is an evidence gap the roster completed anyway — the loaded model declares no
+  // harness axis, or the scan left a rankable member undecidable — never a failure, and the
+  // sentence is omitted rather than printed with a fabricated value.
+  if (contributors.harnessObserved === null) return null
+  const observed = formatScaleValue(report, HARNESS_AXIS, contributors.harnessObserved)
+  return style.faint(
+    `  Le harness est celui du dépôt, pas celui d'une personne : ${observed}, disponible pour chaque compte ci-dessus, qui en porte la même valeur.`,
+  )
+}
+
+function renderRowHarness(row: ContributorRow, contributors: CompletedRoster): string {
+  // SAFETY: `null` is a walk that did not run, and never "wrote none of it" — printing the latter
+  // for a `git` that failed would publish a claim about a person on the strength of a refusal.
+  if (row.harnessAuthorship === null) {
+    return "harness : l'attribution n'a pas pu être lue"
+  }
+  if (contributors.harnessPaths === 0) {
+    return "harness : l'ensemble harness de ce dépôt est vide"
+  }
+  const { files } = row.harnessAuthorship
+  const written =
+    files === 0
+      ? `n'a écrit aucun des ${contributors.harnessPaths} fichiers`
+      : `a écrit ${files} des ${contributors.harnessPaths} fichiers`
+  return `harness : ce compte ${written} de l'ensemble harness de ce dépôt`
 }

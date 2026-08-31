@@ -1,15 +1,15 @@
 import type { AxisId, AxisVocabulary } from '../models/axis.model.js'
 import type { CollectorDiagnostic } from '../models/collector-diagnostic.model.js'
-import type { Demonstration, Observation, ObservedValue } from '../models/observation.model.js'
-import {
-  type CollectorCollection,
-  type CollectorContext,
-  type EvidenceCollector,
+import type {
+  CollectorCollection,
+  CollectorContext,
+  EvidenceCollector,
 } from '../ports/evidence-collector.port.js'
-import { readForgeDerivedMetrics } from './forge-repository/pull-request-history.js'
-import type { RepositorySlug } from './forge-repository/repository-slug.js'
-import { mostRecentCommitDate } from './live-repository/git-process.js'
 import { MINIMUM_ACTIVE_DAYS } from './delivery-sample.js'
+import type { ForgeDeliveryReader } from './forge-repository/delivery-reader.js'
+import { deriveObservations, scaleFor } from './forge-repository/derived-observations.js'
+import { deriveForgeMetrics } from './forge-repository/pull-request-history.js'
+import type { RepositorySlug } from './forge-repository/repository-slug.js'
 
 const COLLECTOR_ID = 'forge-repository'
 
@@ -22,169 +22,69 @@ const COLLECTOR_ID = 'forge-repository'
 // decides for itself whether a subject is its own. That check belongs where the collector set is
 // chosen, because a bundle tracked inside a repository would otherwise be handed the surrounding
 // repository's pull requests.
+//
+// INVARIANT: `deliveries` is the walk shared with `ForgeContributorRosterAdapter` — one memoised
+// `ForgeDeliveryReader`, built once by the composition root and handed to both, so a GitHub subject
+// is walked once for its deliveries rather than twice.
 export class ForgeRepositoryEvidenceCollector implements EvidenceCollector {
   readonly id = COLLECTOR_ID
   readonly supportedAxes: readonly AxisId[] = ['size', 'intervention', 'parallelism']
 
-  constructor(private readonly slug: RepositorySlug) {}
+  constructor(
+    private readonly slug: RepositorySlug,
+    private readonly deliveries: ForgeDeliveryReader,
+  ) {}
 
   async collect(context: CollectorContext): Promise<CollectorCollection> {
     context.signal.throwIfAborted()
 
-    const sizeScale = scaleFor(context.vocabulary, 'size')
-    const interventionScale = scaleFor(context.vocabulary, 'intervention')
-    const parallelismScale = scaleFor(context.vocabulary, 'parallelism')
-    if (
-      sizeScale === undefined &&
-      interventionScale === undefined &&
-      parallelismScale === undefined
-    ) {
-      return { observations: [], diagnostics: [] }
+    if (!hasAnySupportedAxis(context.vocabulary)) return { observations: [], diagnostics: [] }
+
+    const metrics = deriveForgeMetrics(await this.deliveries.read(context.signal))
+
+    return {
+      observations: deriveObservations(
+        metrics,
+        context.vocabulary,
+        COLLECTOR_ID,
+        `merged pull requests of ${this.slug.owner}/${this.slug.name}`,
+      ),
+      diagnostics: diagnosticsFor(metrics, context.vocabulary),
     }
-
-    // INVARIANT: the subject's own most recent activity ends the window, not this source's newest
-    // merge, so both production collectors measure the same period.
-    const metrics = await readForgeDerivedMetrics(
-      this.slug,
-      await mostRecentCommitDate(context.path, context.signal),
-      context.signal,
-    )
-    const observations: Observation[] = []
-    const basis = `merged pull requests of ${this.slug.owner}/${this.slug.name}`
-
-    if (
-      metrics.sizeBucket !== null &&
-      sizeScale?.kind === 'ordinal' &&
-      sizeScale.values.includes(metrics.sizeBucket)
-    ) {
-      observations.push(
-        observation('size', metrics.sizeBucket, `median delivered change over ${basis}`),
-      )
-    }
-
-    if (
-      metrics.demonstratedSize !== null &&
-      sizeScale?.kind === 'ordinal' &&
-      sizeScale.values.includes(metrics.demonstratedSize.value)
-    ) {
-      observations.push(
-        demonstrated(
-          'size',
-          metrics.demonstratedSize.value,
-          { share: metrics.demonstratedSize.share, unit: 'DELIVERIES' },
-          `size reached by at least a third of ${basis}`,
-        ),
-      )
-    }
-
-    if (
-      metrics.intervention !== null &&
-      interventionScale?.kind === 'ordinal' &&
-      interventionScale.values.includes(metrics.intervention)
-    ) {
-      observations.push(
-        observation(
-          'intervention',
-          metrics.intervention,
-          `median corrective commits after opening, over ${basis}`,
-        ),
-      )
-    }
-
-    if (
-      metrics.demonstratedIntervention !== null &&
-      interventionScale?.kind === 'ordinal' &&
-      interventionScale.values.includes(metrics.demonstratedIntervention.value)
-    ) {
-      observations.push(
-        demonstrated(
-          'intervention',
-          metrics.demonstratedIntervention.value,
-          { share: metrics.demonstratedIntervention.share, unit: 'DELIVERIES' },
-          `corrective commits after opening, over ${basis}`,
-        ),
-      )
-    }
-
-    if (metrics.parallelism !== null && parallelismScale?.kind === 'numeric') {
-      observations.push(
-        observation(
-          'parallelism',
-          metrics.parallelism,
-          `median, over active days, of distinct ${basis} receiving a commit`,
-        ),
-      )
-    }
-
-    if (metrics.demonstratedParallelism !== null && parallelismScale?.kind === 'numeric') {
-      observations.push(
-        demonstrated(
-          'parallelism',
-          metrics.demonstratedParallelism.value,
-          { share: metrics.demonstratedParallelism.share, unit: 'ACTIVE_DAYS' },
-          `concurrent ${basis} carried on at least a third of active days`,
-        ),
-      )
-    }
-
-    const diagnostics: CollectorDiagnostic[] = []
-    if (
-      parallelismScale?.kind === 'numeric' &&
-      metrics.parallelism === null &&
-      metrics.activeDays !== null &&
-      metrics.activeDays < MINIMUM_ACTIVE_DAYS
-    ) {
-      diagnostics.push({
-        collector: COLLECTOR_ID,
-        axis: 'parallelism',
-        reason: 'INSUFFICIENT_ACTIVE_DAYS',
-        observed: metrics.activeDays,
-        minimum: MINIMUM_ACTIVE_DAYS,
-      })
-    }
-
-    return { observations, diagnostics }
   }
 }
 
-function scaleFor(vocabulary: readonly AxisVocabulary[], axis: AxisId): AxisVocabulary | undefined {
-  return vocabulary.find((scale) => scale.axis === axis)
+// INVARIANT: why an axis this collector supports went unobserved, and only where the reason is one
+// it knows. A parallelism withheld for too thin a sample is a fact about the window, not a verdict
+// on the subject, and saying so is what stops "no observation" reading as "no branches".
+function diagnosticsFor(
+  metrics: ReturnType<typeof deriveForgeMetrics>,
+  vocabulary: readonly AxisVocabulary[],
+): readonly CollectorDiagnostic[] {
+  const parallelismScale = scaleFor(vocabulary, 'parallelism')
+  if (
+    parallelismScale?.kind !== 'numeric' ||
+    metrics.parallelism !== null ||
+    metrics.activeDays === null ||
+    metrics.activeDays >= MINIMUM_ACTIVE_DAYS
+  ) {
+    return []
+  }
+
+  return [
+    {
+      collector: COLLECTOR_ID,
+      axis: 'parallelism',
+      reason: 'INSUFFICIENT_ACTIVE_DAYS',
+      observed: metrics.activeDays,
+      minimum: MINIMUM_ACTIVE_DAYS,
+    },
+  ]
 }
 
-function observation(axis: AxisId, value: ObservedValue, basis: string): Observation {
-  return {
-    axis,
-    reading: 'SUSTAINED',
-    value,
-    kind: 'OBSERVED',
-    collector: COLLECTOR_ID,
-    basis,
-    demonstration: null,
-  }
-}
-
-// INVARIANT: a demonstrated value never travels without the share that earned it.
-//
-// INVARIANT: every axis this collector answers carries both readings, intervention included. It was
-// excluded once, on the ground that a pull request's opening records a workflow habit rather than
-// whether a human took over — but that objection tells against the *sustained* reading just as
-// hard, and this collector publishes that one. What actually needed guarding was the top of the
-// scale, and `readIntervention` guards it by passing no zero-touch share at all. Below that ceiling
-// a demonstrated reading states the same kind of fact as the other two axes: on this share of
-// deliveries, at most one correction was needed.
-function demonstrated(
-  axis: AxisId,
-  value: ObservedValue,
-  demonstration: Demonstration,
-  basis: string,
-): Observation {
-  return {
-    axis,
-    reading: 'DEMONSTRATED',
-    value,
-    kind: 'OBSERVED',
-    collector: COLLECTOR_ID,
-    basis,
-    demonstration,
-  }
+function hasAnySupportedAxis(vocabulary: readonly AxisVocabulary[]): boolean {
+  return vocabulary.some(
+    (scale) =>
+      scale.axis === 'size' || scale.axis === 'intervention' || scale.axis === 'parallelism',
+  )
 }

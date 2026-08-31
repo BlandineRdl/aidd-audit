@@ -7,3 +7,10 @@ export interface MemberScan {
 }
 
 export const DECIDED_PRESENT: MemberScan = { proven: true, undecidable: false }
+
+// INVARIANT: `paths` is empty exactly when the member is unproven, so `proven` is
+// `paths.length > 0` and is never repeated as its own field.
+export interface ProvenPaths {
+  readonly paths: readonly string[]
+  readonly undecidable: boolean
+}

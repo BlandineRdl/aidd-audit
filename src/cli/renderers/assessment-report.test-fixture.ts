@@ -2,6 +2,8 @@ import type {
   AssessmentReport,
   AxisReport,
   BlockingRequirement,
+  ContributorRosterReport,
+  ContributorRow,
   EvidenceStatus,
   EvidenceGapDiagnostic,
   LevelReport,
@@ -100,6 +102,7 @@ export const failedProvenance = (
 const provenLevel = levelReport()
 
 const validReport: AssessmentReport = {
+  contributors: null,
   schemaVersion: ASSESSMENT_REPORT_SCHEMA_VERSION,
   model: { id: 'aidd', schemaVersion: 1 },
   subject: { path: '/repo/example' },
@@ -135,4 +138,51 @@ const validReport: AssessmentReport = {
 
 export function assessmentReport(overrides: Partial<AssessmentReport> = {}): AssessmentReport {
   return { ...validReport, ...overrides }
+}
+
+const validRow: ContributorRow = {
+  account: 'blandinerdl',
+  emailAddresses: 2,
+  commits: 87,
+  deliveries: 87,
+  activeDays: 12,
+  harnessAuthorship: { files: 41, commits: 60 },
+  proven: provenLevel,
+  next: null,
+  observed: [{ axis: 'size', value: 'L', evidence: 'CONFIRMED' }],
+  demonstrated: null,
+  blocking: [],
+}
+
+export function contributorRow(overrides: Partial<ContributorRow> = {}): ContributorRow {
+  return { ...validRow, ...overrides }
+}
+
+type CompletedContributorRoster = Extract<ContributorRosterReport, { status: 'COMPLETED' }>
+type FailedContributorRoster = Exclude<ContributorRosterReport, CompletedContributorRoster>
+
+const validCompletedRoster: CompletedContributorRoster = {
+  status: 'COMPLETED',
+  windowDays: 180,
+  harnessObserved: ['prompts', 'context-engineering'],
+  harnessPaths: 41,
+  rows: [validRow],
+}
+
+export function completedRoster(
+  overrides: Partial<CompletedContributorRoster> = {},
+): ContributorRosterReport {
+  return { ...validCompletedRoster, ...overrides }
+}
+
+const validFailedRoster: FailedContributorRoster = {
+  status: 'FAILED',
+  rows: [],
+  reason: 'gh: no credentials in this run',
+}
+
+export function failedRoster(
+  overrides: Partial<FailedContributorRoster> = {},
+): ContributorRosterReport {
+  return { ...validFailedRoster, ...overrides }
 }

@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { AxisVocabulary } from '../models/axis.model.js'
 import type { Observation } from '../models/observation.model.js'
+import { forgeDeliveryReader } from './forge-repository/delivery-reader.js'
 import { ForgeRepositoryEvidenceCollector } from './forge-repository.adapter.js'
 
 // SAFETY: Integration against a stub `gh` on PATH: the forge is the boundary and the suite never
@@ -111,8 +112,9 @@ async function collectFrom(
   vocabulary: readonly AxisVocabulary[] = FULL_VOCABULARY,
   signal: AbortSignal = NEVER_ABORTED,
 ): Promise<readonly Observation[]> {
+  const deliveries = forgeDeliveryReader(SLUG, '.')
   return (
-    await new ForgeRepositoryEvidenceCollector(SLUG).collect({
+    await new ForgeRepositoryEvidenceCollector(SLUG, deliveries).collect({
       path: '.',
       vocabulary,
       signal,
@@ -138,7 +140,10 @@ describe('the forge evidence collector', () => {
         ),
       )
 
-      const collection = await new ForgeRepositoryEvidenceCollector(SLUG).collect({
+      const collection = await new ForgeRepositoryEvidenceCollector(
+        SLUG,
+        forgeDeliveryReader(SLUG, '.'),
+      ).collect({
         path: '.',
         vocabulary: FULL_VOCABULARY,
         signal: NEVER_ABORTED,
@@ -164,7 +169,7 @@ describe('the forge evidence collector', () => {
       await ghAnswering(payload(TWELVE_DELIVERIES))
 
       await expect(
-        new ForgeRepositoryEvidenceCollector(SLUG).collect({
+        new ForgeRepositoryEvidenceCollector(SLUG, forgeDeliveryReader(SLUG, '.')).collect({
           path: '.',
           vocabulary: FULL_VOCABULARY,
           signal: NEVER_ABORTED,
@@ -254,7 +259,7 @@ describe('the forge evidence collector', () => {
     async () => {
       await ghAnswering(payload(TWELVE_DELIVERIES))
 
-      const collector = new ForgeRepositoryEvidenceCollector(SLUG)
+      const collector = new ForgeRepositoryEvidenceCollector(SLUG, forgeDeliveryReader(SLUG, '.'))
       const observations = await collector.collect({
         path: '.',
         vocabulary: FULL_VOCABULARY,

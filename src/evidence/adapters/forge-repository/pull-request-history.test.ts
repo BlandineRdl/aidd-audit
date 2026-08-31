@@ -2,7 +2,11 @@ import { chmod, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promi
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { readForgeDerivedMetrics } from './pull-request-history.js'
+import {
+  deriveForgeMetrics,
+  type ForgeDerivedMetrics,
+  readDeliveredChanges,
+} from './pull-request-history.js'
 
 // SAFETY: Integration against a stub `gh` on PATH, so the forge is the boundary under test and the
 // suite never reaches it. The payloads are shaped like the GraphQL answer and copied from no real
@@ -30,6 +34,7 @@ interface RecordedPullRequest {
   readonly changedFiles: number
   readonly commitDates: readonly string[]
   readonly authorType?: 'User' | 'Bot' | null
+  readonly authorLogin?: string
 }
 
 function page(nodes: readonly RecordedPullRequest[], endCursor: string | null): string {
@@ -47,7 +52,7 @@ function page(nodes: readonly RecordedPullRequest[], endCursor: string | null): 
             author:
               node.authorType === null
                 ? null
-                : { __typename: node.authorType ?? 'User', login: 'someone' },
+                : { __typename: node.authorType ?? 'User', login: node.authorLogin ?? 'someone' },
             commits: {
               nodes: node.commitDates.map((committedDate) => ({ commit: { committedDate } })),
             },
@@ -120,7 +125,19 @@ function delivered(
 
 const DAY = (day: number): string => `2026-06-${String(day).padStart(2, '0')}T12:00:00Z`
 
-describe('readForgeDerivedMetrics', () => {
+// INVARIANT: the composition the collector performs, spelled out here rather than exported from
+// the module. A wrapper existed for it and lost its last production caller when the delivery reader
+// took over; keeping an export nothing ships would have left the suite proving a path `dist/cli.js`
+// never runs.
+async function derivedFrom(
+  slug: Parameters<typeof readDeliveredChanges>[0],
+  subjectActivityEnd: Parameters<typeof readDeliveredChanges>[1],
+  signal: Parameters<typeof readDeliveredChanges>[2],
+): Promise<ForgeDerivedMetrics> {
+  return deriveForgeMetrics(await readDeliveredChanges(slug, subjectActivityEnd, signal))
+}
+
+describe('the walk and the derivation it feeds', () => {
   it(
     'reads a median size over every merged pull request in the window',
     async () => {
@@ -131,7 +148,7 @@ describe('readForgeDerivedMetrics', () => {
         ),
       ])
 
-      await expect(readForgeDerivedMetrics(SLUG, null, NEVER_ABORTED)).resolves.toMatchObject({
+      await expect(derivedFrom(SLUG, null, NEVER_ABORTED)).resolves.toMatchObject({
         sizeBucket: 'L',
       })
     },
@@ -154,7 +171,7 @@ describe('readForgeDerivedMetrics', () => {
 
       // INVARIANT: six deliveries clear the sample floor, three do not. A collector that stopped at
       // page one would report nothing here, which is exactly how a cursor bug hides.
-      await expect(readForgeDerivedMetrics(SLUG, null, NEVER_ABORTED)).resolves.toMatchObject({
+      await expect(derivedFrom(SLUG, null, NEVER_ABORTED)).resolves.toMatchObject({
         sizeBucket: 'S',
       })
       const calls = await stub.calls()
@@ -174,7 +191,7 @@ describe('readForgeDerivedMetrics', () => {
         ),
       ])
 
-      await expect(readForgeDerivedMetrics(SLUG, null, NEVER_ABORTED)).resolves.toEqual({
+      await expect(derivedFrom(SLUG, null, NEVER_ABORTED)).resolves.toEqual({
         sizeBucket: null,
         demonstratedSize: null,
         intervention: null,
@@ -201,7 +218,7 @@ describe('readForgeDerivedMetrics', () => {
       ])
 
       // The ancient delivery would carry the median to XL if the window were not applied.
-      await expect(readForgeDerivedMetrics(SLUG, null, NEVER_ABORTED)).resolves.toMatchObject({
+      await expect(derivedFrom(SLUG, null, NEVER_ABORTED)).resolves.toMatchObject({
         sizeBucket: 'S',
       })
     },
@@ -223,7 +240,7 @@ describe('readForgeDerivedMetrics', () => {
 
       // INVARIANT: with no subject activity to go on, the window ends at the newest merge, June 5,
       // and reaches back past February — the six old deliveries count and own the median.
-      await expect(readForgeDerivedMetrics(SLUG, null, NEVER_ABORTED)).resolves.toMatchObject({
+      await expect(derivedFrom(SLUG, null, NEVER_ABORTED)).resolves.toMatchObject({
         sizeBucket: 'XL',
       })
 
@@ -231,7 +248,7 @@ describe('readForgeDerivedMetrics', () => {
       // there and start in late May, so only the recent five remain. A stretch of direct commits
       // after the last merge must not drag the window backwards and change the level.
       await expect(
-        readForgeDerivedMetrics(SLUG, Date.parse('2026-11-20T12:00:00Z'), NEVER_ABORTED),
+        derivedFrom(SLUG, Date.parse('2026-11-20T12:00:00Z'), NEVER_ABORTED),
       ).resolves.toMatchObject({ sizeBucket: 'S' })
     },
     A_LONG_TIME,
@@ -253,7 +270,7 @@ describe('readForgeDerivedMetrics', () => {
       // INVARIANT: merged into another branch after the subject's last commit, so it sits outside
       // the period rather than being the newest thing in it.
       await expect(
-        readForgeDerivedMetrics(SLUG, Date.parse('2026-06-10T12:00:00Z'), NEVER_ABORTED),
+        derivedFrom(SLUG, Date.parse('2026-06-10T12:00:00Z'), NEVER_ABORTED),
       ).resolves.toMatchObject({ sizeBucket: 'S' })
     },
     A_LONG_TIME,
@@ -262,25 +279,30 @@ describe('readForgeDerivedMetrics', () => {
   it(
     'leaves a delivery a bot opened out of every median',
     async () => {
-      await ghAnswering([
-        page(
-          [
-            ...[1, 2, 3, 4, 5].map((day) => delivered(DAY(day), 900, 20)),
-            // Six tiny dependency bumps: a majority, so they own the median if they are counted.
-            ...[6, 7, 8, 9, 10, 11].map((day) => ({
-              ...delivered(DAY(day), 4, 1),
-              authorType: 'Bot' as const,
-            })),
-          ],
-          null,
-        ),
-      ])
+      const payload = page(
+        [
+          ...[1, 2, 3, 4, 5].map((day) => delivered(DAY(day), 900, 20)),
+          // Six tiny dependency bumps: a majority, so they own the median if they are counted.
+          ...[6, 7, 8, 9, 10, 11].map((day) => ({
+            ...delivered(DAY(day), 4, 1),
+            authorType: 'Bot' as const,
+            authorLogin: 'dependabot',
+          })),
+        ],
+        null,
+      )
+      await ghAnswering([payload, payload])
 
       // INVARIANT: the axis measures features delivered with an agent, and a scheduled bump is
       // neither. Counting them here would report S where the subject's own work is L.
-      await expect(readForgeDerivedMetrics(SLUG, null, NEVER_ABORTED)).resolves.toMatchObject({
+      await expect(derivedFrom(SLUG, null, NEVER_ABORTED)).resolves.toMatchObject({
         sizeBucket: 'L',
       })
+
+      // INVARIANT: a bot-opened delivery is dropped whatever login it carries — the exclusion is
+      // keyed on the forge's typing of the author, never on the login's suffix.
+      const deliveries = await readDeliveredChanges(SLUG, null, NEVER_ABORTED)
+      expect(deliveries?.some((delivery) => delivery.openedBy === 'dependabot')).toBe(false)
     },
     A_LONG_TIME,
   )
@@ -288,21 +310,97 @@ describe('readForgeDerivedMetrics', () => {
   it(
     'keeps a delivery whose author the forge could not type',
     async () => {
+      const payload = page(
+        [1, 2, 3, 4, 5].map((day) => ({
+          ...delivered(DAY(day), 900, 20),
+          authorType: null,
+        })),
+        null,
+      )
+      await ghAnswering([payload, payload])
+
+      // INVARIANT: a deleted account leaves no author at all. Absence of proof that it is a bot is
+      // not proof that it is one, and dropping a person's work is the worse mistake.
+      await expect(derivedFrom(SLUG, null, NEVER_ABORTED)).resolves.toMatchObject({
+        sizeBucket: 'L',
+      })
+
+      // INVARIANT: nobody GitHub can name reads as `null`, not as a dropped delivery.
+      const deliveries = await readDeliveredChanges(SLUG, null, NEVER_ABORTED)
+      expect(deliveries?.every((delivery) => delivery.openedBy === null)).toBe(true)
+    },
+    A_LONG_TIME,
+  )
+
+  it(
+    'carries the account that opened each delivery',
+    async () => {
       await ghAnswering([
         page(
-          [1, 2, 3, 4, 5].map((day) => ({
-            ...delivered(DAY(day), 900, 20),
-            authorType: null,
-          })),
+          [
+            { ...delivered(DAY(1), 50, 2), authorLogin: 'perceval' },
+            { ...delivered(DAY(2), 50, 2), authorLogin: 'karadoc' },
+          ],
           null,
         ),
       ])
 
-      // INVARIANT: a deleted account leaves no author at all. Absence of proof that it is a bot is
-      // not proof that it is one, and dropping a person's work is the worse mistake.
-      await expect(readForgeDerivedMetrics(SLUG, null, NEVER_ABORTED)).resolves.toMatchObject({
-        sizeBucket: 'L',
-      })
+      const deliveries = await readDeliveredChanges(SLUG, null, NEVER_ABORTED)
+      expect(deliveries?.map((delivery) => delivery.openedBy)).toEqual(['perceval', 'karadoc'])
+    },
+    A_LONG_TIME,
+  )
+
+  it(
+    'asks the forge for the login behind each delivery',
+    async () => {
+      const stub = await ghAnswering([page([delivered(DAY(1), 50, 2)], null)])
+
+      await readDeliveredChanges(SLUG, null, NEVER_ABORTED)
+
+      const calls = await stub.calls()
+      expect(calls[0]).toContain('login')
+    },
+    A_LONG_TIME,
+  )
+
+  it(
+    'derives the same metrics through the split as through the composition',
+    async () => {
+      const payload = page(
+        [1, 2, 3, 4, 5].map((day) => delivered(DAY(day), 500, 12)),
+        null,
+      )
+      await ghAnswering([payload, payload])
+
+      const split = deriveForgeMetrics(await readDeliveredChanges(SLUG, null, NEVER_ABORTED))
+      const composed = await derivedFrom(SLUG, null, NEVER_ABORTED)
+
+      expect(split).toEqual(composed)
+    },
+    A_LONG_TIME,
+  )
+
+  it(
+    'answers an empty array, not null, for a walk that completed over an empty window',
+    async () => {
+      await ghAnswering([page([delivered('2024-01-01T12:00:00Z', 40_000, 900)], null)])
+
+      // INVARIANT: the one delivery on this page is real, and sits outside the window given by
+      // `subjectActivityEnd` — a completed walk that found nothing, not a walk that failed.
+      await expect(
+        readDeliveredChanges(SLUG, Date.parse('2026-06-10T12:00:00Z'), NEVER_ABORTED),
+      ).resolves.toEqual([])
+    },
+    A_LONG_TIME,
+  )
+
+  it(
+    'answers null rather than an empty walk when the forge answers something it cannot read',
+    async () => {
+      await ghAnswering(['{"data":{"repository":null},"errors":[{"type":"NOT_FOUND"}]}'])
+
+      await expect(readDeliveredChanges(SLUG, null, NEVER_ABORTED)).resolves.toBeNull()
     },
     A_LONG_TIME,
   )
@@ -322,7 +420,7 @@ describe('readForgeDerivedMetrics', () => {
       ])
 
       // Two commits after opening on every delivery: past `after-the-fact-some`, short of `most`.
-      await expect(readForgeDerivedMetrics(SLUG, null, NEVER_ABORTED)).resolves.toMatchObject({
+      await expect(derivedFrom(SLUG, null, NEVER_ABORTED)).resolves.toMatchObject({
         intervention: 'after-the-fact-some',
       })
     },
@@ -344,7 +442,7 @@ describe('readForgeDerivedMetrics', () => {
       // agent at all. Granting `never-once-framed` from it would hand the scale's top observable
       // rank to an absence. This source reads no authorship, so it answers the corrective ranks
       // only, and `key-steps` is the highest it can reach.
-      await expect(readForgeDerivedMetrics(SLUG, null, NEVER_ABORTED)).resolves.toMatchObject({
+      await expect(derivedFrom(SLUG, null, NEVER_ABORTED)).resolves.toMatchObject({
         intervention: 'key-steps',
       })
     },
@@ -372,7 +470,7 @@ describe('readForgeDerivedMetrics', () => {
       // INVARIANT: this is the whole reason the axis gained a second reading. A bimodal history —
       // often clean, sometimes reworked hard — is described by neither number alone, and the median
       // reports only the half it lands in.
-      await expect(readForgeDerivedMetrics(SLUG, null, NEVER_ABORTED)).resolves.toMatchObject({
+      await expect(derivedFrom(SLUG, null, NEVER_ABORTED)).resolves.toMatchObject({
         intervention: 'after-the-fact-most',
         demonstratedIntervention: { value: 'key-steps' },
       })
@@ -397,7 +495,7 @@ describe('readForgeDerivedMetrics', () => {
       ])
 
       // Five requests touched on day 1, two on days 2 to 5: the median of the five active days is 2.
-      await expect(readForgeDerivedMetrics(SLUG, null, NEVER_ABORTED)).resolves.toMatchObject({
+      await expect(derivedFrom(SLUG, null, NEVER_ABORTED)).resolves.toMatchObject({
         parallelism: 2,
       })
     },
@@ -409,9 +507,7 @@ describe('readForgeDerivedMetrics', () => {
     async () => {
       await ghAnswering([])
 
-      await expect(readForgeDerivedMetrics(SLUG, null, NEVER_ABORTED)).rejects.toThrow(
-        /gh api graphql/,
-      )
+      await expect(derivedFrom(SLUG, null, NEVER_ABORTED)).rejects.toThrow(/gh api graphql/)
     },
     A_LONG_TIME,
   )
@@ -421,7 +517,7 @@ describe('readForgeDerivedMetrics', () => {
     async () => {
       await ghAnswering(['{"data":{"repository":null},"errors":[{"type":"NOT_FOUND"}]}'])
 
-      await expect(readForgeDerivedMetrics(SLUG, null, NEVER_ABORTED)).resolves.toEqual({
+      await expect(derivedFrom(SLUG, null, NEVER_ABORTED)).resolves.toEqual({
         sizeBucket: null,
         demonstratedSize: null,
         intervention: null,
@@ -439,10 +535,34 @@ describe('readForgeDerivedMetrics', () => {
     async () => {
       await ghAnswering([page([], null)])
 
-      await expect(readForgeDerivedMetrics(SLUG, null, AbortSignal.abort())).rejects.toThrow(
-        /abort/i,
-      )
+      await expect(derivedFrom(SLUG, null, AbortSignal.abort())).rejects.toThrow(/abort/i)
     },
     A_LONG_TIME,
   )
+})
+
+describe('deriveForgeMetrics', () => {
+  // INVARIANT: every derived value, and there is one more than the name says since `activeDays`
+  // joined them — asserted whole with `toEqual` so a field added to `ForgeDerivedMetrics` and left
+  // unset by the unrecoverable path fails here rather than reaching a report as `undefined`.
+  const NOTHING_DERIVED = {
+    sizeBucket: null,
+    demonstratedSize: null,
+    intervention: null,
+    demonstratedIntervention: null,
+    parallelism: null,
+    demonstratedParallelism: null,
+    activeDays: null,
+  }
+
+  it('derives nothing at all for a walk that could not complete', () => {
+    expect(deriveForgeMetrics(null)).toEqual(NOTHING_DERIVED)
+  })
+
+  // INVARIANT: an empty window counted zero active days; an unreadable walk counted none. The two
+  // are the `[]`-versus-`null` distinction this module draws on purpose, and collapsing them onto
+  // one expectation is what hid `activeDays` when it was added.
+  it('derives nothing at all for a window with too few deliveries to clear the floor', () => {
+    expect(deriveForgeMetrics([])).toEqual({ ...NOTHING_DERIVED, activeDays: 0 })
+  })
 })

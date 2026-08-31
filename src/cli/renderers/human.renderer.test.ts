@@ -4,8 +4,11 @@ import { colouredText } from './text-style.js'
 import {
   assessmentReport,
   axisReport,
+  completedRoster,
+  contributorRow,
   evidenceBlocker,
   failedProvenance,
+  failedRoster,
   levelReport,
   metRequirement,
   notMetRequirement,
@@ -943,3 +946,473 @@ describe('14. colour dresses the report and decides nothing about it', () => {
 })
 
 const codesIn = (line: string) => [...line.matchAll(/\u001b\[([0-9;]*)m/g)].map((match) => match[1])
+
+// The section is last, so everything from its heading on belongs to it.
+const contributorParagraphs = (output: string) => {
+  const paragraphs = output.split('\n\n')
+  const start = paragraphs.findIndex((paragraph) => paragraph.startsWith('Contributeurs :'))
+  return start < 0 ? [] : paragraphs.slice(start)
+}
+
+const contributorRowBlock = (output: string, label: string) =>
+  contributorParagraphs(output).find((paragraph) => paragraph.startsWith(`  ${label} —`))
+
+describe('15. contributors', () => {
+  it('renders no section at all when no roster was read', () => {
+    const output = renderHumanReport(assessmentReport({ contributors: null }))
+
+    expect(output).not.toContain('Contributeurs :')
+  })
+
+  it('renders the section, present and empty, naming the reason, when the roster could not be read', () => {
+    const output = renderHumanReport(
+      assessmentReport({
+        contributors: failedRoster({ reason: 'gh: no credentials in this run' }),
+      }),
+    )
+
+    expect(contributorParagraphs(output)).toEqual([
+      'Contributeurs : lecture impossible — gh: no credentials in this run. Le niveau ci-dessus est inchangé.',
+    ])
+  })
+
+  it('glosses a timed-out roster apart from a failed one', () => {
+    const output = renderHumanReport(
+      assessmentReport({
+        contributors: failedRoster({ status: 'TIMED_OUT', reason: 'the budget was spent' }),
+      }),
+    )
+
+    expect(output).toContain('Contributeurs : délai dépassé — the budget was spent.')
+  })
+
+  it('says nobody was active, naming the window, when the roster completed with no rows', () => {
+    const output = renderHumanReport(
+      assessmentReport({ contributors: completedRoster({ rows: [], windowDays: 90 }) }),
+    )
+
+    expect(output).toContain('Contributeurs : aucun compte actif sur les 90 derniers jours.')
+  })
+
+  it('counts named accounts in the header and names the unattributed bucket as a second clause', () => {
+    const output = renderHumanReport(
+      assessmentReport({
+        contributors: completedRoster({
+          windowDays: 180,
+          rows: [
+            contributorRow({ account: 'alice' }),
+            contributorRow({ account: 'bob' }),
+            contributorRow({ account: null, deliveries: 0, activeDays: 0, commits: 3 }),
+          ],
+        }),
+      }),
+    )
+
+    expect(output).toContain(
+      'Contributeurs : 2 comptes actifs sur les 180 derniers jours, plus des commits que GitHub ne rattache à aucun compte.',
+    )
+  })
+
+  it('uses the singular noun for exactly one account', () => {
+    const output = renderHumanReport(
+      assessmentReport({
+        contributors: completedRoster({ rows: [contributorRow({ account: 'alice' })] }),
+      }),
+    )
+
+    expect(output).toContain('Contributeurs : 1 compte actif')
+  })
+
+  it('names deliveries and, beside them, active days on a row with a measured sample', () => {
+    const output = renderHumanReport(
+      assessmentReport({
+        contributors: completedRoster({
+          rows: [
+            contributorRow({ account: 'alice', deliveries: 87, activeDays: 12, commits: 90 }),
+            contributorRow({ account: 'bob', deliveries: 1, activeDays: 1, commits: 1 }),
+          ],
+        }),
+      }),
+    )
+    const alice = contributorRowBlock(output, 'alice')
+    const bob = contributorRowBlock(output, 'bob')
+
+    expect(alice).toBeDefined()
+    expect(alice).toContain('87 livraisons · 12 jours actifs')
+    expect(bob).toBeDefined()
+    expect(bob).toContain('1 livraison · 1 jour actif')
+  })
+
+  it('names commits instead of active days when nothing was delivered', () => {
+    const output = renderHumanReport(
+      assessmentReport({
+        contributors: completedRoster({
+          rows: [contributorRow({ account: 'bob', deliveries: 0, activeDays: 0, commits: 4 })],
+        }),
+      }),
+    )
+    const row = contributorRowBlock(output, 'bob')
+
+    expect(row).toBeDefined()
+    expect(row).toContain('0 livraison · 4 commits')
+  })
+
+  it('names the unattributed bucket, never a blank and never a plausible-looking login', () => {
+    const output = renderHumanReport(
+      assessmentReport({
+        contributors: completedRoster({
+          rows: [contributorRow({ account: null, deliveries: 0, activeDays: 0, commits: 12 })],
+        }),
+      }),
+    )
+    const row = contributorRowBlock(output, 'non rattaché')
+
+    expect(row).toBeDefined()
+    expect(row).toContain(
+      "0 livraison · 12 commits dont l'adresse d'auteur n'est rattachée à aucun compte GitHub",
+    )
+  })
+
+  it('names a demonstrated axis with the share that earned it, glossed as it is above', () => {
+    const output = renderHumanReport(
+      assessmentReport({
+        contributors: completedRoster({
+          rows: [
+            contributorRow({
+              account: 'alice',
+              proven: levelReport({ id: 'blue', rank: 1, label: 'Blue' }),
+              demonstrated: {
+                level: { id: 'copper', rank: 4, label: 'Copper', outcome: 'MET' },
+                axes: [{ axis: 'size', observed: 'XL', share: 0.34, unit: 'DELIVERIES' }],
+              },
+            }),
+          ],
+        }),
+      }),
+    )
+    const row = contributorRowBlock(output, 'alice')
+
+    expect(row).toBeDefined()
+    expect(row).toContain('XL')
+    expect(row).toContain('atteint sur 34% des livraisons')
+  })
+
+  it('omits the demonstrated line when the row demonstrates no more than it proves', () => {
+    const level = levelReport({ id: 'blue', rank: 1, label: 'Blue' })
+    const output = renderHumanReport(
+      assessmentReport({
+        contributors: completedRoster({
+          rows: [
+            contributorRow({
+              account: 'alice',
+              proven: level,
+              demonstrated: { level, axes: [] },
+            }),
+          ],
+        }),
+      }),
+    )
+    const row = contributorRowBlock(output, 'alice')
+
+    expect(row).toBeDefined()
+    expect(row).not.toContain('démontré :')
+  })
+
+  it(
+    'says a row could not be established, names the unknown axes as an evidence gap, and never ' +
+      'reads as a statement about practice',
+    () => {
+      const copper = levelReport({
+        id: 'copper',
+        rank: 4,
+        label: 'Copper',
+        axes: [
+          axisReport({ axis: 'size', label: 'Taille' }),
+          axisReport({ axis: 'intervention', label: 'Intervention' }),
+          axisReport({ axis: 'parallelism', label: 'En parallèle' }),
+        ],
+      })
+      const output = renderHumanReport(
+        assessmentReport({
+          levels: [copper],
+          contributors: completedRoster({
+            rows: [
+              contributorRow({
+                account: 'carol',
+                proven: null,
+                demonstrated: null,
+                blocking: [
+                  evidenceBlocker('copper', 'size'),
+                  evidenceBlocker('copper', 'intervention'),
+                  evidenceBlocker('copper', 'parallelism'),
+                ],
+              }),
+            ],
+          }),
+        }),
+      )
+      const row = contributorRowBlock(output, 'carol')
+
+      expect(row).toBeDefined()
+      expect(row).toContain('carol — niveau prouvé : aucun')
+      expect(row).toContain('[écart de preuve]')
+      expect(row).toContain('Taille, Intervention et En parallèle restent sans réponse')
+      expect(row).toContain("Ce n'est pas un constat sur sa pratique.")
+      expect(row).not.toMatch(/\b(améliorer|améliorez|corriger|corrigez|changer)\b/i)
+    },
+  )
+
+  it('reads a practice gap as measured and low, never as missing evidence, and recommends nothing', () => {
+    const copper = levelReport({
+      id: 'copper',
+      rank: 4,
+      label: 'Copper',
+      axes: [
+        axisReport({
+          axis: 'size',
+          label: 'Taille',
+          requirements: [notMetRequirement('size', 'L', 'S')],
+        }),
+      ],
+    })
+    const output = renderHumanReport(
+      assessmentReport({
+        levels: [copper],
+        contributors: completedRoster({
+          rows: [
+            contributorRow({
+              account: 'dave',
+              proven: null,
+              demonstrated: null,
+              blocking: [practiceBlocker('copper', 'size')],
+            }),
+          ],
+        }),
+      }),
+    )
+    const row = contributorRowBlock(output, 'dave')
+
+    expect(row).toBeDefined()
+    expect(row).toContain('[écart de pratique]')
+    expect(row).toContain('Taille à Copper')
+    expect(row).not.toContain('[écart de preuve]')
+    expect(row).not.toMatch(/\b(améliorer|améliorez|corriger|corrigez|changer)\b/i)
+  })
+
+  it('prints the shared harness sentence exactly once, beneath the rows, never inside one', () => {
+    const output = renderHumanReport(
+      assessmentReport({
+        contributors: completedRoster({
+          harnessObserved: ['prompts', 'context-engineering'],
+          harnessPaths: 41,
+          rows: [
+            contributorRow({ account: 'alice', harnessAuthorship: { files: 41, commits: 60 } }),
+          ],
+        }),
+      }),
+    )
+    const row = contributorRowBlock(output, 'alice')
+
+    expect(row).toBeDefined()
+    expect(output.split('Le harness est celui du dépôt')).toHaveLength(2)
+    expect(row).not.toContain('Le harness est celui du dépôt')
+    expect(row).toContain("a écrit 41 des 41 fichiers de l'ensemble harness de ce dépôt")
+  })
+
+  it('omits the shared harness sentence when no harness value was established (an evidence gap, not a failure)', () => {
+    const output = renderHumanReport(
+      assessmentReport({
+        contributors: completedRoster({ harnessObserved: null, rows: [contributorRow()] }),
+      }),
+    )
+
+    expect(contributorParagraphs(output).length).toBeGreaterThan(1)
+    expect(output).not.toContain('Le harness est celui du dépôt')
+  })
+
+  it('renders an empty harness set as the empty set, never a blank', () => {
+    const output = renderHumanReport(
+      assessmentReport({
+        contributors: completedRoster({
+          harnessObserved: [],
+          harnessPaths: 0,
+          rows: [contributorRow({ harnessAuthorship: { files: 0, commits: 0 } })],
+        }),
+      }),
+    )
+    const shared = contributorParagraphs(output).find((paragraph) =>
+      paragraph.includes('Le harness est celui du dépôt'),
+    )
+    const row = contributorRowBlock(output, 'blandinerdl')
+
+    expect(shared).toBeDefined()
+    expect(shared).toContain("l'ensemble vide")
+    expect(row).toBeDefined()
+    expect(row).toContain("harness : l'ensemble harness de ce dépôt est vide")
+  })
+
+  it('reads "wrote none of it" apart from authorship that could not be read', () => {
+    const rowWithZero = contributorRowBlock(
+      renderHumanReport(
+        assessmentReport({
+          contributors: completedRoster({
+            rows: [contributorRow({ harnessAuthorship: { files: 0, commits: 0 } })],
+          }),
+        }),
+      ),
+      'blandinerdl',
+    )
+    const rowWithNull = contributorRowBlock(
+      renderHumanReport(
+        assessmentReport({
+          contributors: completedRoster({ rows: [contributorRow({ harnessAuthorship: null })] }),
+        }),
+      ),
+      'blandinerdl',
+    )
+
+    expect(rowWithZero).toBeDefined()
+    expect(rowWithNull).toBeDefined()
+    expect(rowWithZero).toContain("n'a écrit aucun des 41 fichiers")
+    expect(rowWithNull).toContain("l'attribution n'a pas pu être lue")
+    expect(rowWithZero).not.toContain('pas pu être lue')
+    expect(rowWithNull).not.toContain("n'a écrit aucun")
+  })
+})
+
+describe('16. a row states what it measured, not only what it lacks', () => {
+  const rowWithNoLevel = contributorRow({
+    account: 'mina',
+    deliveries: 7,
+    activeDays: 4,
+    proven: null,
+    observed: [
+      { axis: 'size', value: 'L', evidence: 'CONFIRMED' },
+      { axis: 'parallelism', value: null, evidence: 'UNKNOWN' },
+    ],
+  })
+
+  it('prints the confirmed values of a row that reached no level', () => {
+    const output = renderHumanReport(
+      assessmentReport({ contributors: completedRoster({ rows: [rowWithNoLevel] }) }),
+    )
+
+    // SAFETY: the row must be in the document before its contents are asserted — an assertion over
+    // a rendering that never printed the row would hold whatever the renderer did.
+    expect(output).toContain('mina — niveau prouvé : aucun')
+    const line = output
+      .split('\n')
+      .find((candidate) => candidate.includes('observé sur son propre échantillon'))
+
+    expect(line).toBeDefined()
+    expect(line).toContain('L (large)')
+  })
+
+  it('names no unresolved axis on that line, the gap lines already carrying them with a reason', () => {
+    const output = renderHumanReport(
+      assessmentReport({ contributors: completedRoster({ rows: [rowWithNoLevel] }) }),
+    )
+    const line = output
+      .split('\n')
+      .find((candidate) => candidate.includes('observé sur son propre échantillon'))
+
+    expect(line).toBeDefined()
+    expect(line).not.toContain('En parallèle')
+    expect(line).not.toContain('UNKNOWN')
+  })
+
+  it('prints no such line for a row that reached a level, whose values ride in its level', () => {
+    const output = renderHumanReport(
+      assessmentReport({
+        contributors: completedRoster({
+          rows: [
+            contributorRow({
+              account: 'ada',
+              observed: [{ axis: 'size', value: 'L', evidence: 'CONFIRMED' }],
+            }),
+          ],
+        }),
+      }),
+    )
+
+    expect(output).toContain('ada — niveau prouvé')
+    expect(output).not.toContain('observé sur son propre échantillon')
+  })
+})
+
+describe('17. a row names its aim, and never names it alone', () => {
+  const nextLevel = levelReport({
+    id: 'green',
+    rank: 3,
+    label: 'Green',
+    outcome: 'NOT_MET',
+    axes: [
+      axisReport({
+        axis: 'size',
+        label: 'Taille',
+        outcome: 'NOT_MET',
+        requirements: [notMetRequirement('size', 'L', 'S')],
+      }),
+    ],
+  })
+
+  it('names the level a row is next in line for, with what stands in the way', () => {
+    const output = renderHumanReport(
+      assessmentReport({
+        contributors: completedRoster({
+          rows: [
+            contributorRow({
+              account: 'mina',
+              next: nextLevel,
+              blocking: [practiceBlocker('green', 'size')],
+            }),
+          ],
+        }),
+      }),
+    )
+    const rowLines = output.split('\n').filter((line) => line.startsWith('    '))
+
+    expect(output).toContain('mina — niveau prouvé')
+    expect(rowLines.some((line) => line.includes('pour atteindre Green (rang 3) :'))).toBe(true)
+    expect(rowLines.some((line) => line.includes('[écart de pratique]'))).toBe(true)
+  })
+
+  it('takes the gap values from the row own next level, never from the repository', () => {
+    // SAFETY: the repository has met this axis, so reading the values there finds no unmet
+    // requirement and states none. The row's own next level is what pairs the threshold with what
+    // this account observed.
+    const output = renderHumanReport(
+      assessmentReport({
+        contributors: completedRoster({
+          rows: [
+            contributorRow({
+              account: 'mina',
+              next: nextLevel,
+              blocking: [practiceBlocker('green', 'size')],
+            }),
+          ],
+        }),
+      }),
+    )
+    const gap = output
+      .split('\n')
+      .find((line) => line.includes('[écart de pratique]') && line.includes('Taille à Green'))
+
+    expect(gap).toBeDefined()
+    expect(gap).not.toContain("n'atteint pas l'exigence.")
+    expect(gap).toContain('S')
+  })
+
+  it('names no aim on a row that has nothing left to reach', () => {
+    const output = renderHumanReport(
+      assessmentReport({
+        contributors: completedRoster({
+          rows: [contributorRow({ account: 'ada', next: null, blocking: [] })],
+        }),
+      }),
+    )
+
+    expect(output).toContain('ada — niveau prouvé')
+    expect(output).not.toContain('pour atteindre')
+  })
+})

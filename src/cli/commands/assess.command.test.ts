@@ -1,7 +1,9 @@
-import { execFileSync } from 'node:child_process'
+import { execFile, execFileSync } from 'node:child_process'
 import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { chmod, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { promisify } from 'node:util'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { AssessmentReport } from '../../assessment/contracts/assessment-report.contract.js'
 import { gitEnvironment } from '../../evidence/adapters/live-repository/git-process.js'
@@ -20,7 +22,12 @@ const PERCEVAL = 'profiles/perceval'
 
 // LIMITATION: The repository itself: `intervention` is not recoverable from any local history, so
 // one axis is always UNKNOWN and no level can be proven of it.
-const THIS_REPOSITORY = '.'
+// SAFETY: a bundle, never `.`. A suite under `src/` also runs inside Stryker's sandbox, which is a
+// copy of the project with no `.git` — and since `resolveSubjects` refuses a directory that is
+// neither a repository, a bundle, nor a bundle holder, `assess .` there is exit 2 and the dry run
+// dies before a single mutant is tried. `venec` is a recorded bundle whose evidence establishes no
+// level, which is the behaviour this names, and it carries no dependency on the checkout's state.
+const UNCLASSIFIABLE_SUBJECT = 'profiles/venec'
 
 function capturingIo(): { io: CommandIo; stdout: () => string; stderr: () => string } {
   const out: string[] = []
@@ -51,7 +58,7 @@ describe('runAssess — happy path', () => {
   it('says a subject could not be classified rather than naming a level for it', async () => {
     const { io, stdout, stderr } = capturingIo()
 
-    const exitCode = await runAssess(['assess', THIS_REPOSITORY], io)
+    const exitCode = await runAssess(['assess', UNCLASSIFIABLE_SUBJECT], io)
 
     expect(exitCode).toBe(0)
     expect(stderr()).toBe('')
@@ -541,4 +548,183 @@ describe('runAssess — our own failures exit 1, nothing on stdout', () => {
     expect(exitCode).toBe(0)
     expect(stdout()).toContain('Infinity')
   })
+})
+
+// SAFETY: Integration against a real temporary Git repository with a GitHub-shaped `origin` and a
+// stub `gh` planted ahead of any real one on this process's PATH — deterministic and offline
+// whatever `gh` this machine does or does not have installed, on the same footing
+// `forge-repository.adapter.test.ts` already stubs it.
+describe('runAssess — the contributor roster', () => {
+  const run = promisify(execFile)
+  const A_LONG_TIME = 60_000
+  const workspaces: string[] = []
+  let restorePath: string | undefined
+
+  afterEach(async () => {
+    if (restorePath !== undefined) process.env.PATH = restorePath
+    restorePath = undefined
+    await Promise.all(
+      workspaces.splice(0).map((path) => rm(path, { recursive: true, force: true })),
+    )
+  })
+
+  async function emptyDirectory(prefix: string): Promise<string> {
+    const path = await mkdtemp(join(await realpath(tmpdir()), prefix))
+    workspaces.push(path)
+    return path
+  }
+
+  async function git(cwd: string, args: readonly string[]): Promise<void> {
+    await run('git', args, { cwd, env: gitEnvironment() })
+  }
+
+  async function githubOriginRepository(): Promise<string> {
+    const repository = await emptyDirectory('aidd-assess-command-forge-')
+    await git(repository, ['-c', 'init.defaultBranch=main', 'init', '-q'])
+    await git(repository, ['config', 'user.email', 'dev@example.com'])
+    await git(repository, ['config', 'user.name', 'A Developer'])
+    await git(repository, ['config', 'commit.gpgsign', 'false'])
+    await writeFile(join(repository, 'a.md'), 'a\n')
+    await git(repository, ['add', '-A'])
+    await git(repository, ['commit', '-q', '-m', 'init'])
+    await git(repository, [
+      'remote',
+      'add',
+      'origin',
+      'https://github.com/an-owner/a-repository.git',
+    ])
+    return repository
+  }
+
+  async function plantGh(script: string): Promise<string> {
+    const directory = await emptyDirectory('aidd-assess-command-gh-')
+    await writeFile(join(directory, 'gh'), script)
+    await chmod(join(directory, 'gh'), 0o755)
+    restorePath = process.env.PATH
+    process.env.PATH = `${directory}:${process.env.PATH ?? ''}`
+    return directory
+  }
+
+  async function refusingGh(): Promise<void> {
+    await plantGh('#!/bin/sh\necho "gh: no credentials in this run" >&2\nexit 1\n')
+  }
+
+  it('gives a bundle subject no roster at all: contributors stays null', async () => {
+    const { io, stdout } = capturingIo()
+
+    const exitCode = await runAssess(['assess', PERCEVAL, '--json'], io)
+
+    expect(exitCode).toBe(0)
+    expect(JSON.parse(stdout()).contributors).toBeNull()
+  })
+
+  it(
+    'exits 0 with a published report carrying the section when the roster could not be read',
+    async () => {
+      const repository = await githubOriginRepository()
+      await refusingGh()
+      const { io, stdout } = capturingIo()
+
+      const exitCode = await runAssess(['assess', repository, '--json'], io)
+
+      expect(exitCode).toBe(0)
+      const report = JSON.parse(stdout()) as AssessmentReport
+      expect(report.contributors?.status).toBe('FAILED')
+
+      const { io: proseIo, stdout: proseStdout } = capturingIo()
+      await runAssess(['assess', repository], proseIo)
+      expect(proseStdout()).toContain('Contributeurs : lecture impossible')
+    },
+    A_LONG_TIME,
+  )
+
+  it(
+    'honours a `roster: null` override rather than the production wiring it would otherwise build',
+    async () => {
+      const repository = await githubOriginRepository()
+      await refusingGh()
+      const { io, stdout } = capturingIo()
+
+      const exitCode = await runAssess(['assess', repository, '--json'], io, { roster: null })
+
+      expect(exitCode).toBe(0)
+      // INVARIANT: without the override this same subject and this same refusing `gh` produce a
+      // FAILED roster, proven by the test above. `null` here is only reachable if `'roster' in
+      // options` won, never `??`, which would have silently fallen back to `rosterFor`.
+      expect(JSON.parse(stdout()).contributors).toBeNull()
+    },
+    A_LONG_TIME,
+  )
+
+  it(
+    'walks the forge once for its deliveries, shared by the repository line and the rows',
+    async () => {
+      const repository = await githubOriginRepository()
+      const directory = await emptyDirectory('aidd-assess-command-gh-counting-')
+      const counts = join(directory, 'counts')
+      const prAnswer = join(directory, 'pr.json')
+      const commitAnswer = join(directory, 'commits.json')
+      await writeFile(
+        prAnswer,
+        JSON.stringify({
+          data: {
+            repository: {
+              pullRequests: { pageInfo: { hasNextPage: false, endCursor: null }, nodes: [] },
+            },
+          },
+        }),
+      )
+      await writeFile(
+        commitAnswer,
+        JSON.stringify({
+          data: {
+            repository: {
+              defaultBranchRef: {
+                target: {
+                  history: { pageInfo: { hasNextPage: false, endCursor: null }, nodes: [] },
+                },
+              },
+            },
+          },
+        }),
+      )
+      await writeFile(counts, '')
+      await plantGh(
+        [
+          '#!/bin/sh',
+          'kind=other',
+          'for arg in "$@"; do',
+          '  case "$arg" in',
+          '    *pullRequests*) kind=pr ;;',
+          '    *defaultBranchRef*) kind=commits ;;',
+          '  esac',
+          'done',
+          `echo "$kind" >> "${counts}"`,
+          'if [ "$kind" = "pr" ]; then',
+          `  cat "${prAnswer}"`,
+          'else',
+          `  cat "${commitAnswer}"`,
+          'fi',
+          '',
+        ].join('\n'),
+      )
+
+      const { io, stdout } = capturingIo()
+      const exitCode = await runAssess(['assess', repository, '--json'], io)
+
+      expect(exitCode).toBe(0)
+      const report = JSON.parse(stdout()) as AssessmentReport
+      expect(report.contributors?.status).toBe('COMPLETED')
+      expect(
+        report.provenance.find((entry) => entry.collector === 'forge-repository')?.status,
+      ).toBe('COMPLETED')
+
+      const invocations = (await readFile(counts, 'utf8'))
+        .split('\n')
+        .filter((line) => line.length > 0)
+
+      expect(invocations.filter((kind) => kind === 'pr')).toHaveLength(1)
+    },
+    A_LONG_TIME,
+  )
 })

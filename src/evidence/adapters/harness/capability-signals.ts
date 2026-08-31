@@ -1,5 +1,5 @@
 import type { HarnessTree, HarnessTreeEntry } from './harness-tree.js'
-import { DECIDED_PRESENT, type MemberScan } from './member-scan.js'
+import type { ProvenPaths } from './member-scan.js'
 
 // SAFETY: Every table here is closed, and matched by exact name: `prompt-*.md` would let
 // `prompt-toolkit-notes.md` prove `prompts`. A capability whose artifact sits off a table is
@@ -34,28 +34,22 @@ const SETTINGS_FILES = [
   '.gemini/settings.json',
 ]
 
-export function provesPrompts(tracked: readonly string[]): boolean {
-  return (
-    holdsFileNamedAnywhere(tracked, TRANSCRIPT_FILES) ||
-    holdsPathUnderRootDirectory(tracked, TRANSCRIPT_DIRECTORIES)
-  )
+export function provesPrompts(tracked: readonly string[]): readonly string[] {
+  return matchingPaths(tracked, TRANSCRIPT_FILES, TRANSCRIPT_DIRECTORIES)
 }
 
-export function provesContextEngineering(tracked: readonly string[]): boolean {
-  return (
-    holdsFileNamedAnywhere(tracked, CONTEXT_FILES) ||
-    holdsPathUnderRootDirectory(tracked, CONTEXT_DIRECTORIES)
-  )
+export function provesContextEngineering(tracked: readonly string[]): readonly string[] {
+  return matchingPaths(tracked, CONTEXT_FILES, CONTEXT_DIRECTORIES)
 }
 
 export async function provesBehavior(
   tree: HarnessTree,
   tracked: readonly HarnessTreeEntry[],
   signal: AbortSignal,
-): Promise<MemberScan> {
+): Promise<ProvenPaths> {
   const paths = tracked.map((entry) => entry.path)
-  if (holdsPathUnderRootDirectory(paths, BEHAVIOR_DIRECTORIES)) return DECIDED_PRESENT
-  if (holdsFileNamedAnywhere(paths, BEHAVIOR_FILES)) return DECIDED_PRESENT
+  const matched = matchingPaths(paths, BEHAVIOR_FILES, BEHAVIOR_DIRECTORIES)
+  if (matched.length > 0) return { paths: matched, undecidable: false }
   return declaresPermissions(tree, paths, signal)
 }
 
@@ -64,7 +58,7 @@ async function declaresPermissions(
   tree: HarnessTree,
   tracked: readonly string[],
   signal: AbortSignal,
-): Promise<MemberScan> {
+): Promise<ProvenPaths> {
   let undecidable = false
 
   for (const settings of SETTINGS_FILES) {
@@ -83,10 +77,10 @@ async function declaresPermissions(
       continue
     }
 
-    if (declaresPermissionList(document.value)) return DECIDED_PRESENT
+    if (declaresPermissionList(document.value)) return { paths: [settings], undecidable: false }
   }
 
-  return { proven: false, undecidable }
+  return { paths: [], undecidable }
 }
 
 type ParsedSettings =
@@ -114,11 +108,23 @@ function declaresPermissionList(settings: unknown): boolean {
 
 const isNonEmptyArray = (value: unknown): boolean => Array.isArray(value) && value.length > 0
 
-// Matched on whole path segments, so `prompt-toolkit-notes.md` is not `prompt-history.md`.
-const holdsFileNamedAnywhere = (tracked: readonly string[], names: readonly string[]): boolean =>
-  tracked.some((file) => names.some((name) => file === name || file.endsWith(`/${name}`)))
-
-const holdsPathUnderRootDirectory = (
+// INVARIANT: One pass over the tracked list, checked against both tables together: the result
+// stays in tree order and needs no deduplication, and it agrees with the boolean predicates it
+// replaced because `some(p)` and `filter(p).length > 0` decide the same thing.
+function matchingPaths(
   tracked: readonly string[],
+  names: readonly string[],
   directories: readonly string[],
-): boolean => tracked.some((file) => directories.some((directory) => file.startsWith(directory)))
+): readonly string[] {
+  return tracked.filter(
+    (file) =>
+      matchesFileNamedAnywhere(file, names) || matchesPathUnderRootDirectory(file, directories),
+  )
+}
+
+// Matched on whole path segments, so `prompt-toolkit-notes.md` is not `prompt-history.md`.
+const matchesFileNamedAnywhere = (file: string, names: readonly string[]): boolean =>
+  names.some((name) => file === name || file.endsWith(`/${name}`))
+
+const matchesPathUnderRootDirectory = (file: string, directories: readonly string[]): boolean =>
+  directories.some((directory) => file.startsWith(directory))

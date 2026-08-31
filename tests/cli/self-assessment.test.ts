@@ -179,3 +179,26 @@ describe('4. nothing about this repository is special-cased', () => {
     )
   })
 })
+
+// INVARIANT: this checkout has a GitHub origin, so the composition root builds a roster for it; the
+// spawn fixture's refusing `gh` is what keeps the section present-and-failed rather than absent.
+// What is asserted is the capability — a source that could not answer says so — never the state:
+// no login, no row count and no level, on the same footing as the rest of this suite.
+describe('5. the contributor roster is present, refused, and names nobody', () => {
+  it('answers a failed roster rather than an absent one', () => {
+    expect(report.contributors).not.toBeNull()
+    if (report.contributors === null) return
+
+    expect(report.contributors.status).toBe('FAILED')
+    expect(report.contributors.rows).toEqual([])
+    expect('reason' in report.contributors ? report.contributors.reason : '').not.toBe('')
+  })
+
+  it('says so in prose, with no row for any account', () => {
+    expect(prose).toContain('Contributeurs : lecture impossible')
+    // SAFETY: a row, were the roster COMPLETED, would open with two leading spaces and an em dash
+    // before "proven:" — `renderContributorRow`'s own shape. A FAILED roster is typed with no rows
+    // at all, so this is a belt-and-braces check on the rendering rather than the contract.
+    expect(prose).not.toMatch(/^ {2}\S+ — niveau prouvé/m)
+  })
+})
