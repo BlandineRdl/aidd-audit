@@ -13,6 +13,8 @@ de la couleur, sans changer son contenu.
 > **Le principe qui gouverne tout :** ne demande pas ce que tu peux observer, et ne prétends pas
 > savoir ce que tu ne peux pas prouver.
 
+➡️ **[Lire la méthode en une page : ce que mesure le moteur, pourquoi, et comment il rend son verdict.](METHODE.md)**
+
 ## Prérequis
 
 | | |
@@ -20,6 +22,7 @@ de la couleur, sans changer son contenu.
 | Node.js | >= 24 |
 | pnpm | 11 (épinglé par `packageManager`) |
 | Réseau | nécessaire à l'installation ; optionnel à l'exécution, mais requis par le collecteur de forge |
+| `gh` authentifié | requis pour mesurer `Taille`, `Intervention` et `En parallèle` sur un dépôt GitHub vivant |
 
 ## Installation
 
