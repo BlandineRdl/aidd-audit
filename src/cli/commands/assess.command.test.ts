@@ -22,7 +22,12 @@ const PERCEVAL = 'profiles/perceval'
 
 // LIMITATION: The repository itself: `intervention` is not recoverable from any local history, so
 // one axis is always UNKNOWN and no level can be proven of it.
-const THIS_REPOSITORY = '.'
+// SAFETY: a bundle, never `.`. A suite under `src/` also runs inside Stryker's sandbox, which is a
+// copy of the project with no `.git` — and since `resolveSubjects` refuses a directory that is
+// neither a repository, a bundle, nor a bundle holder, `assess .` there is exit 2 and the dry run
+// dies before a single mutant is tried. `venec` is a recorded bundle whose evidence establishes no
+// level, which is the behaviour this names, and it carries no dependency on the checkout's state.
+const UNCLASSIFIABLE_SUBJECT = 'profiles/venec'
 
 function capturingIo(): { io: CommandIo; stdout: () => string; stderr: () => string } {
   const out: string[] = []
@@ -53,7 +58,7 @@ describe('runAssess — happy path', () => {
   it('says a subject could not be classified rather than naming a level for it', async () => {
     const { io, stdout, stderr } = capturingIo()
 
-    const exitCode = await runAssess(['assess', THIS_REPOSITORY], io)
+    const exitCode = await runAssess(['assess', UNCLASSIFIABLE_SUBJECT], io)
 
     expect(exitCode).toBe(0)
     expect(stderr()).toBe('')

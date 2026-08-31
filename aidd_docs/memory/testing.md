@@ -136,21 +136,51 @@ Three things in the configuration are load-bearing:
 
 **The second pass is the more useful lesson.** A further 25 tests, aimed at survivors named one by one from the report, bought 0.7 points. `readShellLoops` answers in two booleans, so a great many internal distinctions are simply not observable from outside it, and chasing them would mean exporting internals to test them — which buys a number and loses the rule. **Stop when the curve flattens.** What remains worth doing sits elsewhere: `agent-invocation.ts` (66.28, 29 uncovered) and `model-consistency.ts` (78.90, 9 uncovered).
 
-**Third baseline, 2026-08-31, after the per-person attribution work — and measured under CPU contention, so read it as an indication rather than as a figure: 88.62% total, 91.07% of covered code — 2013 killed, 425 timed out, 239 survived, 74 uncovered, 0 errors. Wall time: 40 minutes 36 seconds**, up from the thirteen minutes above.
+**Third baseline, 2026-08-31, after the per-person attribution work, measured on an idle machine:
+86.44% total, 88.14% of covered code — 2266 killed, 239 timed out, 337 survived, 56 uncovered, 0
+errors, in 24 minutes 24 seconds.**
 
-**What is contaminated, and why the number is kept anyway.** A second sweep was running on the same machine throughout, and the clean re-run meant to replace this one was killed by the environment before it finished. Two of the figures above are therefore not evidence: the **wall time**, which measures a contended machine as much as the suite, and the **425 timeouts**, which a loaded machine manufactures — a mutant killed by the clock rather than by an assertion. Stryker counts a timeout as detected, so roughly a sixth of the headline percentage rests on that class, and the first two baselines record no timeout bucket at all, which is what makes the three columns non-comparable in that direction as well as in the file-set one. What survives contention is the survivor and uncovered counts, which no clock decides. **Delete nothing and re-measure**: the numbers are the only record of this file set, and the sweep is reproducible by design.
-
-The set mutated grew by three named files — `commit-history.ts`, `contributor-deliveries.ts` and `derived-observations.ts` — and the `harness/` and `assessment/composition/` globs picked up `harness-authorship.ts` and `compose-contributor-roster.ts` for free; the totals below are therefore not comparable to the ones above them, whose file set was smaller. What is comparable, because neither file moved, is the pair the second baseline earned:
+The set mutated grew by five files — `commit-history.ts`, `contributor-deliveries.ts`,
+`derived-observations.ts` and `delivery-reader.ts` named one by one, plus
+`forge-contributor-roster.adapter.ts`, with the `harness/` and `assessment/composition/` globs
+picking up `harness-authorship.ts`, `compose-contributor-roster.ts` and `report-projection.ts` for
+free. The totals are therefore not comparable to the baselines above, whose file set was smaller.
+What is comparable, because the feature touches neither file, is the pair the second baseline earned:
 
 | | second baseline | third baseline |
 | --- | --- | --- |
-| `shell-tokens.ts` | 81.01 | 82.40 |
-| `shell-loop.ts` | 79.15 | 81.41 |
-| `harness/` overall | 79.51 | 81.42 |
+| `shell-tokens.ts` | 81.01 | 81.56 |
+| `shell-loop.ts` | 79.15 | 79.15 |
+| `harness-scan.ts` | 97.30 | 100.00 |
 
-**Neither fell — and that comparison is unsettled until a clean sweep lands.** A fall was the one thing this sweep was run to catch, since the feature touches neither file, and both rose instead by a margin consistent with sweep-to-sweep noise; but a contended run inflates every score through the timeout bucket, and a rise of one to two points is inside what that alone can produce. Read it as no evidence of a fall, never as evidence of a rise.
+**Neither fell**, which is the one thing this sweep was run to catch; `shell-loop.ts` did not move at
+all, and `harness-scan.ts` reached 100 because phase 4's `provenBy` earned its own suite.
 
-`harness-authorship.ts` is the reason wall time grew: 74.07% total, 21 survived, 3 timed out, over real temporary Git repositories — the slowest per-mutant cost of anything in the swept set, since every mutant re-runs `git log` against a real work tree rather than a source string. It was kept in the sweep rather than taken out: authorship is decision logic — which commits and which files a proving path resolves to — and the whole reason `stryker.config.json` interrogates decision logic is to catch exactly the kind of guard this feature already shipped once with a neutered test (see `contributor-roster.port.ts`'s `null`-to-`FAILED` classification, restored in phase 9's own neutering pass). The other new files cost little: `commit-history.ts` scored 97.35 (98.00 covered) despite 44 of its mutants timing out — the paginated walk's own loop — and `derived-observations.ts` scored 100.00 with 61 timeouts and zero survivors. `contributor-deliveries.ts`, at 77.27 with 5 survivors, and `compose-contributor-roster.ts`, at 81.16 with 13 survivors, are this baseline's own weak spots and are owed the same kind of second pass `shell-tokens.ts` and `shell-loop.ts` already had — not chased here, because `pnpm mutation` stays a report to read rather than a gate this phase exists to close.
+**A contended sweep is not a measurement, and one was very nearly recorded as one.** An earlier run of
+this same set reported 88.62% with **425** timeouts while a second sweep held the same CPU; the run
+above reports 239 on an idle machine. Stryker counts a timeout as detected, so contention inflates
+the headline through a class no assertion earned — nearly two points here. The first two baselines
+record no timeout bucket at all. **Run the sweep alone, and treat a timeout count far above the
+previous one as evidence about the machine rather than about the tests.**
+
+**A suite under `src/` must not depend on this checkout being a Git repository.** Stryker runs the
+suite inside `.stryker-tmp/sandbox-*`, a copy of the project with no `.git`, so `assess .` there is
+neither a repository, a bundle, nor a bundle holder — `resolveSubjects` refuses it and the run exits
+`2`. One test asserting the happy path against `'.'` was enough to kill the dry run before a single
+mutant was tried, and it had been green in `pnpm check` all along, because the ordinary run has a
+`.git`. It now assesses `profiles/venec`, a recorded bundle whose evidence establishes no level —
+the same behaviour, with no dependency on the checkout's state. **A sweep that dies at startup is
+the failure mode this file already records reading exactly like success.**
+
+`harness-authorship.ts` is the slowest thing in the swept set at 72.84%, because every mutant re-runs
+`git log` against a real temporary work tree rather than a source string. It stays in: authorship is
+decision logic, and interrogating decision logic is the whole reason `stryker.config.json` exists.
+The new files that scored well need nothing — `delivery-reader.ts` 100.00, `commit-history.ts` 97.35,
+`pull-request-history.ts` 96.41, `forge-contributor-roster.adapter.ts` 86.52. The weak spots owed a
+second pass, on the terms `shell-tokens.ts` and `shell-loop.ts` already had one: `agent-invocation.ts`
+70.93 (the oldest of them, already named by the second baseline), `harness-authorship.ts` 72.84,
+`repository-slug.ts` 76.67, `contributor-deliveries.ts` 77.27, `compose-contributor-roster.ts` 81.33.
+Not chased here: `pnpm mutation` is a report to read, never a gate to pass.
 
 ## Doubles
 
