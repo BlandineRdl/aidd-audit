@@ -46,6 +46,16 @@ node dist/cli.js assess .
 node dist/cli.js assess profiles     # les six dossiers enregistrés, un rapport chacun
 ```
 
+### Raccourcis pnpm
+
+Ces commandes reconstruisent le CLI avant de l’exécuter :
+
+```bash
+pnpm aidd-evaluation:project   # évalue le projet courant (`assess .`)
+pnpm aidd-evaluation:profiles  # évalue tous les profils de référence
+pnpm aidd-evaluation:harness   # audite le contexte Claude du projet courant
+```
+
 Un chemin qui n'est ni l'un ni l'autre est une faute de l'appelant, pas un rapport vide :
 `assess src` sort avec le code `2` et dit ce qu'il a cherché.
 

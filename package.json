@@ -12,6 +12,9 @@
     "mutation": "stryker run",
     "check": "pnpm typecheck && pnpm test && pnpm architecture && pnpm comments",
     "build": "tsup",
+    "aidd-evaluation:profiles": "pnpm build && node dist/cli.js assess profiles",
+    "aidd-evaluation:harness": "pnpm build && node dist/cli.js harness .",
+    "aidd-evaluation:project": "pnpm build && node dist/cli.js assess .",
     "build:standalone": "tsup --config tsup.standalone.config.ts && cp aidd.yml plugins/aidd-evaluation/bin/aidd.yml",
     "prepare": "lefthook install"
   },
